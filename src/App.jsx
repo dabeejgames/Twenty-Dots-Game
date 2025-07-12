@@ -1,80 +1,82 @@
+// src/App.jsx
+
 import React, { useState } from "react";
 import SinglePlayerApp from "./SinglePlayerApp";
 import MultiplayerApp from "./MultiplayerApp";
 import BackgroundDots from "./components/BackgroundDots";
-import TwentyDotsLogo from "./components/TwentyDotsLogo";
-
-function ModeSelectScreen({ onSingle, onMulti }) {
-  return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        minHeight: 400,
-        minWidth: 320,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "column",
-        background: "none",
-        zIndex: 1,
-      }}
-    >
-      <TwentyDotsLogo style={{ fontSize: "2.4em", marginBottom: 18 }} />
-      <button
-        onClick={onSingle}
-        style={{
-          background: "#3498db",
-          color: "#fff",
-          fontWeight: 700,
-          fontSize: "1.25em",
-          padding: "15px 40px",
-          border: "none",
-          borderRadius: 12,
-          margin: 8,
-          transition: "background 0.2s, boxShadow 0.2s",
-          boxShadow: "0 3px 12px #3498db33, 0 2px 4px #0001",
-          cursor: "pointer"
-        }}
-      >
-        Single Player
-      </button>
-      <button
-        onClick={onMulti}
-        style={{
-          background: "#27ae60",
-          color: "#fff",
-          fontWeight: 700,
-          fontSize: "1.12em",
-          padding: "13px 34px",
-          border: "none",
-          borderRadius: 12,
-          margin: 8,
-          transition: "background 0.2s, boxShadow 0.2s",
-          boxShadow: "0 3px 12px #27ae6033, 0 2px 4px #0001",
-          cursor: "pointer"
-        }}
-      >
-        Multiplayer
-      </button>
-      <div style={{ marginTop: 32, color: "#999", fontSize: "1.05em" }}>
-        <span>By dabeejgames</span>
-      </div>
-    </div>
-  );
-}
 
 export default function App() {
   const [screen, setScreen] = useState("menu");
 
   return (
-    <>
-      {screen !== "menu" && <BackgroundDots />}
+    <div style={{ minHeight: "100vh", background: "#eaf0fa", position: "relative" }}>
+      <BackgroundDots />
       {screen === "menu" && (
-        <ModeSelectScreen
-          onSingle={() => setScreen("single")}
-          onMulti={() => setScreen("multi")}
-        />
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: "100vh",
+            zIndex: 1,
+            position: "relative"
+          }}
+        >
+          <h1
+            style={{
+              fontFamily: "'Orbitron', Arial, sans-serif",
+              fontWeight: 900,
+              fontSize: "2.7em",
+              color: "#2b71e7",
+              textShadow: "0 4px 32px #b8d1ff33"
+            }}
+          >
+            Twenty Dots Game
+          </h1>
+          <p style={{ color: "#5b6b8c", fontSize: "1.18em", marginBottom: 32 }}>
+            A modern multiplayer and single-player strategy game.
+          </p>
+          <button
+            style={{
+              fontSize: 22,
+              padding: "14px 44px",
+              borderRadius: 16,
+              background: "linear-gradient(120deg, #2b71e7 60%, #b26de6 100%)",
+              color: "#fff",
+              fontWeight: 700,
+              border: "none",
+              margin: "18px 0",
+              boxShadow: "0 4px 20px #2b71e733",
+              cursor: "pointer",
+              letterSpacing: "1.2px"
+            }}
+            onClick={() => setScreen("single")}
+          >
+            Single Player
+          </button>
+          <button
+            style={{
+              fontSize: 22,
+              padding: "14px 44px",
+              borderRadius: 16,
+              background: "linear-gradient(120deg, #b26de6 60%, #2b71e7 100%)",
+              color: "#fff",
+              fontWeight: 700,
+              border: "none",
+              margin: "18px 0",
+              boxShadow: "0 4px 20px #b26de633",
+              cursor: "pointer",
+              letterSpacing: "1.2px"
+            }}
+            onClick={() => setScreen("multi")}
+          >
+            Multiplayer
+          </button>
+          <footer style={{ marginTop: 48, color: "#b0b8c9", fontSize: "1em" }}>
+            &copy; {new Date().getFullYear()} Twenty Dots Game
+          </footer>
+        </div>
       )}
       {screen === "single" && (
         <SinglePlayerApp onBack={() => setScreen("menu")} />
@@ -82,6 +84,6 @@ export default function App() {
       {screen === "multi" && (
         <MultiplayerApp onBack={() => setScreen("menu")} />
       )}
-    </>
+    </div>
   );
 }
