@@ -298,7 +298,10 @@
         <div id="joinScreen">
             <div class="form-group">
                 <label for="serverIp">Server IP Address:</label>
-                <input type="text" id="serverIp" placeholder="e.g., 192.168.1.100" value="localhost">
+                <input type="text" id="serverIp" placeholder="e.g., 192.168.1.100 or leave empty for same server" value="">
+                <small style="color: #a0a0a0; display: block; margin-top: 5px;">
+                    Leave empty if accessing from the same URL as this page
+                </small>
             </div>
             <div class="form-group">
                 <label for="gameId">Game ID:</label>
@@ -355,12 +358,26 @@
             gameId = document.getElementById('gameId').value;
             playerName = document.getElementById('playerName').value;
             
-            if (!serverIp || !gameId || !playerName) {
-                showError('joinError', 'Please fill in all fields');
+            if (!gameId || !playerName) {
+                showError('joinError', 'Please enter Game ID and your name');
                 return;
             }
             
-            const serverUrl = `http://${serverIp}:5000`;
+            // If no server IP specified, use the same origin
+            let serverUrl;
+            if (!serverIp || serverIp.trim() === '') {
+                // Use same server that's hosting this page
+                serverUrl = window.location.origin;
+            } else {
+                // Use specified server (add http:// if not present)
+                if (!serverIp.startsWith('http://') && !serverIp.startsWith('https://')) {
+                    serverUrl = `http://${serverIp}:5000`;
+                } else {
+                    serverUrl = serverIp;
+                }
+            }
+            
+            console.log('Connecting to:', serverUrl);
             socket = io(serverUrl);
             
             socket.on('connect', () => {

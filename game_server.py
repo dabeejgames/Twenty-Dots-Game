@@ -2,10 +2,11 @@
 Game Server for Twenty Dots
 Manages game state and coordinates multiple networked players
 """
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 import json
+import os
 from twenty_dots import TwentyDots
 from ai_player import AIPlayer
 
@@ -384,7 +385,19 @@ def handle_list_games():
     
     emit('games_list', {'games': available_games})
 
+@app.route('/')
+def index():
+    """Serve the web client"""
+    return send_from_directory('.', 'web_client.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Serve static files"""
+    return send_from_directory('.', path)
+
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
     print("Starting Twenty Dots Game Server...")
-    print("Server will be accessible at http://localhost:5000")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    print(f"Server will be accessible at http://0.0.0.0:{port}")
+    print(f"Web client at: http://0.0.0.0:{port}/web_client.html")
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
