@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twenty Dots - Web Client</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+            color: white;
+            font-family: 'Arial', sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #ffd700;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        /* Join Screen */
+        #joinScreen {
+            max-width: 500px;
+            margin: 100px auto;
+            background: #1a1a2e;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ffd700;
+            font-weight: bold;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #2d2d44;
+            border: 2px solid #6c5ce7;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #ffd700;
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #6c5ce7;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5f4dd1;
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        
+        /* Game Screen */
+        #gameScreen {
+            display: none;
+        }
+        
+        .game-layout {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 30px;
+            margin-top: 20px;
+        }
+        
+        .board-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .board {
+            display: grid;
+            grid-template-columns: 40px repeat(6, 70px);
+            grid-template-rows: 40px repeat(6, 70px);
+            gap: 2px;
+            background: #2d2d44;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        
+        .board-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ff6b6b;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .cell {
+            background: #1a1a2e;
+            border: 1px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 5px;
+        }
+        
+        .dot {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+        }
+        
+        .dot.red { background: #FF4757; }
+        .dot.blue { background: #36A2EB; }
+        .dot.purple { background: #9C27B0; }
+        .dot.green { background: #4CAF50; }
+        .dot.yellow { background: #FFEB3B; }
+        
+        /* Sidebar */
+        .sidebar {
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .turn-info {
+            background: #2d2d44;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .hand {
+            margin-bottom: 20px;
+        }
+        
+        .hand h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+        }
+        
+        .cards {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .card {
+            background: #FF4757;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 3px solid transparent;
+        }
+        
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .card.selected {
+            border-color: #ffd700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+        
+        .card.blue { background: #36A2EB; }
+        .card.purple { background: #9C27B0; }
+        .card.green { background: #4CAF50; }
+        .card.yellow { background: #FFEB3B; color: #333; }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .controls button {
+            margin: 0;
+        }
+        
+        .btn-play {
+            background: #4CAF50;
+        }
+        
+        .btn-play:hover {
+            background: #45a049;
+        }
+        
+        .btn-end {
+            background: #ff6b6b;
+        }
+        
+        .btn-end:hover {
+            background: #ff5252;
+        }
+        
+        /* Scores */
+        .scores {
+            background: #2d2d44;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .scores h3 {
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
+        
+        .player-score {
+            padding: 8px;
+            margin: 5px 0;
+            background: #1a1a2e;
+            border-radius: 5px;
+        }
+        
+        .error-message {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .success-message {
+            background: #27ae60;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        @media (max-width: 1200px) {
+            .game-layout {
+                grid-template-columns: 1fr;
+            }
+            
+            .board {
+                grid-template-columns: 30px repeat(6, 60px);
+                grid-template-rows: 30px repeat(6, 60px);
+            }
+            
+            .dot {
+                width: 40px;
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Twenty Dots</h1>
+        
+        <!-- Join Screen -->
+        <div id="joinScreen">
+            <div class="form-group">
+                <label for="serverIp">Server IP Address:</label>
+                <input type="text" id="serverIp" placeholder="e.g., 192.168.1.100" value="localhost">
+            </div>
+            <div class="form-group">
+                <label for="gameId">Game ID:</label>
+                <input type="text" id="gameId" placeholder="e.g., game_001" value="game_001">
+            </div>
+            <div class="form-group">
+                <label for="playerName">Your Name:</label>
+                <input type="text" id="playerName" placeholder="Enter your name">
+            </div>
+            <button onclick="joinGame()">Join Game</button>
+            <div id="joinError" class="error-message"></div>
+            <div id="joinSuccess" class="success-message"></div>
+        </div>
+        
+        <!-- Game Screen -->
+        <div id="gameScreen">
+            <div class="game-layout">
+                <div class="board-container">
+                    <div class="scores" id="scoresPanel">
+                        <h3>Scores</h3>
+                        <div id="scoresList"></div>
+                    </div>
+                    <div class="board" id="gameBoard"></div>
+                </div>
+                
+                <div class="sidebar">
+                    <div class="turn-info" id="turnInfo">Waiting...</div>
+                    
+                    <div class="hand">
+                        <h3>Your Hand</h3>
+                        <div class="cards" id="handCards"></div>
+                    </div>
+                    
+                    <div class="controls">
+                        <button class="btn-play" id="playBtn" onclick="playCards()" disabled>Play Selected Cards</button>
+                        <button class="btn-end" id="endBtn" onclick="endTurn()" disabled>End Turn</button>
+                    </div>
+                    
+                    <div id="gameError" class="error-message"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let socket;
+        let gameId;
+        let playerName;
+        let myHand = [];
+        let selectedCards = [];
+        
+        function joinGame() {
+            const serverIp = document.getElementById('serverIp').value;
+            gameId = document.getElementById('gameId').value;
+            playerName = document.getElementById('playerName').value;
+            
+            if (!serverIp || !gameId || !playerName) {
+                showError('joinError', 'Please fill in all fields');
+                return;
+            }
+            
+            const serverUrl = `http://${serverIp}:5000`;
+            socket = io(serverUrl);
+            
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                socket.emit('join_game', {
+                    game_id: gameId,
+                    player_name: playerName
+                });
+            });
+            
+            socket.on('join_success', (data) => {
+                showSuccess('joinSuccess', 'Joined game! Waiting for host to start...');
+                setTimeout(() => {
+                    document.getElementById('joinScreen').style.display = 'none';
+                    document.getElementById('gameScreen').style.display = 'block';
+                }, 1500);
+            });
+            
+            socket.on('game_started', (gameState) => {
+                console.log('Game started!', gameState);
+                updateGameState(gameState);
+            });
+            
+            socket.on('game_updated', (gameState) => {
+                console.log('Game updated', gameState);
+                updateGameState(gameState);
+            });
+            
+            socket.on('your_hand', (data) => {
+                console.log('Received hand', data);
+                myHand = data.hand;
+                updateHand();
+            });
+            
+            socket.on('error', (data) => {
+                showError('gameError', data.message);
+            });
+            
+            socket.on('connect_error', (error) => {
+                showError('joinError', 'Failed to connect to server. Check IP address and make sure server is running.');
+            });
+        }
+        
+        function updateGameState(state) {
+            // Update board
+            updateBoard(state.board);
+            
+            // Update scores
+            updateScores(state.players);
+            
+            // Update turn info
+            const isMyTurn = state.current_turn === playerName;
+            document.getElementById('turnInfo').textContent = 
+                isMyTurn ? "YOUR TURN!" : `${state.current_turn}'s Turn`;
+            
+            // Enable/disable buttons
+            document.getElementById('playBtn').disabled = !isMyTurn;
+            document.getElementById('endBtn').disabled = !isMyTurn;
+        }
+        
+        function updateBoard(board) {
+            const boardDiv = document.getElementById('gameBoard');
+            boardDiv.innerHTML = '';
+            
+            const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
+            const cols = ['1', '2', '3', '4', '5', '6'];
+            
+            // Empty corner
+            boardDiv.appendChild(document.createElement('div'));
+            
+            // Column headers
+            cols.forEach(col => {
+                const label = document.createElement('div');
+                label.className = 'board-label';
+                label.textContent = col;
+                boardDiv.appendChild(label);
+            });
+            
+            // Rows
+            for (let r = 0; r < 6; r++) {
+                // Row header
+                const label = document.createElement('div');
+                label.className = 'board-label';
+                label.textContent = rows[r];
+                boardDiv.appendChild(label);
+                
+                // Cells
+                for (let c = 0; c < 6; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                    if (board[r] && board[r][c]) {
+                        const dot = document.createElement('div');
+                        dot.className = `dot ${board[r][c].color}`;
+                        cell.appendChild(dot);
+                    }
+                    
+                    boardDiv.appendChild(cell);
+                }
+            }
+        }
+        
+        function updateScores(players) {
+            const scoresList = document.getElementById('scoresList');
+            scoresList.innerHTML = '';
+            
+            for (const [name, data] of Object.entries(players)) {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'player-score';
+                playerDiv.innerHTML = `<strong>${name}:</strong> ${data.total_dots} dots`;
+                scoresList.appendChild(playerDiv);
+            }
+        }
+        
+        function updateHand() {
+            const handDiv = document.getElementById('handCards');
+            handDiv.innerHTML = '';
+            
+            myHand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `card ${card.color}`;
+                cardDiv.innerHTML = `<strong>${card.location[0]}${card.location[1]}</strong><br>${card.color.toUpperCase()}`;
+                cardDiv.onclick = () => toggleCardSelection(index, cardDiv);
+                handDiv.appendChild(cardDiv);
+            });
+        }
+        
+        function toggleCardSelection(index, cardDiv) {
+            const cardIndex = selectedCards.indexOf(index);
+            if (cardIndex > -1) {
+                selectedCards.splice(cardIndex, 1);
+                cardDiv.classList.remove('selected');
+            } else {
+                if (selectedCards.length < 2) {
+                    selectedCards.push(index);
+                    cardDiv.classList.add('selected');
+                }
+            }
+        }
+        
+        function playCards() {
+            if (selectedCards.length === 0) {
+                showError('gameError', 'Please select at least one card');
+                return;
+            }
+            
+            const cards = selectedCards.map(i => myHand[i]);
+            socket.emit('play_cards', {
+                game_id: gameId,
+                cards: cards
+            });
+            
+            selectedCards = [];
+        }
+        
+        function endTurn() {
+            socket.emit('end_turn', {
+                game_id: gameId
+            });
+        }
+        
+        function showError(elementId, message) {
+            const errorDiv = document.getElementById(elementId);
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        function showSuccess(elementId, message) {
+            const successDiv = document.getElementById(elementId);
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
