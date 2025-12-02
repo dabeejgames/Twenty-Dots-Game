@@ -22,6 +22,7 @@ class GameSession:
     def __init__(self, game_id, host_sid):
         self.game_id = game_id
         self.game = TwentyDots()
+        self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
         self.players = {}  # sid -> player_info
         self.player_order = []  # List of player names in turn order
         self.ai_players = {}  # player_name -> AIPlayer instance
