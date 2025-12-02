@@ -128,18 +128,33 @@ def handle_create_game(data):
 
 @socketio.on('join_game')
 def handle_join_game(data):
-    """Player joins an existing game"""
+    """Player joins an existing game (creates if doesn't exist)"""
     game_id = data.get('game_id')
     
-    # Generate default player name if not provided
-    if game_id in games:
-        player_name = data.get('player_name', f'Player {len(games[game_id].players) + 1}')
-    else:
-        player_name = data.get('player_name', 'Player 1')
-    
+    # Auto-create game if it doesn't exist (first player)
     if game_id not in games:
-        emit('error', {'message': 'Game not found'})
+        player_name = data.get('player_name', 'Player 1')
+        game_session = GameSession(game_id, request.sid)
+        success, message = game_session.add_player(request.sid, player_name)
+        
+        if not success:
+            emit('error', {'message': message})
+            return
+        
+        games[game_id] = game_session
+        join_room(game_id)
+        
+        emit('join_success', {
+            'game_id': game_id,
+            'player_name': player_name,
+            'players': game_session.player_order
+        })
+        print(f"Game auto-created: {game_id} by {player_name}")
         return
+    
+    # Game exists, join it
+    game_session = games[game_id]
+    player_name = data.get('player_name', f'Player {len(game_session.players) + 1}')
     
     game_session = games[game_id]
     
