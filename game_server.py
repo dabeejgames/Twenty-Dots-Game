@@ -63,25 +63,64 @@ class GameSession:
     
     def get_game_state(self):
         """Get current game state for broadcasting"""
+        # Build board with proper format
+        board_data = []
+        for row_idx, row in enumerate(self.game.grid):
+            row_data = []
+            for col_idx, dot in enumerate(row):
+                if dot:
+                    row_data.append({'color': dot.color, 'location': (self.game.rows[row_idx], self.game.columns[col_idx])})
+                else:
+                    row_data.append(None)
+            board_data.append(row_data)
+        
+        # Get landmines
+        landmines_data = []
+        for lm in self.game.landmines:
+            landmines_data.append({
+                'location': lm['location'],
+                'color': lm['color'],
+                'player': lm['player']
+            })
+        
         return {
-            'board': [[{'color': dot.color, 'location': dot.location} if dot else None 
-                      for dot in row] for row in self.game.grid],
+            'board': board_data,
             'players': {name: {
                 'score': data['score'],
                 'total_dots': data['total_dots'],
                 'hand_size': len(data['hand']),
-                'discard_pile': [{'color': c.color, 'location': c.location} 
-                                for c in data.get('discard_pile', [])[-2:]]
+                'discard_pile': []  # Don't expose other players' discards
             } for name, data in self.game.players.items()},
             'current_turn': self.game.get_current_player(),
             'turn_number': getattr(self.game, 'turn_number', 1),
-            'deck_size': len(self.game.deck)
+            'deck_size': len(self.game.deck),
+            'yellow_dot_position': self.game.yellow_dot_position,
+            'landmines': landmines_data
         }
     
     def get_player_hand(self, player_name):
         """Get specific player's hand"""
         hand = self.game.players[player_name]['hand']
-        return [{'color': c.color, 'location': c.location} for c in hand]
+        cards_data = []
+        for c in hand:
+            # Handle both string and tuple locations
+            if isinstance(c.location, tuple):
+                loc = c.location
+            elif isinstance(c.location, str):
+                if c.location == 'PWR':
+                    loc = ('P', 'WR')  # Power card marker
+                else:
+                    loc = (c.location[0], c.location[1])
+            else:
+                loc = ('?', '?')
+            
+            card_data = {
+                'color': c.color,
+                'location': list(loc),
+                'power': c.power if hasattr(c, 'power') and c.power else None
+            }
+            cards_data.append(card_data)
+        return cards_data
 
 @socketio.on('connect')
 def handle_connect():
@@ -306,7 +345,7 @@ def handle_start_game(data):
 def handle_play_cards(data):
     """Player plays one or more cards"""
     game_id = data.get('game_id')
-    cards_data = data.get('cards')  # List of {color, location}
+    cards_data = data.get('cards')  # List of {color, location, power}
     
     if game_id not in games:
         emit('error', {'message': 'Game not found'})
@@ -319,30 +358,80 @@ def handle_play_cards(data):
         emit('error', {'message': 'You are not in this game'})
         return
     
-    if game_session.game.current_turn != player_name:
+    if game_session.game.get_current_player() != player_name:
         emit('error', {'message': 'Not your turn'})
         return
     
     # Convert cards data back to Card objects
     from twenty_dots import Card
-    cards = [Card(tuple(c['location']), c['color']) for c in cards_data]
+    hand = game_session.game.players[player_name]['hand']
+    cards_to_play = []
     
-    # Validate and play cards
-    success, message = game_session.game.play_cards(player_name, cards)
+    for card_data in cards_data:
+        # Find matching card in hand
+        for card in hand:
+            card_loc = card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}"
+            req_loc = f"{card_data['location'][0]}{card_data['location'][1]}"
+            
+            if card.color == card_data['color'] and card_loc == req_loc:
+                cards_to_play.append(card)
+                break
     
-    if not success:
-        emit('error', {'message': message})
+    if len(cards_to_play) != len(cards_data):
+        emit('error', {'message': 'Invalid cards selected'})
         return
+    
+    if len(cards_to_play) > 2:
+        emit('error', {'message': 'Cannot play more than 2 cards per turn'})
+        return
+    
+    # Play each card
+    matches_made = False
+    for card in cards_to_play:
+        # Remove card from hand
+        hand.remove(card)
+        
+        # Place dot on board
+        if card.power:
+            # Handle power cards (simplified for now)
+            continue
+            
+        # Regular card - place dot
+        row = card.location[0] if isinstance(card.location, tuple) else card.location[0]
+        col = card.location[1] if isinstance(card.location, tuple) else card.location[1]
+        
+        success, replaced_color = game_session.game.place_card_dot(card)
+        
+        if success:
+            # Check for matches
+            match = game_session.game.check_line_match(row, col, card.color)
+            if match:
+                matches_made = True
+                game_session.game.collect_dots(match, player_name, card.color)
+    
+    # Draw cards back to 5
+    while len(hand) < 5 and game_session.game.deck:
+        game_session.game.draw_card(player_name)
+    
+    # Roll for yellow dot if match was made
+    if matches_made and not game_session.game.yellow_dot_position:
+        row_idx, col_idx = game_session.game.roll_dice()
+        if game_session.game.grid[row_idx][col_idx] is None:
+            from twenty_dots import Dot
+            game_session.game.grid[row_idx][col_idx] = Dot('yellow')
+            game_session.game.yellow_dot_position = (row_idx, col_idx)
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
     
-    # Send updated hand to player
-    hand = game_session.get_player_hand(player_name)
-    emit('your_hand', {'hand': hand})
+    # Send updated hand to all players
+    for sid, player_info in game_session.players.items():
+        if not player_info['is_ai'] and player_info['connected']:
+            hand = game_session.get_player_hand(player_info['name'])
+            socketio.emit('your_hand', {'hand': hand}, room=sid)
     
-    print(f"{player_name} played {len(cards)} card(s) in game {game_id}")
+    print(f"{player_name} played {len(cards_to_play)} card(s) in game {game_id}")
 
 @socketio.on('end_turn')
 def handle_end_turn(data):
@@ -360,24 +449,29 @@ def handle_end_turn(data):
         emit('error', {'message': 'You are not in this game'})
         return
     
-    if game_session.game.current_turn != player_name:
+    if game_session.game.get_current_player() != player_name:
         emit('error', {'message': 'Not your turn'})
         return
     
+    # Draw cards to 5 before ending turn
+    hand = game_session.game.players[player_name]['hand']
+    while len(hand) < 5 and game_session.game.deck:
+        game_session.game.draw_card(player_name)
+    
     # Move to next turn
-    game_session.game.next_turn()
+    game_session.game.next_player()
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
     
-    # Send hand to new current player
-    next_player = game_session.game.current_turn
+    # Send hand to all players
     for sid, player_info in game_session.players.items():
-        if player_info['name'] == next_player and not player_info['is_ai']:
-            hand = game_session.get_player_hand(next_player)
-            socketio.emit('your_hand', {'hand': hand}, room=sid)
-            break
+        if not player_info['is_ai'] and player_info['connected']:
+            player_hand = game_session.get_player_hand(player_info['name'])
+            socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+    
+    print(f"Turn ended. Now: {game_session.game.get_current_player()}")
     
     # If next player is AI, execute their turn
     if next_player in game_session.ai_players:
