@@ -534,10 +534,18 @@ def index():
     """Serve the web client"""
     return send_from_directory('.', 'web_client.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    """Return empty favicon to prevent 404 errors"""
+    return '', 204
+
 @app.route('/<path:path>')
 def serve_static(path):
     """Serve static files"""
-    return send_from_directory('.', path)
+    try:
+        return send_from_directory('.', path)
+    except:
+        return '', 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
