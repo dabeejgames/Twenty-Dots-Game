@@ -183,6 +183,36 @@ def handle_join_game(data):
     })
     
     print(f"{player_name} joined game {game_id}")
+    
+    # Auto-start game when 2 players join
+    if len(game_session.player_order) >= 2 and not game_session.started:
+        print(f"Auto-starting game {game_id} with {len(game_session.player_order)} players")
+        
+        # Initialize game
+        num_players = len(game_session.player_order)
+        game_session.game = TwentyDots(num_players=num_players, difficulty='easy', ai_opponents={})
+        
+        # Update player names in the game
+        old_names = list(game_session.game.players.keys())
+        for i, pname in enumerate(game_session.player_order):
+            if i < len(old_names):
+                old_name = old_names[i]
+                game_session.game.players[pname] = game_session.game.players.pop(old_name)
+        
+        game_session.game.deal_cards(5)
+        game_session.started = True
+        
+        # Send game state to all players
+        game_state = game_session.get_game_state()
+        emit('game_started', game_state, room=game_id)
+        
+        # Send each player their hand privately
+        for sid, player_info in game_session.players.items():
+            if not player_info['is_ai'] and player_info['connected']:
+                hand = game_session.get_player_hand(player_info['name'])
+                socketio.emit('your_hand', {'hand': hand}, room=sid)
+        
+        print(f"Game {game_id} auto-started with players: {game_session.player_order}")
 
 @socketio.on('add_ai_player')
 def handle_add_ai(data):
