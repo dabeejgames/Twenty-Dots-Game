@@ -516,6 +516,54 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Mode Selection */
+        .mode-selection {
+            max-width: 600px;
+            margin: 80px auto;
+            text-align: center;
+        }
+        
+        .mode-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .mode-button {
+            background: rgba(26, 26, 46, 0.95);
+            padding: 40px 30px;
+            border-radius: 20px;
+            border: 3px solid rgba(255, 215, 0, 0.3);
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .mode-button:hover {
+            border-color: #ffd700;
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(255, 215, 0, 0.3);
+        }
+        
+        .mode-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        
+        .mode-title {
+            color: #ffd700;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .mode-description {
+            color: #aaa;
+            font-size: 14px;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -526,8 +574,32 @@
             <span style="font-size: 0.4em; color: #888;">Online Multiplayer</span>
         </h1>
         
+        <!-- Mode Selection Screen -->
+        <div id="modeScreen">
+            <div class="mode-selection">
+                <h2 style="color: #ffd700; font-size: 2em; margin-bottom: 20px;">Choose Game Mode</h2>
+                <div class="mode-buttons">
+                    <div class="mode-button" onclick="showMultiplayerScreen()">
+                        <div class="mode-icon">🌐</div>
+                        <div class="mode-title">Multiplayer</div>
+                        <div class="mode-description">Play online with friends<br>2-4 players</div>
+                    </div>
+                    <div class="mode-button" onclick="showSinglePlayerMessage()">
+                        <div class="mode-icon">🤖</div>
+                        <div class="mode-title">Single Player</div>
+                        <div class="mode-description">Play against AI<br>Coming soon to web!</div>
+                    </div>
+                </div>
+                <div style="margin-top: 30px; padding: 20px; background: rgba(108, 92, 231, 0.2); border-radius: 10px; border-left: 4px solid #6c5ce7;">
+                    <p style="color: #aaa; font-size: 14px; margin: 0;">
+                        💡 <strong style="color: #ffd700;">Tip:</strong> For single-player with AI, download the desktop version from GitHub
+                    </p>
+                </div>
+            </div>
+        </div>
+        
         <!-- Join Screen -->
-        <div id="joinScreen">
+        <div id="joinScreen" style="display: none;">
             <div class="form-group">
                 <label for="serverIp">Server IP Address:</label>
                 <input type="text" id="serverIp" placeholder="Leave empty for same server" value="">
@@ -603,6 +675,15 @@
         let myHand = [];
         let selectedCards = [];
         let currentGameState = null;
+        
+        function showMultiplayerScreen() {
+            document.getElementById('modeScreen').style.display = 'none';
+            document.getElementById('joinScreen').style.display = 'block';
+        }
+        
+        function showSinglePlayerMessage() {
+            alert('🤖 Single Player Mode\n\nThe web version currently supports multiplayer only.\n\nFor single-player with AI opponents, please download and run the desktop version:\n\n1. Clone the repository from GitHub\n2. Install Python and dependencies\n3. Run: python launcher.py\n\nThe desktop version includes:\n✓ Play against AI\n✓ Power cards\n✓ Landmines\n✓ Save/load games\n✓ Custom difficulty');
+        }
         
         function joinGame() {
             const serverIp = document.getElementById('serverIp').value;
