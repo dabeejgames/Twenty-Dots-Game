@@ -130,7 +130,12 @@ def handle_create_game(data):
 def handle_join_game(data):
     """Player joins an existing game"""
     game_id = data.get('game_id')
-    player_name = data.get('player_name', f'Player {len(games.get(game_id, {}).players) + 1}')
+    
+    # Generate default player name if not provided
+    if game_id in games:
+        player_name = data.get('player_name', f'Player {len(games[game_id].players) + 1}')
+    else:
+        player_name = data.get('player_name', 'Player 1')
     
     if game_id not in games:
         emit('error', {'message': 'Game not found'})
@@ -275,7 +280,7 @@ def handle_play_cards(data):
     
     # Convert cards data back to Card objects
     from twenty_dots import Card
-    cards = [Card(c['color'], tuple(c['location'])) for c in cards_data]
+    cards = [Card(tuple(c['location']), c['color']) for c in cards_data]
     
     # Validate and play cards
     success, message = game_session.game.play_cards(player_name, cards)

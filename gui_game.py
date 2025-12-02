@@ -1542,6 +1542,7 @@ class TwentyDotsGUI(QMainWindow):
         for idx in self.selected_cards:
             if idx < len(hand):
                 card = hand[idx]
+                print(f"DEBUG: Checking card {card.location}, already played: {self.locations_played_this_turn}")
                 if not card.is_power_card() and card.location in self.locations_played_this_turn:
                     self.current_player_label.setText("❌ Cannot play 2 cards at the same location in one turn!")
                     QTimer.singleShot(2000, self.update_current_player)
@@ -1551,6 +1552,9 @@ class TwentyDotsGUI(QMainWindow):
         if len(self.selected_cards) == 2:
             card1 = hand[self.selected_cards[0]]
             card2 = hand[self.selected_cards[1]]
+            print(f"DEBUG: Comparing cards - card1.location='{card1.location}' ({type(card1.location)}), card2.location='{card2.location}' ({type(card2.location)})")
+            print(f"DEBUG: card1.is_power={card1.is_power_card()}, card2.is_power={card2.is_power_card()}")
+            print(f"DEBUG: Locations equal? {card1.location == card2.location}")
             if not card1.is_power_card() and not card2.is_power_card() and card1.location == card2.location:
                 self.current_player_label.setText("❌ Cannot play 2 cards with the same location!")
                 QTimer.singleShot(2000, self.update_current_player)
@@ -3021,6 +3025,11 @@ class TwentyDotsGUI(QMainWindow):
     def update_current_player(self):
         """Update the current player label."""
         player = self.game.get_current_player()
+        # Reset turn tracking variables for new turn
+        self.cards_played_this_turn = 0
+        self.locations_played_this_turn = []
+        self.scored_this_turn = False
+        print(f"DEBUG: New turn started for {player}, locations_played reset to: {self.locations_played_this_turn}")
         self.current_player_label.setText(f"🎮 {player}'s Turn")
         self.current_player_label.setStyleSheet("color: #ff6b6b; font-weight: bold;")
     
