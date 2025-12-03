@@ -872,9 +872,12 @@
             const handDiv = document.getElementById('handCards');
             handDiv.innerHTML = '';
             
+            console.log('Updating hand with cards:', myHand.map(c => `${c.location[0]}${c.location[1]}:${c.color}`));
+            
             myHand.forEach((card, index) => {
                 const cardDiv = document.createElement('div');
                 cardDiv.className = `card ${card.color}`;
+                console.log(`Card ${index}: location=${card.location[0]}${card.location[1]}, color=${card.color}, className=${cardDiv.className}`);
                 
                 const locationDiv = document.createElement('div');
                 locationDiv.className = 'card-location';

@@ -85,19 +85,26 @@ class GameSession:
                 'player': lm['player']
             })
         
+        # Get yellow dot position
+        yellow_position = None
+        if self.game.yellow_dot_position:
+            row_idx, col_idx = self.game.yellow_dot_position
+            yellow_position = [self.game.rows[row_idx], self.game.columns[col_idx]]
+        
         return {
             'board': board_data,
             'players': {name: {
                 'score': data['score'],
                 'total_dots': data['total_dots'],
                 'hand_size': len(data['hand']),
-                'discard_pile': []  # Don't expose other players' discards
+                'discard_pile': []
             } for name, data in self.game.players.items()},
             'current_turn': self.game.get_current_player(),
             'turn_number': getattr(self.game, 'turn_number', 1),
             'deck_size': len(self.game.deck),
-            'yellow_dot_position': self.game.yellow_dot_position,
-            'landmines': landmines_data
+            'yellow_dot_position': yellow_position,
+            'landmines': landmines_data,
+            'can_roll_dice': getattr(self.game, 'can_roll_dice', False)
         }
     
     def get_player_hand(self, player_name):
@@ -477,6 +484,56 @@ def handle_end_turn(data):
             socketio.emit('your_hand', {'hand': player_hand}, room=sid)
     
     print(f"Turn ended. Now: {game_session.game.get_current_player()}")
+
+@socketio.on('roll_dice')
+def handle_roll_dice(data):
+    """Player rolls dice for yellow wild dot"""
+    game_id = data.get('game_id')
+    
+    if game_id not in games:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    game_session = games[game_id]
+    player_name = game_session.get_player_name(request.sid)
+    
+    if not player_name:
+        emit('error', {'message': 'You are not in this game'})
+        return
+    
+    if game_session.game.get_current_player() != player_name:
+        emit('error', {'message': 'Not your turn'})
+        return
+    
+    # Roll for yellow dot position
+    row_idx, col_idx = game_session.game.roll_dice()
+    
+    # Place yellow dot
+    from twenty_dots import Dot
+    old_dot = game_session.game.grid[row_idx][col_idx]
+    game_session.game.grid[row_idx][col_idx] = Dot('yellow')
+    game_session.game.yellow_dot_position = (row_idx, col_idx)
+    
+    # Check for matches created by yellow dot
+    row = game_session.game.rows[row_idx]
+    col = game_session.game.columns[col_idx]
+    match = game_session.game.check_line_match(row, col, 'yellow')
+    
+    if match:
+        # Collect the match with yellow
+        game_session.game.collect_dots(match, player_name, 'yellow')
+    
+    # Broadcast updated game state
+    game_state = game_session.get_game_state()
+    emit('game_updated', game_state, room=game_id)
+    
+    # Send updated hand to all players
+    for sid, player_info in game_session.players.items():
+        if not player_info['is_ai'] and player_info['connected']:
+            player_hand = game_session.get_player_hand(player_info['name'])
+            socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+    
+    print(f"{player_name} rolled dice, placed yellow at {row}{col}")
     
     # If next player is AI, execute their turn
     if next_player in game_session.ai_players:
