@@ -756,14 +756,19 @@
         }
         
         function updateGameState(state) {
+            console.log('[UPDATE_STATE] Called with state:', state);
             currentGameState = state;
             updateBoard(state.board);
             updatePlayers(state.players, state.current_turn);
             updateTurnInfo(state.current_turn);
             
             const isMyTurn = state.current_turn === playerName;
+            console.log('[UPDATE_STATE] isMyTurn:', isMyTurn, 'current_turn:', state.current_turn, 'playerName:', playerName);
+            console.log('[UPDATE_STATE] Setting playBtn.disabled to', !isMyTurn || selectedCards.length === 0);
+            console.log('[UPDATE_STATE] Setting endBtn.disabled to', !isMyTurn);
             document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0;
             document.getElementById('endBtn').disabled = !isMyTurn;
+            console.log('[UPDATE_STATE] Button states updated. endBtn.disabled is now:', document.getElementById('endBtn').disabled);
         }
         
         function updateBoard(board) {
