@@ -275,14 +275,20 @@ class TwentyDots:
         player_names = list(self.players.keys())
         card_idx = 0
         
+        print(f"[DEAL_CARDS] Starting to deal {cards_per_player} cards to {len(player_names)} players")
+        print(f"[DEAL_CARDS] First 10 cards in deck: {[(c.location, c.color) for c in self.deck[:10]]}")
+        
         for _ in range(cards_per_player):
             for player in player_names:
                 if card_idx < len(self.deck):
-                    self.players[player]['hand'].append(self.deck[card_idx])
+                    card = self.deck[card_idx]
+                    print(f"[DEAL_CARDS] Dealing card {card_idx} to {player}: {card.location} {card.color}")
+                    self.players[player]['hand'].append(card)
                     card_idx += 1
         
         # Remaining cards stay in deck for drawing
         self.deck = self.deck[card_idx:]
+        print(f"[DEAL_CARDS] Dealing complete. {len(self.deck)} cards remaining in deck")
     
     def draw_card(self, player_name: str) -> Card:
         """Draw a card from the deck for a player."""
