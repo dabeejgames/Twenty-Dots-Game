@@ -234,6 +234,7 @@ def handle_join_game(data):
         # Initialize game
         num_players = len(game_session.player_order)
         game_session.game = TwentyDots(num_players=num_players, difficulty='easy', ai_opponents={})
+        game_session.game.shuffle_deck()  # SHUFFLE THE NEW GAME!
         
         # Update player names in the game
         old_names = list(game_session.game.players.keys())
