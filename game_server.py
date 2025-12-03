@@ -449,41 +449,59 @@ def handle_play_cards(data):
 def handle_end_turn(data):
     """Player ends their turn"""
     game_id = data.get('game_id')
+    print(f"[END_TURN] Received end_turn request for game {game_id}")
     
     if game_id not in games:
+        print(f"[END_TURN] ERROR: Game {game_id} not found")
         emit('error', {'message': 'Game not found'})
         return
     
     game_session = games[game_id]
     player_name = game_session.get_player_name(request.sid)
+    print(f"[END_TURN] Player name from session: {player_name}")
     
     if not player_name:
+        print(f"[END_TURN] ERROR: Player not found in session {request.sid}")
         emit('error', {'message': 'You are not in this game'})
         return
     
-    if game_session.game.get_current_player() != player_name:
+    current_player = game_session.game.get_current_player()
+    print(f"[END_TURN] Current player: {current_player}, Ending player: {player_name}")
+    
+    if current_player != player_name:
+        print(f"[END_TURN] ERROR: Not this player's turn! Current={current_player}, Request from={player_name}")
         emit('error', {'message': 'Not your turn'})
         return
     
+    print(f"[END_TURN] Validations passed. Drawing cards...")
     # Draw cards to 5 before ending turn
     hand = game_session.game.players[player_name]['hand']
+    cards_drawn = 0
     while len(hand) < 5 and game_session.game.deck:
         game_session.game.draw_card(player_name)
+        cards_drawn += 1
+    print(f"[END_TURN] Drew {cards_drawn} cards. Hand size now: {len(hand)}")
     
+    print(f"[END_TURN] Current player index before: {game_session.game.current_player_idx}")
     # Move to next turn
     game_session.game.next_player()
+    print(f"[END_TURN] Current player index after: {game_session.game.current_player_idx}")
+    print(f"[END_TURN] New current player: {game_session.game.get_current_player()}")
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
+    print(f"[END_TURN] Broadcasting game state with current_turn: {game_state['current_turn']}")
     emit('game_updated', game_state, room=game_id)
     
     # Send hand to all players
+    print(f"[END_TURN] Sending hands to {len(game_session.players)} players")
     for sid, player_info in game_session.players.items():
         if not player_info['is_ai'] and player_info['connected']:
             player_hand = game_session.get_player_hand(player_info['name'])
             socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+            print(f"[END_TURN] Sent hand to {player_info['name']}")
     
-    print(f"Turn ended. Now: {game_session.game.get_current_player()}")
+    print(f"[END_TURN] Turn ended successfully. Now: {game_session.game.get_current_player()}")
 
 @socketio.on('roll_dice')
 def handle_roll_dice(data):

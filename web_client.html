@@ -736,7 +736,7 @@
             });
             
             socket.on('game_updated', (gameState) => {
-                console.log('Game updated', gameState);
+                console.log('[CLIENT] Game updated. Current turn:', gameState.current_turn, 'My name:', playerName, 'Is my turn:', gameState.current_turn === playerName);
                 updateGameState(gameState);
             });
             
@@ -938,6 +938,7 @@
         }
         
         function endTurn() {
+            console.log('[CLIENT] Emitting end_turn event', {game_id: gameId, player: playerName});
             socket.emit('end_turn', {
                 game_id: gameId
             });
