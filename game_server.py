@@ -553,7 +553,10 @@ def serve_static(path):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    print("=" * 60)
     print("Starting Twenty Dots Game Server...")
     print(f"Server will be accessible at http://0.0.0.0:{port}")
     print(f"Web client at: http://0.0.0.0:{port}/web_client.html")
+    print("Deck shuffle: ENABLED")
+    print("=" * 60)
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
