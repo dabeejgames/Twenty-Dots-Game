@@ -180,10 +180,12 @@ def handle_create_game(data):
 def handle_join_game(data):
     """Player joins an existing game (creates if doesn't exist)"""
     game_id = data.get('game_id')
+    print(f"[JOIN_GAME] Received join_game request for game {game_id}")
     
     # Auto-create game if it doesn't exist (first player)
     if game_id not in games:
         player_name = data.get('player_name', 'Player 1')
+        print(f"[JOIN_GAME] Game doesn't exist, creating. First player: {player_name}")
         game_session = GameSession(game_id, request.sid)
         success, message = game_session.add_player(request.sid, player_name)
         
@@ -199,12 +201,13 @@ def handle_join_game(data):
             'player_name': player_name,
             'players': game_session.player_order
         })
-        print(f"Game auto-created: {game_id} by {player_name}")
+        print(f"[JOIN_GAME] Game auto-created: {game_id} by {player_name}. Player order: {game_session.player_order}")
         return
     
     # Game exists, join it
     game_session = games[game_id]
     player_name = data.get('player_name', f'Player {len(game_session.players) + 1}')
+    print(f"[JOIN_GAME] Game exists. Second player joining: {player_name}")
     
     game_session = games[game_id]
     
@@ -236,11 +239,13 @@ def handle_join_game(data):
     
     # Auto-start game when 2 players join
     if len(game_session.player_order) >= 2 and not game_session.started:
-        print(f"Auto-starting game {game_id} with {len(game_session.player_order)} players")
+        print(f"[AUTO_START] Auto-starting game {game_id} with {len(game_session.player_order)} players")
+        print(f"[AUTO_START] Player order: {game_session.player_order}")
         
         # Initialize game
         num_players = len(game_session.player_order)
         game_session.game = TwentyDots(num_players=num_players, difficulty='easy', ai_opponents={})
+        print(f"[AUTO_START] Created TwentyDots with num_players={num_players}. Initial player names: {list(game_session.game.players.keys())}")
         game_session.game.shuffle_deck()  # SHUFFLE THE NEW GAME!
         
         # Update player names in the game
@@ -248,7 +253,11 @@ def handle_join_game(data):
         for i, pname in enumerate(game_session.player_order):
             if i < len(old_names):
                 old_name = old_names[i]
+                print(f"[AUTO_START] Renaming player {i}: {old_name} -> {pname}")
                 game_session.game.players[pname] = game_session.game.players.pop(old_name)
+        
+        print(f"[AUTO_START] After renaming, player names: {list(game_session.game.players.keys())}")
+        print(f"[AUTO_START] Current player (idx=0): {game_session.game.get_current_player()}")
         
         game_session.game.deal_cards(5)
         game_session.started = True
