@@ -23,6 +23,7 @@ class GameSession:
         self.game_id = game_id
         self.game = TwentyDots()
         self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
+        print(f"Created new game {game_id}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
         self.players = {}  # sid -> player_info
         self.player_order = []  # List of player names in turn order
         self.ai_players = {}  # player_name -> AIPlayer instance
@@ -121,6 +122,8 @@ class GameSession:
                 'power': c.power if hasattr(c, 'power') and c.power else None
             }
             cards_data.append(card_data)
+        
+        print(f"Sending hand to {player_name}: colors = {[c.color for c in hand]}")
         return cards_data
 
 @socketio.on('connect')
