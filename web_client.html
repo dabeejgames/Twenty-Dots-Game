@@ -339,7 +339,6 @@
         }
         
         .card {
-            background: linear-gradient(135deg, #FF4757 0%, #e74c3c 100%);
             padding: 18px;
             border-radius: 12px;
             text-align: center;
@@ -352,17 +351,7 @@
             position: relative;
         }
         
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
-        }
-        
-        .card.selected {
-            border-color: #ffd700;
-            box-shadow: 0 0 30px rgba(255, 215, 0, 0.7);
-            transform: translateY(-5px) scale(1.05);
-        }
-        
+        .card.red { background: linear-gradient(135deg, #FF4757 0%, #e74c3c 100%); }
         .card.blue { background: linear-gradient(135deg, #36A2EB 0%, #2980b9 100%); }
         .card.purple { background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%); }
         .card.green { background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); }
