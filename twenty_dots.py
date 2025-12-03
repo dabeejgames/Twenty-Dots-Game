@@ -230,6 +230,8 @@ class TwentyDots:
         import random
         deck = []
         
+        print("[DECK CREATION] Building new shuffled deck...")
+        
         # Create 36 regular location cards for each color (144 total)
         all_locations = []
         for row in self.rows:
@@ -239,6 +241,8 @@ class TwentyDots:
         for color in self.colors:
             for location in all_locations:
                 deck.append(Card(location, color))
+        
+        print(f"[DECK CREATION] Created {len(deck)} cards across {len(self.colors)} colors")
         
         # Add power cards separately (not tied to specific locations)
         if self.power_cards_enabled:
