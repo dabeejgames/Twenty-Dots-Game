@@ -38,6 +38,17 @@
             gap: 15px;
         }
         
+        .logo {
+            width: 80px;
+            height: 80px;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
         /* Join Screen */
         #joinScreen {
             max-width: 550px;
@@ -569,7 +580,7 @@
 <body>
     <div class="container">
         <h1>
-            <span>🎮</span>
+            <img src="Twenty Dots Logo.png" alt="Twenty Dots" class="logo">
             <span>Twenty Dots</span>
             <span style="font-size: 0.4em; color: #888;">Online Multiplayer</span>
         </h1>
@@ -860,7 +871,7 @@
             const isMyTurn = currentTurn === playerName;
             
             if (isMyTurn) {
-                turnDiv.textContent = '🎮 YOUR TURN!';
+                turnDiv.textContent = '⭐ YOUR TURN!';
                 turnDiv.className = 'turn-indicator my-turn';
             } else {
                 turnDiv.textContent = `⏳ ${currentTurn}'s Turn`;
