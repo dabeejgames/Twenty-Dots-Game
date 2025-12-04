@@ -658,7 +658,8 @@ def handle_roll_dice(data):
         game_session.game.must_advance_after_roll[player_name] = False
         # Reset card counter for new player
         new_player = game_session.game.get_current_player()
-        if not hasattr(game_session.game, 'turn_cards_played'):\n            game_session.game.turn_cards_played = {}
+        if not hasattr(game_session.game, 'turn_cards_played'):
+            game_session.game.turn_cards_played = {}
         game_session.game.turn_cards_played[new_player] = 0
         print(f"[ROLL_DICE] Turn advanced to {new_player}")
         # Don't place a new yellow dot - just end this player's turn
