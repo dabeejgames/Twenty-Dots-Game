@@ -407,6 +407,12 @@
             box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
         }
         
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed !important;
+            box-shadow: none !important;
+        }
+        
         .landmines-section {
             background: rgba(45, 45, 68, 0.5);
             padding: 15px;
@@ -648,10 +654,10 @@
                     </div>
                     
                     <div class="controls-section">
-                        <button class="btn-play" id="playBtn" onclick="playCards()" disabled>
+                        <button class="btn-play" id="playBtn" onclick="playCards()">
                             ▶️ Play Selected Cards
                         </button>
-                        <button class="btn-end" id="endBtn" onclick="endTurn()" disabled>
+                        <button class="btn-end" id="endBtn" onclick="endTurn()">
                             ⏭️ End Turn
                         </button>
                     </div>
