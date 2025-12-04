@@ -481,6 +481,13 @@ def handle_play_cards(data):
         game_session.game.can_roll_dice = False
         print(f"[PLAY_CARDS] Yellow not affected - can_roll_dice set to False")
     
+    # Auto-advance turn after playing 2 cards
+    if len(game_session.discard_piles.get(player_name, [])) >= 2:
+        print(f"[PLAY_CARDS] {player_name} has played 2 cards, auto-advancing turn")
+        game_session.game.can_roll_dice = True
+        game_session.game.next_player()
+        print(f"[PLAY_CARDS] Turn advanced to {game_session.game.get_current_player()}")
+    
     # Broadcast updated game state
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)

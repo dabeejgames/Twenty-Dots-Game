@@ -575,19 +575,11 @@
                     const cell = document.createElement('div');
                     cell.className = 'cell';
                     
-                    if (board[r] && board[r][c]) {
-                        const dot = document.createElement('div');
-                        dot.className = `dot ${board[r][c].color}`;
-                        cell.appendChild(dot);
-                    }
-                    
-                    if (yellowDotPosition && yellowDotPosition[0] === rows[r] && yellowDotPosition[1] === cols[c]) {
-                        const yellowDot = document.createElement('div');
-                        yellowDot.className = 'dot yellow';
-                        cell.appendChild(yellowDot);
-                    }
-                    
-                    boardDiv.appendChild(cell);
+                if (board[r] && board[r][c]) {
+                    const dot = document.createElement('div');
+                    dot.className = `dot ${board[r][c].color}`;
+                    cell.appendChild(dot);
+                }                    boardDiv.appendChild(cell);
                 }
             }
         }
