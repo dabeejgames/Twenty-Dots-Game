@@ -1683,15 +1683,15 @@ class TwentyDotsGUI(QMainWindow):
                             row = self.game.rows[pos[0]]
                             col = self.game.columns[pos[1]]
                             match_result = self.game.check_line_match(row, col, dot.color)
-                            if match_result:
-                                line_match, match_color = match_result
+                            line_match, match_color = match_result
+                            if line_match:
                                 # Check if yellow is in the match
                                 for match_pos in line_match:
                                     match_dot = self.game.grid[match_pos[1]][match_pos[0]]
                                     if match_dot and match_dot.color == 'yellow':
                                         self.yellow_collected_by_power = True
                                         break
-                                self.game.collect_dots(line_match, player, dot.color)
+                                self.game.collect_dots(line_match, player, match_color)
                                 self.update_board()
                                 self.update_scores()
                     
@@ -1709,15 +1709,15 @@ class TwentyDotsGUI(QMainWindow):
                             row = self.game.rows[pos[0]]
                             col = self.game.columns[pos[1]]
                             match_result = self.game.check_line_match(row, col, dot.color)
-                            if match_result:
-                                line_match, match_color = match_result
+                            line_match, match_color = match_result
+                            if line_match:
                                 # Check if yellow is in the match
                                 for match_pos in line_match:
                                     match_dot = self.game.grid[match_pos[1]][match_pos[0]]
                                     if match_dot and match_dot.color == 'yellow':
                                         self.yellow_collected_by_power = True
                                         break
-                                self.game.collect_dots(line_match, player, dot.color)
+                                self.game.collect_dots(line_match, player, match_color)
                                 self.update_board()
                                 self.update_scores()
                     
@@ -2624,11 +2624,10 @@ class TwentyDotsGUI(QMainWindow):
                         self.game.players[player]['total_dots'] += 1
                     
                     match_result = self.game.check_line_match(card.location[0], card.location[1], card.color)
-                    if match_result:
-                        line_match, match_color = match_result
+                    line_match, match_color = match_result
+                    if line_match:
                         print(f"DEBUG: check_line_match returned {len(line_match)} positions (color={match_color})")
                     else:
-                        line_match = None
                         print(f"DEBUG: check_line_match returned no match")
                     
                     if line_match:

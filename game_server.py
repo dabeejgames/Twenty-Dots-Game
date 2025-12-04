@@ -503,8 +503,8 @@ def handle_play_cards(data):
             
             # Check for matches
             match_result = game_session.game.check_line_match(row, col, card.color)
-            if match_result:
-                match, match_color = match_result
+            match, match_color = match_result
+            if match:  # Check if match list has items
                 matches_made = True
                 # Check if yellow dot is in the matched positions
                 for col_idx, row_idx in match:
@@ -688,9 +688,9 @@ def handle_roll_dice(data):
     # Check for matches created by yellow dot
     print(f"[ROLL_DICE] About to call check_line_match for {row}{col} (indices {row_idx},{col_idx})")
     match_result = game_session.game.check_line_match(row, col, 'yellow')
+    match, match_color = match_result
     
-    if match_result:
-        match, match_color = match_result
+    if match:  # Check if match list has items
         print(f"[ROLL_DICE] check_line_match returned match of {len(match)} positions: {match} (color={match_color})")
         # Collect the match with the detected color (not 'yellow')
         print(f"[ROLL_DICE] MATCH FOUND! Collecting {len(match)} positions for color {match_color}")
