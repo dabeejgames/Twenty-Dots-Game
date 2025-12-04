@@ -408,6 +408,7 @@
     
     <!-- Join Game Screen -->
     <div id="joinScreen">
+        <div style="position: absolute; top: 10px; right: 10px; background: red; color: white; padding: 10px; z-index: 999;">DEBUG: Join Screen Active</div>
         <!-- Create vs Join Selection -->
         <div id="modeSelection" class="join-form">
             <h2 style="color: #ffd700; margin-bottom: 40px;">Multiplayer</h2>
@@ -471,6 +472,7 @@
     
     <!-- Main Game Screen -->
     <div id="gameScreen" class="main-container">
+        <div style="position: absolute; top: 10px; left: 10px; background: lime; color: black; padding: 10px; z-index: 999;">DEBUG: Game Screen Active</div>
         <div style="width: 100%; height: 100%; display: flex; flex-direction: column;">
             <!-- Header -->
             <div class="header">
@@ -608,11 +610,28 @@
             });
             
             socket.on('join_success', () => {
-                console.log('=== JOIN_SUCCESS ===');
-                console.log('Removing active from joinScreen, adding to gameScreen');
-                document.getElementById('joinScreen').classList.remove('active');
-                document.getElementById('gameScreen').classList.add('active');
-                console.log('gameScreen now has classes:', document.getElementById('gameScreen').classList);
+                console.log('=== JOIN_SUCCESS RECEIVED ===');
+                try {
+                    const joinScreenEl = document.getElementById('joinScreen');
+                    const gameScreenEl = document.getElementById('gameScreen');
+                    console.log('joinScreenEl:', joinScreenEl);
+                    console.log('gameScreenEl:', gameScreenEl);
+                    
+                    if (joinScreenEl) {
+                        console.log('Before: joinScreen classes:', joinScreenEl.classList);
+                        joinScreenEl.classList.remove('active');
+                        console.log('After remove: joinScreen classes:', joinScreenEl.classList);
+                    }
+                    
+                    if (gameScreenEl) {
+                        console.log('Before: gameScreen classes:', gameScreenEl.classList);
+                        gameScreenEl.classList.add('active');
+                        console.log('After add: gameScreen classes:', gameScreenEl.classList);
+                        console.log('GameScreen computed style:', window.getComputedStyle(gameScreenEl).display);
+                    }
+                } catch(e) {
+                    console.error('Error in join_success handler:', e);
+                }
             });
             
             socket.on('game_started', (gameState) => {
