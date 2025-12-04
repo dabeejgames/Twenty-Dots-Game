@@ -55,10 +55,17 @@
             border-radius: 10px;
             padding: 20px;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
         }
         
-        .logo-box div:first-child { font-size: 60px; }
-        .logo-box div:last-child { color: #ffd700; font-weight: bold; margin-top: 10px; }
+        .logo-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
         
         /* Center panel - Board and Players */
         .center-panel {
@@ -399,8 +406,7 @@
                 <!-- Left: Logo -->
                 <div class="left-panel">
                     <div class="logo-box">
-                        <div>🎯</div>
-                        <div>TWENTY<br>DOTS</div>
+                        <img src="Twenty Dots Logo.png" alt="Twenty Dots Logo">
                     </div>
                 </div>
                 
@@ -490,12 +496,18 @@
             });
             
             socket.on('game_updated', (gameState) => {
-                console.log('Game updated', gameState);
+                console.log('=== GAME_UPDATED ===');
+                console.log('Board:', gameState.board);
+                console.log('Current turn:', gameState.current_turn);
+                console.log('Can roll dice:', gameState.can_roll_dice);
+                console.log('Yellow dot position:', gameState.yellow_dot_position);
                 updateGameState(gameState);
             });
             
             socket.on('your_hand', (data) => {
-                console.log('Received hand', data);
+                console.log('=== YOUR_HAND ===');
+                console.log('Received', data.hand.length, 'cards');
+                console.log('Hand:', data.hand);
                 myHand = data.hand;
                 updateHand();
             });
@@ -521,6 +533,14 @@
         }
 
         function updateBoard(board, yellowDotPosition) {
+            console.log('UPDATE_BOARD: Rendering board with', board.length, 'rows');
+            let dotCount = 0;
+            for (let r = 0; r < board.length; r++) {
+                for (let c = 0; c < board[r].length; c++) {
+                    if (board[r][c]) dotCount++;
+                }
+            }
+            console.log('UPDATE_BOARD: Total dots on board:', dotCount);
             const boardDiv = document.getElementById('gameBoard');
             boardDiv.innerHTML = '';
             
@@ -650,6 +670,8 @@
             if (selectedCards.length === 0) return;
             
             const cards = selectedCards.map(i => myHand[i]);
+            console.log('PLAY_CARDS: Sending cards:', cards);
+            console.log('PLAY_CARDS: Current game state:', currentGameState);
             socket.emit('play_cards', {
                 game_id: gameId,
                 cards: cards
