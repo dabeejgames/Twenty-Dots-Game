@@ -23,6 +23,7 @@ class GameSession:
         self.game_id = game_id
         self.game = TwentyDots()
         self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
+        self.game.can_roll_dice = True  # First player must roll to place initial wild dot
         print(f"Created new game {game_id}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
         self.players = {}  # sid -> player_info
         self.player_order = []  # List of player names in turn order
@@ -262,6 +263,10 @@ def handle_join_game(data):
         game_session.game.deal_cards(5)
         game_session.started = True
         
+        # Player 1 must roll wild dot first - enable roll dice
+        game_session.game.can_roll_dice = True
+        print(f"[AUTO_START] Set can_roll_dice=True. Player {game_session.game.get_current_player()} must roll first.")
+        
         # Send game state to all players
         game_state = game_session.get_game_state()
         emit('game_started', game_state, room=game_id)
@@ -415,6 +420,7 @@ def handle_play_cards(data):
     
     # Play each card
     matches_made = False
+    yellow_replaced = False
     for card in cards_to_play:
         # Remove card from hand
         hand.remove(card)
@@ -424,11 +430,19 @@ def handle_play_cards(data):
         if card.power:
             # Handle power cards (simplified for now)
             continue
+        
+        # Check if we're placing on yellow
+        row = card.location[0]
+        col = card.location[1]
+        row_idx = game_session.game.rows.index(row)
+        col_idx = game_session.game.columns.index(col)
+        current_dot = game_session.game.grid[row_idx][col_idx]
+        if current_dot and current_dot.color == 'yellow':
+            yellow_replaced = True
+            print(f"[PLAY_CARDS] Yellow dot will be replaced at {row}{col}")
             
         # Regular card - place dot
         success, replaced_color = game_session.game.place_card_dot(card)
-        row = card.location[0]
-        col = card.location[1]
         print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}")
         
         if success:
@@ -442,9 +456,13 @@ def handle_play_cards(data):
     while len(hand) < 5 and game_session.game.deck:
         game_session.game.draw_card(player_name)
     
-    # If matches were made, allow player to roll dice for yellow dot
-    if matches_made:
+    # If yellow was replaced or collected, allow player to roll again for new yellow
+    if matches_made or yellow_replaced:
         game_session.game.can_roll_dice = True
+        print(f"[PLAY_CARDS] Yellow was replaced/collected - can_roll_dice set to True")
+    else:
+        game_session.game.can_roll_dice = False
+        print(f"[PLAY_CARDS] Yellow not affected - can_roll_dice set to False")
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
@@ -498,8 +516,9 @@ def handle_end_turn(data):
     print(f"[END_TURN] Current player index before: {game_session.game.current_player_idx}")
     # Move to next turn
     game_session.game.next_player()
-    # Reset dice rolling flag
-    game_session.game.can_roll_dice = False
+    # Next player must roll (or will roll after yellow is replaced during play)
+    game_session.game.can_roll_dice = True
+    print(f"[END_TURN] Set can_roll_dice = True for next player")
     print(f"[END_TURN] Current player index after: {game_session.game.current_player_idx}")
     print(f"[END_TURN] New current player: {game_session.game.get_current_player()}")
     
@@ -555,9 +574,13 @@ def handle_roll_dice(data):
     if match:
         # Collect the match with yellow
         game_session.game.collect_dots(match, player_name, 'yellow')
+        # Can roll again if matched
+        game_session.game.can_roll_dice = True
+    else:
+        # No match - player can now play cards
+        game_session.game.can_roll_dice = False
     
-    # Reset the roll dice flag
-    game_session.game.can_roll_dice = False
+    print(f"[ROLL_DICE] {player_name} rolled at {row}{col}. Match: {bool(match)}. can_roll_dice={game_session.game.can_roll_dice}")
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
