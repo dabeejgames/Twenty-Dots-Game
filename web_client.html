@@ -529,8 +529,8 @@
             const isMyTurn = state.current_turn === playerName;
             const canRoll = state.can_roll_dice || false;
             
-            // Roll Dice button: show if it's your turn AND can_roll_dice is true
-            document.getElementById('rollBtn').style.display = (isMyTurn && canRoll) ? 'block' : 'none';
+            // Roll Dice button: always visible, enabled only when can_roll_dice is true and it's your turn
+            document.getElementById('rollBtn').style.display = 'block';
             document.getElementById('rollBtn').disabled = !isMyTurn || !canRoll;
             
             // Play and End buttons: only enabled if it's your turn and you haven't rolled yet
@@ -633,12 +633,21 @@
                         
                         const discardContainer = document.createElement('div');
                         discardContainer.className = 'discard-cards';
-                        // Show last 2 cards
+                        discardContainer.style.display = 'flex';
+                        discardContainer.style.gap = '5px';
+                        discardContainer.style.marginTop = '5px';
+                        discardContainer.style.flexWrap = 'wrap';
+                        discardContainer.style.justifyContent = 'center';
+                        // Show last 2 cards as card boxes
                         const lastCards = data.discard_pile.slice(-2);
                         lastCards.forEach(card => {
                             const cardDiv = document.createElement('div');
-                            cardDiv.className = `discard-card ${card.color}`;
-                            cardDiv.textContent = card.location;
+                            cardDiv.className = `card ${card.color}`;
+                            cardDiv.style.width = '60px';
+                            cardDiv.style.minHeight = '40px';
+                            cardDiv.style.fontSize = '0.7em';
+                            cardDiv.style.padding = '4px';
+                            cardDiv.innerHTML = `<div>${card.location}</div><div style="font-size: 0.7em; opacity: 0.8;">${card.color.toUpperCase()}</div>`;
                             discardContainer.appendChild(cardDiv);
                         });
                         playerBox.appendChild(discardContainer);
