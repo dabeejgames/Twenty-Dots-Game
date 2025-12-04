@@ -120,10 +120,10 @@ class TwentyDots:
         self.num_players = num_players
         self.difficulty = difficulty
         self.power_cards_enabled = power_cards
-        self.grid_size = 8
+        self.grid_size = 6
         self.grid = [[None for _ in range(self.grid_size)] for _ in range(self.grid_size)]
-        self.columns = ['1', '2', '3', '4', '5', '6', '7', '8']
-        self.rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+        self.columns = ['1', '2', '3', '4', '5', '6']
+        self.rows = ['A', 'B', 'C', 'D', 'E', 'F']
         self.colors = ['red', 'blue', 'purple', 'green']
         
         # Initialize deck
