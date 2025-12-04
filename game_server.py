@@ -98,6 +98,7 @@ class GameSession:
             'players': {name: {
                 'score': data['score'],
                 'total_dots': data['total_dots'],
+                'yellow_dots': data.get('yellow_dots', 0),
                 'hand_size': len(data['hand']),
                 'discard_pile': self.discard_piles.get(name, [])
             } for name, data in self.game.players.items()},
@@ -135,6 +136,14 @@ class GameSession:
         
         print(f"Sending hand to {player_name}: colors = {[c.color for c in hand]}")
         return cards_data
+    
+    def check_winner(self):
+        """Check if any player has won. Returns {'winner': player_name, 'condition': condition} or None"""
+        for player_name in self.player_order:
+            result = self.game.check_win_condition(player_name)
+            if result['winner']:
+                return result
+        return None
 
 @socketio.on('connect')
 def handle_connect():
@@ -570,6 +579,17 @@ def handle_play_cards(data):
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
     
+    # Check for winner after cards are played
+    winner_result = game_session.check_winner()
+    if winner_result:
+        print(f"[PLAY_CARDS] WINNER! {winner_result['winner']} won via {winner_result['condition']}")
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['condition'],
+            'final_state': game_state
+        }, room=game_id)
+        return
+    
     # Don't reset discard pile - keep it visible to show what was played
     
     # Send updated hand to all players
@@ -726,6 +746,17 @@ def handle_roll_dice(data):
     # Broadcast updated game state
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
+    
+    # Check for winner after rolling
+    winner_result = game_session.check_winner()
+    if winner_result:
+        print(f"[ROLL_DICE] WINNER! {winner_result['winner']} won via {winner_result['condition']}")
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['condition'],
+            'final_state': game_state
+        }, room=game_id)
+        return
     
     # Send updated hand to all players
     for sid, player_info in game_session.players.items():

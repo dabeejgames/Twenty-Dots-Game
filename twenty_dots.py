@@ -136,6 +136,7 @@ class TwentyDots:
             'hand': [], 
             'score': {color: 0 for color in self.colors}, 
             'total_dots': 0,
+            'yellow_dots': 0,
             'is_ai': f"Player {i+1}" in self.ai_opponents,
             'double_next_match': False
         } for i in range(num_players)}
@@ -148,6 +149,34 @@ class TwentyDots:
             self.win_condition = lambda p: p['total_dots'] >= 20
         else:  # hard
             self.win_condition = lambda p: all(p['score'][color] >= 5 for color in self.colors)
+    
+    def check_win_condition(self, player_name: str) -> dict:
+        """
+        Check all three win conditions for a player.
+        Returns: {'winner': player_name, 'condition': 'condition_type'} or {'winner': None}
+        
+        Win conditions:
+        1. 'twenty_dots': First to 20 total dots
+        2. 'five_colors': First to get 5 of each color (red, blue, green, purple)
+        3. 'five_with_yellow': First to get 5 of each color including yellow
+        """
+        player_data = self.players[player_name]
+        
+        # Condition 1: First to 20 total dots
+        if player_data['total_dots'] >= 20:
+            return {'winner': player_name, 'condition': 'twenty_dots'}
+        
+        # Condition 2: 5 of each color (excluding yellow)
+        if all(player_data['score'][color] >= 5 for color in self.colors):
+            return {'winner': player_name, 'condition': 'five_colors'}
+        
+        # Condition 3: 5 of each color including yellow
+        # (need to track yellow collection separately)
+        yellow_count = player_data.get('yellow_dots', 0)
+        if yellow_count >= 5 and all(player_data['score'][color] >= 5 for color in self.colors):
+            return {'winner': player_name, 'condition': 'five_with_yellow'}
+        
+        return {'winner': None}
     
     def display_grid(self):
         """Display the 6x6 grid with labels."""
@@ -466,6 +495,9 @@ class TwentyDots:
             if dot:
                 self.players[player_name]['score'][color] += multiplier
                 self.players[player_name]['total_dots'] += multiplier
+                # Track yellow dots separately for the 5-with-yellow win condition
+                if dot.color == 'yellow':
+                    self.players[player_name]['yellow_dots'] += multiplier
                 self.grid[row_idx][col_idx] = None
         
         # Reset double score flag after use
