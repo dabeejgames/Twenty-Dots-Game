@@ -389,6 +389,14 @@
                 <input type="text" id="playerName" placeholder="e.g., Brandon" value="Brandon">
             </div>
             <div class="form-group">
+                <label>Win Condition</label>
+                <select id="winCondition" style="width: 100%; padding: 10px; border-radius: 5px; background: #2a2a3e; color: white; border: 2px solid #ffd700;">
+                    <option value="twenty_dots">First to 20 Total Dots</option>
+                    <option value="five_colors">First to 5 of Each Color</option>
+                    <option value="five_with_yellow">First to 5 of Each Color + 5 Yellow</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <button class="btn-join" onclick="joinGame()">🎮 Join Game</button>
             </div>
             <div class="error-message" id="joinError"></div>
@@ -469,6 +477,7 @@
         function joinGame() {
             gameId = document.getElementById('gameId').value || 'demo';
             playerName = document.getElementById('playerName').value || 'Player';
+            const gameMode = document.getElementById('winCondition').value;
             
             if (!gameId || !playerName) {
                 showError('joinError', 'Please enter Game ID and your name');
@@ -483,7 +492,8 @@
                 console.log('Connected to server');
                 socket.emit('join_game', {
                     game_id: gameId,
-                    player_name: playerName
+                    player_name: playerName,
+                    game_mode: gameMode
                 });
             });
             
@@ -516,6 +526,26 @@
             
             socket.on('error', (data) => {
                 console.log('Error:', data.message);
+            });
+            
+            socket.on('game_over', (data) => {
+                console.log('GAME OVER!', data);
+                const winner = data.winner;
+                const condition = data.condition;
+                
+                let conditionText = '';
+                if (condition === 'twenty_dots') {
+                    conditionText = 'First to reach 20 total dots!';
+                } else if (condition === 'five_colors') {
+                    conditionText = 'First to collect 5 of each color!';
+                } else if (condition === 'five_with_yellow') {
+                    conditionText = 'First to collect 5 of each color including yellow!';
+                }
+                
+                setTimeout(() => {
+                    alert(`🎉 ${winner} WINS! 🎉\n\n${conditionText}`);
+                    location.reload();
+                }, 500);
             });
         }
 

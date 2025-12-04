@@ -19,12 +19,13 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 games = {}
 
 class GameSession:
-    def __init__(self, game_id, host_sid):
+    def __init__(self, game_id, host_sid, game_mode='twenty_dots'):
         self.game_id = game_id
+        self.game_mode = game_mode
         self.game = TwentyDots(num_players=2, difficulty='easy', ai_opponents={}, power_cards=False)
         self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
         self.game.can_roll_dice = True  # First player must roll to place initial wild dot
-        print(f"Created new game {game_id}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
+        print(f"Created new game {game_id} with mode {game_mode}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
         self.players = {}  # sid -> player_info
         self.player_order = []  # List of player names in turn order
         self.ai_players = {}  # player_name -> AIPlayer instance
@@ -106,7 +107,8 @@ class GameSession:
             'deck_size': len(self.game.deck),
             'yellow_dot_position': yellow_position,
             'landmines': landmines_data,
-            'can_roll_dice': getattr(self.game, 'can_roll_dice', False)
+            'can_roll_dice': getattr(self.game, 'can_roll_dice', False),
+            'game_mode': self.game_mode
         }
     
     def get_player_hand(self, player_name):
@@ -135,6 +137,28 @@ class GameSession:
         
         print(f"Sending hand to {player_name}: colors = {[c.color for c in hand]}")
         return cards_data
+    
+    def check_winner(self):
+        """Check if anyone has won based on game_mode"""
+        for player_name in self.player_order:
+            player_data = self.game.players[player_name]
+            
+            if self.game_mode == 'twenty_dots':
+                if player_data['total_dots'] >= 20:
+                    return {'winner': player_name, 'mode': 'twenty_dots'}
+            
+            elif self.game_mode == 'five_colors':
+                # Check if player has 5 of each color (red, blue, green, purple)
+                if all(player_data['score'].get(color, 0) >= 5 for color in ['red', 'blue', 'green', 'purple']):
+                    return {'winner': player_name, 'mode': 'five_colors'}
+            
+            elif self.game_mode == 'five_with_yellow':
+                # Check if player has 5 yellow dots AND 5 of each color
+                yellow_dots = player_data.get('yellow_dots', 0)
+                if yellow_dots >= 5 and all(player_data['score'].get(color, 0) >= 5 for color in ['red', 'blue', 'green', 'purple']):
+                    return {'winner': player_name, 'mode': 'five_with_yellow'}
+        
+        return None
 
 @socketio.on('connect')
 def handle_connect():
@@ -188,8 +212,9 @@ def handle_join_game(data):
     # Auto-create game if it doesn't exist (first player)
     if game_id not in games:
         player_name = data.get('player_name', 'Player 1')
-        print(f"[JOIN_GAME] Game doesn't exist, creating. First player: {player_name}")
-        game_session = GameSession(game_id, request.sid)
+        game_mode = data.get('game_mode', 'twenty_dots')
+        print(f"[JOIN_GAME] Game doesn't exist, creating. First player: {player_name}, mode: {game_mode}")
+        game_session = GameSession(game_id, request.sid, game_mode)
         success, message = game_session.add_player(request.sid, player_name)
         
         if not success:
@@ -570,6 +595,16 @@ def handle_play_cards(data):
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
     
+    # Check for winner
+    winner_result = game_session.check_winner()
+    if winner_result:
+        print(f"[PLAY_CARDS] GAME OVER! Winner: {winner_result['winner']} (mode: {winner_result['mode']})")
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['mode']
+        }, room=game_id)
+        return
+    
     # Don't reset discard pile - keep it visible to show what was played
     
     # Send updated hand to all players
@@ -726,6 +761,16 @@ def handle_roll_dice(data):
     # Broadcast updated game state
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
+    
+    # Check for winner
+    winner_result = game_session.check_winner()
+    if winner_result:
+        print(f"[ROLL_DICE] GAME OVER! Winner: {winner_result['winner']} (mode: {winner_result['mode']})")
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['mode']
+        }, room=game_id)
+        return
     
     # Send updated hand to all players
     for sid, player_info in game_session.players.items():
