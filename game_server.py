@@ -424,6 +424,17 @@ def handle_play_cards(data):
         emit('error', {'message': 'Cannot play more than 2 cards per turn'})
         return
     
+    # Check for duplicate locations
+    if len(cards_to_play) == 2:
+        loc1 = cards_to_play[0].location if isinstance(cards_to_play[0].location, str) else f"{cards_to_play[0].location[0]}{cards_to_play[0].location[1]}"
+        loc2 = cards_to_play[1].location if isinstance(cards_to_play[1].location, str) else f"{cards_to_play[1].location[0]}{cards_to_play[1].location[1]}"
+        if loc1 == loc2:
+            emit('error', {'message': 'Cannot play 2 cards on the same location in one turn'})
+            return
+    
+    # Check current discard count BEFORE adding new cards
+    current_discard_count = len(game_session.discard_piles.get(player_name, []))
+    
     # Play each card
     matches_made = False
     yellow_replaced = False
@@ -477,15 +488,16 @@ def handle_play_cards(data):
         game_session.game.can_roll_dice = False
         print(f"[PLAY_CARDS] Yellow not affected - can_roll_dice set to False")
     
-    # Auto-advance turn after playing 2 cards
-    if len(game_session.discard_piles.get(player_name, [])) >= 2:
-        print(f"[PLAY_CARDS] {player_name} has played 2 cards, auto-advancing turn")
-        # Reset current player's discard pile for their next turn
-        game_session.discard_piles[player_name] = []
+    # Auto-advance turn after playing 2 cards (check using count from before this play)
+    new_discard_count = current_discard_count + len(cards_to_play)
+    if new_discard_count >= 2:
+        print(f"[PLAY_CARDS] {player_name} has played {new_discard_count} cards total, auto-advancing turn")
         # Don't enable roll dice on turn advance - only enable if yellow was affected
         if not (matches_made or yellow_replaced):
             game_session.game.can_roll_dice = False
         game_session.game.next_player()
+        # Reset current player's discard pile for their next turn AFTER advancing
+        game_session.discard_piles[player_name] = []
         print(f"[PLAY_CARDS] Turn advanced to {game_session.game.get_current_player()}")
     
     # Draw cards back to 5 AFTER turn logic
