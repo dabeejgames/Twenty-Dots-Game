@@ -671,17 +671,35 @@ def handle_roll_dice(data):
     old_dot = game_session.game.grid[row_idx][col_idx]
     game_session.game.grid[row_idx][col_idx] = Dot('yellow')
     game_session.game.yellow_dot_position = (row_idx, col_idx)
-    print(f"[ROLL_DICE] Placed yellow dot at grid[{row_idx}][{col_idx}]")
+    print(f"[ROLL_DICE] Placed yellow dot at grid[{row_idx}][{col_idx}] (replaced: {old_dot.color if old_dot else 'empty'})")
+    
+    # Log surrounding grid state for debugging
+    print(f"[ROLL_DICE] Grid around {row}{col}:")
+    for check_row in range(max(0, row_idx-2), min(6, row_idx+3)):
+        for check_col in range(max(0, col_idx-2), min(6, col_idx+3)):
+            dot = game_session.game.grid[check_row][check_col]
+            dot_str = f"{dot.color[0].upper()}" if dot else "."
+            if check_row == row_idx and check_col == col_idx:
+                dot_str = f"[{dot_str}]"  # Mark placed dot
+            print(dot_str, end=" ")
+        print()
     
     # Check for matches created by yellow dot
+    print(f"[ROLL_DICE] About to call check_line_match for {row}{col} (indices {row_idx},{col_idx})")
     match = game_session.game.check_line_match(row, col, 'yellow')
+    print(f"[ROLL_DICE] check_line_match returned match={match} (type={type(match)}, len={len(match) if match else 0})")
     
     if match:
         # Collect the match with yellow
+        print(f"[ROLL_DICE] MATCH FOUND! Collecting {len(match)} positions: {match}")
         game_session.game.collect_dots(match, player_name, 'yellow')
+        print(f"[ROLL_DICE] After collect_dots, checking player stats...")
+        print(f"[ROLL_DICE] {player_name}'s score: {game_session.game.players[player_name]['score']}")
+        print(f"[ROLL_DICE] {player_name}'s total_dots: {game_session.game.players[player_name]['total_dots']}")
         # Can roll again if matched
         game_session.game.can_roll_dice = True
     else:
+        print(f"[ROLL_DICE] NO MATCH detected at {row}{col}")
         # No match - if player must advance after roll, do it now
         if must_advance:
             print(f"[ROLL_DICE] Advancing {player_name}'s turn after rolling")
