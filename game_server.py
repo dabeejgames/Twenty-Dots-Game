@@ -262,6 +262,8 @@ def handle_join_game(data):
         print(f"[AUTO_START] After renaming, player names: {list(game_session.game.players.keys())}")
         print(f"[AUTO_START] Current player (idx=0): {game_session.game.get_current_player()}")
         
+        # Shuffle deck before dealing
+        game_session.game.shuffle_deck()
         game_session.game.deal_cards(5)
         game_session.started = True
         
