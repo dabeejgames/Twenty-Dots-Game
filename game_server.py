@@ -444,6 +444,12 @@ def handle_play_cards(data):
     
     cards_played_this_turn = game_session.game.turn_cards_played[current_player]
     
+    # Prevent playing more cards if already at 2 this turn
+    total_played_this_turn = cards_played_this_turn + len(cards_to_play)
+    if total_played_this_turn > 2:
+        emit('error', {'message': f'Can only play 2 cards per turn. Already played {cards_played_this_turn}'})
+        return
+    
     # Play each card
     matches_made = False
     yellow_replaced = False
@@ -515,8 +521,17 @@ def handle_play_cards(data):
     total_played_this_turn = cards_played_this_turn + len(cards_to_play)
     game_session.game.turn_cards_played[current_player] = total_played_this_turn
     
+    # Only draw cards when turn is ending (at 2 cards played)
     if total_played_this_turn >= 2:
-        print(f"[PLAY_CARDS] {player_name} has played {total_played_this_turn} cards this turn, auto-advancing turn")
+        print(f"[PLAY_CARDS] {player_name} has played {total_played_this_turn} cards this turn, drawing replacements")
+        # Draw cards back to 5 AFTER playing 2 cards
+        cards_drawn = 0
+        while len(hand) < 5 and game_session.game.deck:
+            game_session.game.draw_card(player_name)
+            cards_drawn += 1
+        print(f"[PLAY_CARDS] Drew {cards_drawn} cards")
+        
+        print(f"[PLAY_CARDS] Auto-advancing turn")
         # Don't enable roll dice on turn advance - only enable if yellow was affected
         if not (yellow_replaced or yellow_collected):
             game_session.game.can_roll_dice = False
@@ -525,13 +540,8 @@ def handle_play_cards(data):
         new_player = game_session.game.get_current_player()
         game_session.game.turn_cards_played[new_player] = 0
         print(f"[PLAY_CARDS] Turn advanced to {new_player}")
-    
-    # Draw cards back to 5 AFTER turn logic - this will draw 2 cards after playing 2
-    cards_drawn = 0
-    while len(hand) < 5 and game_session.game.deck:
-        game_session.game.draw_card(player_name)
-        cards_drawn += 1
-    print(f"[PLAY_CARDS] Drew {cards_drawn} cards")
+    else:
+        print(f"[PLAY_CARDS] {player_name} has played {total_played_this_turn} card(s) this turn, waiting for more or 2nd card")
     
     # Broadcast updated game state BEFORE modifying discard pile
     game_state = game_session.get_game_state()
