@@ -649,23 +649,10 @@ def handle_roll_dice(data):
     if not hasattr(game_session.game, 'must_advance_after_roll'):
         game_session.game.must_advance_after_roll = {}
     
-    if player_name in game_session.game.must_advance_after_roll and game_session.game.must_advance_after_roll[player_name]:
-        print(f"[ROLL_DICE] {player_name} must now advance turn after rolling")
-        # Advance to next player
-        game_session.game.next_player()
-        game_session.game.can_roll_dice = False
-        # Clear the flag
-        game_session.game.must_advance_after_roll[player_name] = False
-        # Reset card counter for new player
-        new_player = game_session.game.get_current_player()
-        if not hasattr(game_session.game, 'turn_cards_played'):
-            game_session.game.turn_cards_played = {}
-        game_session.game.turn_cards_played[new_player] = 0
-        print(f"[ROLL_DICE] Turn advanced to {new_player}")
-        # Don't place a new yellow dot - just end this player's turn
-        game_state = game_session.get_game_state()
-        emit('game_updated', game_state, room=game_id)
-        return
+    # Track if this player must advance turn after rolling
+    must_advance = player_name in game_session.game.must_advance_after_roll and game_session.game.must_advance_after_roll[player_name]
+    if must_advance:
+        print(f"[ROLL_DICE] {player_name} must advance turn after this roll")
     
     # Roll for yellow dot position (returns row, col as strings like 'A', '1')
     row, col = game_session.game.roll_dice()
@@ -690,8 +677,16 @@ def handle_roll_dice(data):
         # Can roll again if matched
         game_session.game.can_roll_dice = True
     else:
-        # No match - player can now play cards
-        game_session.game.can_roll_dice = False
+        # No match - if player must advance after roll, do it now
+        if must_advance:
+            print(f"[ROLL_DICE] Advancing {player_name}'s turn after rolling")
+            game_session.game.must_advance_after_roll[player_name] = False
+            new_player = game_session.game.next_player()
+            game_session.game.turn_cards_played[new_player] = 0
+            game_session.game.can_roll_dice = False
+        else:
+            # Normal case - player can now play cards
+            game_session.game.can_roll_dice = False
     
     print(f"[ROLL_DICE] {player_name} rolled at {row}{col}. Match: {bool(match)}. can_roll_dice={game_session.game.can_roll_dice}")
     
