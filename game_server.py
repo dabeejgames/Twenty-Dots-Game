@@ -469,10 +469,6 @@ def handle_play_cards(data):
                 matches_made = True
                 game_session.game.collect_dots(match, player_name, card.color)
     
-    # Draw cards back to 5
-    while len(hand) < 5 and game_session.game.deck:
-        game_session.game.draw_card(player_name)
-    
     # If yellow was replaced or collected, allow player to roll again for new yellow
     if matches_made or yellow_replaced:
         game_session.game.can_roll_dice = True
@@ -484,9 +480,15 @@ def handle_play_cards(data):
     # Auto-advance turn after playing 2 cards
     if len(game_session.discard_piles.get(player_name, [])) >= 2:
         print(f"[PLAY_CARDS] {player_name} has played 2 cards, auto-advancing turn")
-        game_session.game.can_roll_dice = True
+        # Don't enable roll dice on turn advance - only enable if yellow was affected
+        if not (matches_made or yellow_replaced):
+            game_session.game.can_roll_dice = False
         game_session.game.next_player()
         print(f"[PLAY_CARDS] Turn advanced to {game_session.game.get_current_player()}")
+    
+    # Draw cards back to 5 AFTER turn logic
+    while len(hand) < 5 and game_session.game.deck:
+        game_session.game.draw_card(player_name)
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
