@@ -368,6 +368,8 @@ def handle_play_cards(data):
     game_id = data.get('game_id')
     cards_data = data.get('cards')  # List of {color, location, power}
     
+    print(f"[PLAY_CARDS] Received play_cards from player. Cards: {cards_data}")
+    
     if game_id not in games:
         emit('error', {'message': 'Game not found'})
         return
@@ -386,6 +388,8 @@ def handle_play_cards(data):
     # Convert cards data back to Card objects
     from twenty_dots import Card
     hand = game_session.game.players[player_name]['hand']
+    print(f"[PLAY_CARDS] Hand before: {[(c.color, c.location) for c in hand]}")
+    
     cards_to_play = []
     
     for card_data in cards_data:
@@ -398,7 +402,10 @@ def handle_play_cards(data):
                 cards_to_play.append(card)
                 break
     
+    print(f"[PLAY_CARDS] Found {len(cards_to_play)} cards to play")
+    
     if len(cards_to_play) != len(cards_data):
+        print(f"[PLAY_CARDS] ERROR: Could not find all cards. Expected {len(cards_data)}, found {len(cards_to_play)}")
         emit('error', {'message': 'Invalid cards selected'})
         return
     
@@ -411,6 +418,7 @@ def handle_play_cards(data):
     for card in cards_to_play:
         # Remove card from hand
         hand.remove(card)
+        print(f"[PLAY_CARDS] Removed {card.color} {card.location} from hand")
         
         # Place dot on board
         if card.power:
@@ -418,10 +426,10 @@ def handle_play_cards(data):
             continue
             
         # Regular card - place dot
-        row = card.location[0] if isinstance(card.location, tuple) else card.location[0]
-        col = card.location[1] if isinstance(card.location, tuple) else card.location[1]
-        
         success, replaced_color = game_session.game.place_card_dot(card)
+        row = card.location[0]
+        col = card.location[1]
+        print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}")
         
         if success:
             # Check for matches
