@@ -295,6 +295,14 @@
             animation: glow 2s infinite;
         }
         
+        .dot.yellow-wild {
+            background: radial-gradient(circle at 30% 30%, #FFEB3B, #FFD700);
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.9), inset 0 0 15px rgba(255, 255, 255, 0.3);
+            animation: glow 1.5s infinite;
+            border: 2px dashed rgba(255, 215, 0, 0.8);
+            position: relative;
+        }
+        
         @keyframes glow {
             0%, 100% { box-shadow: 0 0 25px rgba(255, 215, 0, 0.7); }
             50% { box-shadow: 0 0 40px rgba(255, 215, 0, 1); }
@@ -405,6 +413,15 @@
         
         .btn-end:hover {
             box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+        }
+        
+        .btn-roll {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
+        }
+        
+        .btn-roll:hover {
+            box-shadow: 0 6px 20px rgba(243, 156, 18, 0.6);
         }
         
         button:disabled {
@@ -660,6 +677,9 @@
                         <button class="btn-end" id="endBtn" onclick="endTurn()">
                             ⏭️ End Turn
                         </button>
+                        <button class="btn-roll" id="rollBtn" onclick="rollDice()" style="display: none;">
+                            🎲 Roll Dice
+                        </button>
                     </div>
                     
                     <div id="landminesSection" class="landmines-section" style="display: none;">
@@ -764,7 +784,7 @@
         function updateGameState(state) {
             console.log('[UPDATE_STATE] Called with state:', state);
             currentGameState = state;
-            updateBoard(state.board);
+            updateBoard(state.board, state.yellow_dot_position);
             updatePlayers(state.players, state.current_turn);
             updateTurnInfo(state.current_turn);
             
@@ -774,10 +794,16 @@
             console.log('[UPDATE_STATE] Setting endBtn.disabled to', !isMyTurn);
             document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0;
             document.getElementById('endBtn').disabled = !isMyTurn;
+            
+            // Show roll dice button if can roll and it's my turn
+            const canRoll = state.can_roll_dice || false;
+            document.getElementById('rollBtn').style.display = (isMyTurn && canRoll) ? 'block' : 'none';
+            document.getElementById('rollBtn').disabled = !isMyTurn || !canRoll;
+            
             console.log('[UPDATE_STATE] Button states updated. endBtn.disabled is now:', document.getElementById('endBtn').disabled);
         }
         
-        function updateBoard(board) {
+        function updateBoard(board, yellowDotPosition) {
             const boardDiv = document.getElementById('gameBoard');
             boardDiv.innerHTML = '';
             
@@ -814,8 +840,12 @@
                         cell.appendChild(dot);
                     }
                     
-                    // Check for landmines (if implemented)
-                    // TODO: Add landmine markers
+                    // Check for yellow dot at this position
+                    if (yellowDotPosition && yellowDotPosition[0] === rows[r] && yellowDotPosition[1] === cols[c]) {
+                        const yellowDot = document.createElement('div');
+                        yellowDot.className = 'dot yellow-wild';
+                        cell.appendChild(yellowDot);
+                    }
                     
                     boardDiv.appendChild(cell);
                 }
@@ -957,6 +987,13 @@
             selectedCards = [];
             document.querySelectorAll('.card.selected').forEach(card => {
                 card.classList.remove('selected');
+            });
+        }
+        
+        function rollDice() {
+            console.log('[CLIENT] Rolling dice for yellow wild dot');
+            socket.emit('roll_dice', {
+                game_id: gameId
             });
         }
         
