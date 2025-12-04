@@ -21,7 +21,7 @@ games = {}
 class GameSession:
     def __init__(self, game_id, host_sid):
         self.game_id = game_id
-        self.game = TwentyDots()
+        self.game = TwentyDots(num_players=2, difficulty='easy', ai_opponents={}, power_cards=False)
         self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
         self.game.can_roll_dice = True  # First player must roll to place initial wild dot
         print(f"Created new game {game_id}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
@@ -30,6 +30,7 @@ class GameSession:
         self.ai_players = {}  # player_name -> AIPlayer instance
         self.host_sid = host_sid
         self.started = False
+        self.discard_piles = {}  # Track discard piles for each player
         
     def add_player(self, sid, player_name, is_ai=False):
         """Add a player to the game"""
@@ -98,7 +99,7 @@ class GameSession:
                 'score': data['score'],
                 'total_dots': data['total_dots'],
                 'hand_size': len(data['hand']),
-                'discard_pile': []
+                'discard_pile': self.discard_piles.get(name, [])
             } for name, data in self.game.players.items()},
             'current_turn': self.game.get_current_player(),
             'turn_number': getattr(self.game, 'turn_number', 1),
@@ -113,21 +114,22 @@ class GameSession:
         hand = self.game.players[player_name]['hand']
         cards_data = []
         for c in hand:
+            # Skip power cards for now
+            if hasattr(c, 'power') and c.power:
+                continue
+                
             # Handle both string and tuple locations
             if isinstance(c.location, tuple):
                 loc = c.location
             elif isinstance(c.location, str):
-                if c.location == 'PWR':
-                    loc = ('P', 'WR')  # Power card marker
-                else:
-                    loc = (c.location[0], c.location[1])
+                loc = (c.location[0], c.location[1])
             else:
                 loc = ('?', '?')
             
             card_data = {
                 'color': c.color,
                 'location': list(loc),
-                'power': c.power if hasattr(c, 'power') and c.power else None
+                'power': None
             }
             cards_data.append(card_data)
         
@@ -262,6 +264,10 @@ def handle_join_game(data):
         
         game_session.game.deal_cards(5)
         game_session.started = True
+        
+        # Initialize discard piles for all players
+        for pname in game_session.player_order:
+            game_session.discard_piles[pname] = []
         
         # Player 1 must roll wild dot first - enable roll dice
         game_session.game.can_roll_dice = True
@@ -422,6 +428,17 @@ def handle_play_cards(data):
     matches_made = False
     yellow_replaced = False
     for card in cards_to_play:
+        # Add card to discard pile first
+        if player_name not in game_session.discard_piles:
+            game_session.discard_piles[player_name] = []
+        
+        card_info = {
+            'location': card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}",
+            'color': card.color
+        }
+        game_session.discard_piles[player_name].append(card_info)
+        print(f"[PLAY_CARDS] Added {card.color} {card.location} to {player_name}'s discard pile")
+        
         # Remove card from hand
         hand.remove(card)
         print(f"[PLAY_CARDS] Removed {card.color} {card.location} from hand")
@@ -557,18 +574,21 @@ def handle_roll_dice(data):
         emit('error', {'message': 'Not your turn'})
         return
     
-    # Roll for yellow dot position
-    row_idx, col_idx = game_session.game.roll_dice()
+    # Roll for yellow dot position (returns row, col as strings like 'A', '1')
+    row, col = game_session.game.roll_dice()
+    row_idx = game_session.game.rows.index(row)
+    col_idx = game_session.game.columns.index(col)
+    
+    print(f"[ROLL_DICE] Rolled {row}{col} (indices: {row_idx}, {col_idx})")
     
     # Place yellow dot
     from twenty_dots import Dot
     old_dot = game_session.game.grid[row_idx][col_idx]
     game_session.game.grid[row_idx][col_idx] = Dot('yellow')
     game_session.game.yellow_dot_position = (row_idx, col_idx)
+    print(f"[ROLL_DICE] Placed yellow dot at grid[{row_idx}][{col_idx}]")
     
     # Check for matches created by yellow dot
-    row = game_session.game.rows[row_idx]
-    col = game_session.game.columns[col_idx]
     match = game_session.game.check_line_match(row, col, 'yellow')
     
     if match:

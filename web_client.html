@@ -104,6 +104,9 @@
         .player-score-dots { display: flex; justify-content: center; gap: 3px; margin: 5px 0; }
         .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
         .player-hand { font-size: 0.85em; color: #aaa; }
+        .player-discard { font-size: 0.75em; color: #888; margin-top: 5px; }
+        .discard-cards { display: flex; justify-content: center; gap: 3px; margin-top: 3px; flex-wrap: wrap; max-width: 220px; }
+        .discard-card { width: 35px; height: 20px; border-radius: 3px; font-size: 0.65em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; }
         
         /* Board */
         .board-section {
@@ -628,6 +631,26 @@
                     handDiv.className = 'player-hand';
                     handDiv.textContent = `Hand: ${data.hand_size}/5`;
                     playerBox.appendChild(handDiv);
+                    
+                    // Add discard pile
+                    if (data.discard_pile && data.discard_pile.length > 0) {
+                        const discardLabel = document.createElement('div');
+                        discardLabel.className = 'player-discard';
+                        discardLabel.textContent = `Discard: ${data.discard_pile.length}`;
+                        playerBox.appendChild(discardLabel);
+                        
+                        const discardContainer = document.createElement('div');
+                        discardContainer.className = 'discard-cards';
+                        // Show last 2 cards
+                        const lastCards = data.discard_pile.slice(-2);
+                        lastCards.forEach(card => {
+                            const cardDiv = document.createElement('div');
+                            cardDiv.className = `discard-card ${card.color}`;
+                            cardDiv.textContent = card.location;
+                            discardContainer.appendChild(cardDiv);
+                        });
+                        playerBox.appendChild(discardContainer);
+                    }
                 }
             });
         }
