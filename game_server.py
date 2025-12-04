@@ -434,8 +434,15 @@ def handle_play_cards(data):
             emit('error', {'message': 'Cannot play 2 cards on the same location in one turn'})
             return
     
-    # Check current discard count BEFORE adding new cards
-    current_discard_count = len(game_session.discard_piles.get(player_name, []))
+    # Track cards played this turn (discard piles now persist across turns)
+    if not hasattr(game_session.game, 'turn_cards_played'):
+        game_session.game.turn_cards_played = {}
+    
+    current_player = game_session.game.get_current_player()
+    if current_player not in game_session.game.turn_cards_played:
+        game_session.game.turn_cards_played[current_player] = 0
+    
+    cards_played_this_turn = game_session.game.turn_cards_played[current_player]
     
     # Play each card
     matches_made = False
@@ -474,9 +481,15 @@ def handle_play_cards(data):
             
         # Regular card - place dot
         success, replaced_color = game_session.game.place_card_dot(card)
-        print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}")
+        print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}, replaced={replaced_color}")
         
         if success:
+            # Award point if we replaced a colored dot
+            if replaced_color and replaced_color != 'yellow':
+                game_session.game.players[player_name]['score'][replaced_color] += 1
+                game_session.game.players[player_name]['total_dots'] += 1
+                print(f"[PLAY_CARDS] Awarded point for replacing {replaced_color} dot")
+            
             # Check for matches
             match = game_session.game.check_line_match(row, col, card.color)
             if match:
@@ -498,15 +511,20 @@ def handle_play_cards(data):
         game_session.game.can_roll_dice = False
         print(f"[PLAY_CARDS] Yellow not affected - can_roll_dice set to False")
     
-    # Auto-advance turn after playing 2 cards (check using count from before this play)
-    new_discard_count = current_discard_count + len(cards_to_play)
-    if new_discard_count >= 2:
-        print(f"[PLAY_CARDS] {player_name} has played {new_discard_count} cards total, auto-advancing turn")
+    # Auto-advance turn after playing 2 cards THIS TURN
+    total_played_this_turn = cards_played_this_turn + len(cards_to_play)
+    game_session.game.turn_cards_played[current_player] = total_played_this_turn
+    
+    if total_played_this_turn >= 2:
+        print(f"[PLAY_CARDS] {player_name} has played {total_played_this_turn} cards this turn, auto-advancing turn")
         # Don't enable roll dice on turn advance - only enable if yellow was affected
         if not (yellow_replaced or yellow_collected):
             game_session.game.can_roll_dice = False
         game_session.game.next_player()
-        print(f"[PLAY_CARDS] Turn advanced to {game_session.game.get_current_player()}")
+        # Reset card counter for new player
+        new_player = game_session.game.get_current_player()
+        game_session.game.turn_cards_played[new_player] = 0
+        print(f"[PLAY_CARDS] Turn advanced to {new_player}")
     
     # Draw cards back to 5 AFTER turn logic - this will draw 2 cards after playing 2
     cards_drawn = 0
