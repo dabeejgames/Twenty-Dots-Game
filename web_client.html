@@ -440,9 +440,8 @@
                     <div class="hand-title">Your Hand</div>
                     <div class="cards-container" id="handCards"></div>
                     <div class="controls">
-                        <button class="btn-play" id="playBtn" onclick="playCards()">▶️ Play Cards</button>
-                        <button class="btn-roll" id="rollBtn" onclick="rollDice()" style="display: none;">🎲 Roll Wild Dice</button>
-                        <button class="btn-end" id="endBtn" onclick="endTurn()">⏭️ End Turn</button>
+                        <button class="btn-play" id="playBtn" onclick="playCards()" disabled>▶️ Play Cards</button>
+                        <button class="btn-roll" id="rollBtn" onclick="rollDice()" disabled>🎲 Roll Wild Dice</button>
                         <button class="btn-clear" onclick="clearSelection()">🗑️ Clear Selection</button>
                     </div>
                 </div>
@@ -533,9 +532,8 @@
             document.getElementById('rollBtn').style.display = 'block';
             document.getElementById('rollBtn').disabled = !isMyTurn || !canRoll;
             
-            // Play and End buttons: only enabled if it's your turn and you haven't rolled yet
+            // Play Cards button: only enabled if it's your turn, you have cards selected, AND you've already rolled (canRoll is false)
             document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0 || canRoll;
-            document.getElementById('endBtn').disabled = !isMyTurn || canRoll;
         }
 
         function updateBoard(board, yellowDotPosition) {

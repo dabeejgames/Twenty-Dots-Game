@@ -438,6 +438,7 @@ def handle_play_cards(data):
     # Play each card
     matches_made = False
     yellow_replaced = False
+    yellow_collected = False
     for card in cards_to_play:
         # Add card to discard pile first
         if player_name not in game_session.discard_piles:
@@ -478,10 +479,17 @@ def handle_play_cards(data):
             match = game_session.game.check_line_match(row, col, card.color)
             if match:
                 matches_made = True
+                # Check if yellow dot is in the matched positions
+                for col_idx, row_idx in match:
+                    dot = game_session.game.grid[row_idx][col_idx]
+                    if dot and dot.color == 'yellow':
+                        yellow_collected = True
+                        print(f"[PLAY_CARDS] Yellow dot collected in match")
+                        break
                 game_session.game.collect_dots(match, player_name, card.color)
     
     # If yellow was replaced or collected, allow player to roll again for new yellow
-    if matches_made or yellow_replaced:
+    if yellow_replaced or yellow_collected:
         game_session.game.can_roll_dice = True
         print(f"[PLAY_CARDS] Yellow was replaced/collected - can_roll_dice set to True")
     else:
@@ -493,20 +501,22 @@ def handle_play_cards(data):
     if new_discard_count >= 2:
         print(f"[PLAY_CARDS] {player_name} has played {new_discard_count} cards total, auto-advancing turn")
         # Don't enable roll dice on turn advance - only enable if yellow was affected
-        if not (matches_made or yellow_replaced):
+        if not (yellow_replaced or yellow_collected):
             game_session.game.can_roll_dice = False
         game_session.game.next_player()
-        # Reset current player's discard pile for their next turn AFTER advancing
-        game_session.discard_piles[player_name] = []
         print(f"[PLAY_CARDS] Turn advanced to {game_session.game.get_current_player()}")
     
     # Draw cards back to 5 AFTER turn logic
     while len(hand) < 5 and game_session.game.deck:
         game_session.game.draw_card(player_name)
     
-    # Broadcast updated game state
+    # Broadcast updated game state BEFORE resetting discard pile
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
+    
+    # Reset discard pile AFTER broadcasting so UI can see the cards
+    if new_discard_count >= 2:
+        game_session.discard_piles[player_name] = []
     
     # Send updated hand to all players
     for sid, player_info in game_session.players.items():
@@ -556,9 +566,7 @@ def handle_end_turn(data):
     print(f"[END_TURN] Current player index before: {game_session.game.current_player_idx}")
     # Move to next turn
     game_session.game.next_player()
-    # Next player must roll (or will roll after yellow is replaced during play)
-    game_session.game.can_roll_dice = True
-    print(f"[END_TURN] Set can_roll_dice = True for next player")
+    # Don't automatically enable roll dice - it should only be enabled at game start or when yellow is affected
     print(f"[END_TURN] Current player index after: {game_session.game.current_player_idx}")
     print(f"[END_TURN] New current player: {game_session.game.get_current_player()}")
     
