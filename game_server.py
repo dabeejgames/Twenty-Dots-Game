@@ -434,13 +434,9 @@ def handle_play_cards(data):
     while len(hand) < 5 and game_session.game.deck:
         game_session.game.draw_card(player_name)
     
-    # Roll for yellow dot if match was made
-    if matches_made and not game_session.game.yellow_dot_position:
-        row_idx, col_idx = game_session.game.roll_dice()
-        if game_session.game.grid[row_idx][col_idx] is None:
-            from twenty_dots import Dot
-            game_session.game.grid[row_idx][col_idx] = Dot('yellow')
-            game_session.game.yellow_dot_position = (row_idx, col_idx)
+    # If matches were made, allow player to roll dice for yellow dot
+    if matches_made:
+        game_session.game.can_roll_dice = True
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
@@ -494,6 +490,8 @@ def handle_end_turn(data):
     print(f"[END_TURN] Current player index before: {game_session.game.current_player_idx}")
     # Move to next turn
     game_session.game.next_player()
+    # Reset dice rolling flag
+    game_session.game.can_roll_dice = False
     print(f"[END_TURN] Current player index after: {game_session.game.current_player_idx}")
     print(f"[END_TURN] New current player: {game_session.game.get_current_player()}")
     
@@ -550,6 +548,9 @@ def handle_roll_dice(data):
         # Collect the match with yellow
         game_session.game.collect_dots(match, player_name, 'yellow')
     
+    # Reset the roll dice flag
+    game_session.game.can_roll_dice = False
+    
     # Broadcast updated game state
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
@@ -561,12 +562,6 @@ def handle_roll_dice(data):
             socketio.emit('your_hand', {'hand': player_hand}, room=sid)
     
     print(f"{player_name} rolled dice, placed yellow at {row}{col}")
-    
-    # If next player is AI, execute their turn
-    if next_player in game_session.ai_players:
-        execute_ai_turn(game_session, next_player)
-    
-    print(f"Turn ended. Now: {next_player}")
 
 def execute_ai_turn(game_session, ai_name):
     """Execute an AI player's turn"""
