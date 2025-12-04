@@ -19,12 +19,13 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 games = {}
 
 class GameSession:
-    def __init__(self, game_id, host_sid):
+    def __init__(self, game_id, host_sid, game_mode='twenty_dots'):
         self.game_id = game_id
+        self.game_mode = game_mode  # Store the selected game mode
         self.game = TwentyDots(num_players=2, difficulty='easy', ai_opponents={}, power_cards=False)
         self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
         self.game.can_roll_dice = True  # First player must roll to place initial wild dot
-        print(f"Created new game {game_id}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
+        print(f"Created new game {game_id} with mode {game_mode}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
         self.players = {}  # sid -> player_info
         self.player_order = []  # List of player names in turn order
         self.ai_players = {}  # player_name -> AIPlayer instance
@@ -107,7 +108,8 @@ class GameSession:
             'deck_size': len(self.game.deck),
             'yellow_dot_position': yellow_position,
             'landmines': landmines_data,
-            'can_roll_dice': getattr(self.game, 'can_roll_dice', False)
+            'can_roll_dice': getattr(self.game, 'can_roll_dice', False),
+            'game_mode': self.game_mode
         }
     
     def get_player_hand(self, player_name):
@@ -138,11 +140,24 @@ class GameSession:
         return cards_data
     
     def check_winner(self):
-        """Check if any player has won. Returns {'winner': player_name, 'condition': condition} or None"""
+        """Check if any player has won based on the selected game mode. Returns {'winner': player_name, 'condition': condition} or None"""
         for player_name in self.player_order:
-            result = self.game.check_win_condition(player_name)
-            if result['winner']:
-                return result
+            player_data = self.game.players[player_name]
+            
+            # Check only the selected game mode
+            if self.game_mode == 'twenty_dots':
+                if player_data['total_dots'] >= 20:
+                    return {'winner': player_name, 'condition': 'twenty_dots'}
+            
+            elif self.game_mode == 'five_colors':
+                if all(player_data['score'][color] >= 5 for color in self.game.colors):
+                    return {'winner': player_name, 'condition': 'five_colors'}
+            
+            elif self.game_mode == 'five_with_yellow':
+                yellow_count = player_data.get('yellow_dots', 0)
+                if yellow_count >= 5 and all(player_data['score'][color] >= 5 for color in self.game.colors):
+                    return {'winner': player_name, 'condition': 'five_with_yellow'}
+        
         return None
 
 @socketio.on('connect')
@@ -192,13 +207,14 @@ def handle_create_game(data):
 def handle_join_game(data):
     """Player joins an existing game (creates if doesn't exist)"""
     game_id = data.get('game_id')
-    print(f"[JOIN_GAME] Received join_game request for game {game_id}")
+    game_mode = data.get('game_mode', 'twenty_dots')
+    print(f"[JOIN_GAME] Received join_game request for game {game_id} with mode {game_mode}")
     
     # Auto-create game if it doesn't exist (first player)
     if game_id not in games:
         player_name = data.get('player_name', 'Player 1')
         print(f"[JOIN_GAME] Game doesn't exist, creating. First player: {player_name}")
-        game_session = GameSession(game_id, request.sid)
+        game_session = GameSession(game_id, request.sid, game_mode)
         success, message = game_session.add_player(request.sid, player_name)
         
         if not success:
@@ -211,9 +227,10 @@ def handle_join_game(data):
         emit('join_success', {
             'game_id': game_id,
             'player_name': player_name,
-            'players': game_session.player_order
+            'players': game_session.player_order,
+            'game_mode': game_mode
         })
-        print(f"[JOIN_GAME] Game auto-created: {game_id} by {player_name}. Player order: {game_session.player_order}")
+        print(f"[JOIN_GAME] Game auto-created: {game_id} by {player_name} with mode {game_mode}. Player order: {game_session.player_order}")
         return
     
     # Game exists, join it
