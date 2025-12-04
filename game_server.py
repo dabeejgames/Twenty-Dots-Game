@@ -531,15 +531,20 @@ def handle_play_cards(data):
             cards_drawn += 1
         print(f"[PLAY_CARDS] Drew {cards_drawn} cards")
         
-        print(f"[PLAY_CARDS] Auto-advancing turn")
-        # Don't enable roll dice on turn advance - only enable if yellow was affected
+        # Only advance turn if yellow was NOT replaced or collected
+        # If yellow was affected, current player must roll again
         if not (yellow_replaced or yellow_collected):
+            print(f"[PLAY_CARDS] Auto-advancing turn (yellow not affected)")
             game_session.game.can_roll_dice = False
-        game_session.game.next_player()
-        # Reset card counter for new player
-        new_player = game_session.game.get_current_player()
-        game_session.game.turn_cards_played[new_player] = 0
-        print(f"[PLAY_CARDS] Turn advanced to {new_player}")
+            game_session.game.next_player()
+            # Reset card counter for new player
+            new_player = game_session.game.get_current_player()
+            game_session.game.turn_cards_played[new_player] = 0
+            print(f"[PLAY_CARDS] Turn advanced to {new_player}")
+        else:
+            print(f"[PLAY_CARDS] Yellow was affected - {player_name} must roll again")
+            # Reset card counter for same player to play again after rolling
+            game_session.game.turn_cards_played[current_player] = 0
     else:
         print(f"[PLAY_CARDS] {player_name} has played {total_played_this_turn} card(s) this turn, waiting for more or 2nd card")
     
