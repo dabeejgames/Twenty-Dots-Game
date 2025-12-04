@@ -363,7 +363,7 @@ class TwentyDots:
         # Otherwise can't place
         return (False, None)
     
-    def check_line_match(self, row: str, col: str, color: str) -> list:
+    def check_line_match(self, row: str, col: str, color: str) -> tuple:
         """
         Check for a line match (3 or more in a row) after placing a dot.
         Returns list of ALL dots that form lines with the newly placed dot (may include multiple matches).
@@ -453,8 +453,8 @@ class TwentyDots:
                 seen.add(pos)
                 unique_matches.append(pos)
         
-        print(f"DEBUG: Returning {len(unique_matches)} unique matched positions: {unique_matches}")
-        return unique_matches
+        print(f"DEBUG: Returning {len(unique_matches)} unique matched positions: {unique_matches} (target_color={target_color})")
+        return unique_matches, target_color
     
     def collect_dots(self, positions: list, player_name: str, color: str):
         """Collect dots from the board and add to player's score."""

@@ -502,8 +502,9 @@ def handle_play_cards(data):
                 print(f"[PLAY_CARDS] Awarded point for replacing {replaced_color} dot")
             
             # Check for matches
-            match = game_session.game.check_line_match(row, col, card.color)
-            if match:
+            match_result = game_session.game.check_line_match(row, col, card.color)
+            if match_result:
+                match, match_color = match_result
                 matches_made = True
                 # Check if yellow dot is in the matched positions
                 for col_idx, row_idx in match:
@@ -512,7 +513,7 @@ def handle_play_cards(data):
                         yellow_collected = True
                         print(f"[PLAY_CARDS] Yellow dot collected in match")
                         break
-                game_session.game.collect_dots(match, player_name, card.color)
+                game_session.game.collect_dots(match, player_name, match_color)
     
     # If yellow was replaced or collected, allow player to roll again for new yellow
     if yellow_replaced or yellow_collected:
@@ -686,13 +687,14 @@ def handle_roll_dice(data):
     
     # Check for matches created by yellow dot
     print(f"[ROLL_DICE] About to call check_line_match for {row}{col} (indices {row_idx},{col_idx})")
-    match = game_session.game.check_line_match(row, col, 'yellow')
-    print(f"[ROLL_DICE] check_line_match returned match={match} (type={type(match)}, len={len(match) if match else 0})")
+    match_result = game_session.game.check_line_match(row, col, 'yellow')
     
-    if match:
-        # Collect the match with yellow
-        print(f"[ROLL_DICE] MATCH FOUND! Collecting {len(match)} positions: {match}")
-        game_session.game.collect_dots(match, player_name, 'yellow')
+    if match_result:
+        match, match_color = match_result
+        print(f"[ROLL_DICE] check_line_match returned match of {len(match)} positions: {match} (color={match_color})")
+        # Collect the match with the detected color (not 'yellow')
+        print(f"[ROLL_DICE] MATCH FOUND! Collecting {len(match)} positions for color {match_color}")
+        game_session.game.collect_dots(match, player_name, match_color)
         print(f"[ROLL_DICE] After collect_dots, checking player stats...")
         print(f"[ROLL_DICE] {player_name}'s score: {game_session.game.players[player_name]['score']}")
         print(f"[ROLL_DICE] {player_name}'s total_dots: {game_session.game.players[player_name]['total_dots']}")
