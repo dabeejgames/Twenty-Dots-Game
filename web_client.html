@@ -152,36 +152,121 @@
         }
         
         .game-layout {
-            display: grid;
-            grid-template-columns: 300px 1fr 350px;
-            gap: 25px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             margin-top: 20px;
+            padding: 20px;
         }
         
-        /* Left Sidebar - Players */
-        .players-sidebar {
-            background: rgba(26, 26, 46, 0.8);
+        .main-grid {
+            display: grid;
+            grid-template-columns: 200px 450px 350px;
+            grid-template-rows: auto auto auto;
+            gap: 20px;
+            align-items: center;
+            justify-items: center;
+        }
+        
+        .player-corner {
+            width: 200px;
+        }
+        
+        .player-corner.top-left { grid-column: 1; grid-row: 1; }
+        .player-corner.top-right { grid-column: 3; grid-row: 1; }
+        .player-corner.bottom-left { grid-column: 1; grid-row: 3; }
+        .player-corner.bottom-right { grid-column: 3; grid-row: 3; }
+        
+        .center-filler {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .logo-container {
+            grid-column: 1;
+            grid-row: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .logo-placeholder {
+            background: rgba(26, 26, 46, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            border: 3px solid #ffd700;
+            text-align: center;
+            width: 180px;
+        }
+        
+        .board-container {
+            grid-column: 2;
+            grid-row: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .hand-container {
+            grid-column: 3;
+            grid-row: 2;
+            background: rgba(26, 26, 46, 0.9);
             padding: 20px;
             border-radius: 15px;
-            height: fit-content;
+            border: 3px solid #6c5ce7;
+            max-height: 600px;
+            overflow-y: auto;
+            width: 100%;
         }
         
-        .player-card {
-            background: #2d2d44;
-            padding: 15px;
+        /* Player Info Boxes */
+        .player-info-box {
+            background: #1a1a2e;
             border-radius: 10px;
-            margin-bottom: 15px;
-            border: 3px solid transparent;
-            transition: all 0.3s;
+            border: 2px solid #444;
+            padding: 15px;
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
         
-        .player-card.active {
+        .player-info-box.active {
             border-color: #4CAF50;
             box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+            background: rgba(76, 175, 80, 0.1);
         }
         
-        .player-card.me {
+        .player-info-box.me {
             border-color: #ffd700;
+            background: rgba(255, 215, 0, 0.05);
+        }
+        
+        .player-name {
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 1.1em;
+            text-align: center;
+        }
+        
+        .player-stats {
+            font-size: 0.9em;
+            color: #aaa;
+            text-align: center;
+        }
+        
+        .player-score {
+            color: #4CAF50;
+            font-weight: bold;
+            text-align: center;
+            font-size: 1.2em;
+        }
+        
+        /* Left Sidebar - Players - HIDDEN */
+        .players-sidebar {
+            display: none;
+        }
         }
         
         .player-name {
@@ -424,6 +509,15 @@
             box-shadow: 0 6px 20px rgba(243, 156, 18, 0.6);
         }
         
+        .btn-clear {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+        }
+        
+        .btn-clear:hover {
+            box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
+        }
+        
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed !important;
@@ -649,46 +743,68 @@
             </div>
             
             <div class="game-layout">
-                <!-- Left: Players -->
-                <div class="players-sidebar">
-                    <h3 style="color: #ffd700; margin-bottom: 15px;">Players</h3>
-                    <div id="playersList"></div>
-                </div>
-                
-                <!-- Center: Board -->
-                <div class="board-container">
-                    <div class="board-wrapper">
+                <!-- Main grid: Players in corners, board in center, hand on right -->
+                <div class="main-grid">
+                    <!-- Top row: Player 1 (top-left), Player 2 (top-right) -->
+                    <div class="player-corner top-left">
+                        <div id="player0" class="player-info-box"></div>
+                    </div>
+                    <div class="center-filler"></div>
+                    <div class="player-corner top-right">
+                        <div id="player1" class="player-info-box"></div>
+                    </div>
+                    
+                    <!-- Middle row: Logo (left), Board (center), Hand (right) -->
+                    <div class="logo-container">
+                        <div class="logo-placeholder">
+                            <div style="font-size: 80px; line-height: 1;">🎯</div>
+                            <div style="text-align: center; font-weight: bold; margin-top: 10px; color: #ffd700;">TWENTY<br>DOTS</div>
+                        </div>
+                    </div>
+                    
+                    <div class="board-container">
                         <div class="board" id="gameBoard"></div>
-                    </div>
-                    <div id="gameMessages"></div>
-                </div>
-                
-                <!-- Right: Hand & Controls -->
-                <div class="hand-sidebar">
-                    <div class="hand-section">
-                        <h3>Your Hand</h3>
-                        <div class="cards-grid" id="handCards"></div>
+                        <div id="gameMessages" style="text-align: center; margin-top: 20px; color: #ffd700; font-weight: bold; min-height: 30px;"></div>
                     </div>
                     
-                    <div class="controls-section">
-                        <button class="btn-play" id="playBtn" onclick="playCards()">
-                            ▶️ Play Selected Cards
-                        </button>
-                        <button class="btn-end" id="endBtn" onclick="endTurn()">
-                            ⏭️ End Turn
-                        </button>
-                        <button class="btn-roll" id="rollBtn" onclick="rollDice()" style="display: none;">
-                            🎲 Roll Dice
-                        </button>
+                    <div class="hand-container">
+                        <div class="hand-section">
+                            <h3 style="color: #ffd700; margin-bottom: 10px; font-size: 1.1em;">Your Hand</h3>
+                            <div class="cards-grid" id="handCards"></div>
+                        </div>
+                        
+                        <div class="controls-section">
+                            <button class="btn-play" id="playBtn" onclick="playCards()">
+                                ▶️ Play Cards
+                            </button>
+                            <button class="btn-end" id="endBtn" onclick="endTurn()">
+                                ⏭️ End Turn
+                            </button>
+                            <button class="btn-roll" id="rollBtn" onclick="rollDice()" style="display: none;">
+                                🎲 Roll Dice
+                            </button>
+                            <button class="btn-clear" onclick="clearSelection()" style="margin-top: 10px;">
+                                🗑️ Clear Selection
+                            </button>
+                        </div>
+                        
+                        <div id="landminesSection" class="landmines-section" style="display: none; margin-top: 20px;">
+                            <h4 style="color: #ff6b6b; margin-bottom: 10px;">💥 Active Landmines</h4>
+                            <div class="landmine-list" id="landminesList" style="font-size: 0.9em;"></div>
+                        </div>
+                        
+                        <div id="gameError" class="error-message"></div>
+                        <div id="gameInfo" class="info-message"></div>
                     </div>
                     
-                    <div id="landminesSection" class="landmines-section" style="display: none;">
-                        <h4>💥 Active Landmines</h4>
-                        <div class="landmine-list" id="landminesList"></div>
+                    <!-- Bottom row: Player 3 (bottom-left), Player 4 (bottom-right) -->
+                    <div class="player-corner bottom-left">
+                        <div id="player2" class="player-info-box"></div>
                     </div>
-                    
-                    <div id="gameError" class="error-message"></div>
-                    <div id="gameInfo" class="info-message"></div>
+                    <div class="center-filler"></div>
+                    <div class="player-corner bottom-right">
+                        <div id="player3" class="player-info-box"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -853,46 +969,47 @@
         }
         
         function updatePlayers(players, currentTurn) {
-            const playersDiv = document.getElementById('playersList');
-            playersDiv.innerHTML = '';
+            const playerArray = Object.entries(players);
+            const playerIds = ['player0', 'player1', 'player2', 'player3'];
             
-            for (const [name, data] of Object.entries(players)) {
-                const playerCard = document.createElement('div');
-                playerCard.className = 'player-card';
-                if (name === currentTurn) playerCard.classList.add('active');
-                if (name === playerName) playerCard.classList.add('me');
+            playerIds.forEach((playerId, idx) => {
+                const playerBox = document.getElementById(playerId);
+                if (!playerBox) return;
+                playerBox.innerHTML = '';
+                playerBox.classList.remove('active', 'me');
                 
-                const nameDiv = document.createElement('div');
-                nameDiv.className = 'player-name';
-                nameDiv.textContent = name + (name === playerName ? ' (You)' : '');
-                playerCard.appendChild(nameDiv);
-                
-                const statsDiv = document.createElement('div');
-                statsDiv.className = 'player-stats';
-                statsDiv.textContent = `Total: ${data.total_dots} dots | Hand: ${data.hand_size} cards`;
-                playerCard.appendChild(statsDiv);
-                
-                // Score breakdown
-                const scoreBreakdown = document.createElement('div');
-                scoreBreakdown.className = 'score-breakdown';
-                ['red', 'blue', 'purple', 'green'].forEach(color => {
-                    const scoreDot = document.createElement('div');
-                    scoreDot.className = `score-dot ${color}`;
-                    scoreDot.textContent = data.score ? (data.score[color] || 0) : 0;
-                    scoreBreakdown.appendChild(scoreDot);
-                });
-                playerCard.appendChild(scoreBreakdown);
-                
-                // Discard preview
-                if (data.discard_pile && data.discard_pile.length > 0) {
-                    const discardDiv = document.createElement('div');
-                    discardDiv.className = 'discard-preview';
-                    const recent = data.discard_pile.slice(-2);
-                    discardDiv.textContent = `Last played: ${recent.map(c => `${c.location[0]}${c.location[1]}`).join(', ')}`;
-                    playerCard.appendChild(discardDiv);
+                if (idx < playerArray.length) {
+                    const [name, data] = playerArray[idx];
+                    if (name === currentTurn) playerBox.classList.add('active');
+                    if (name === playerName) playerBox.classList.add('me');
+                    
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'player-name';
+                    nameDiv.textContent = name + (name === playerName ? ' (You)' : '');
+                    playerBox.appendChild(nameDiv);
+                    
+                    const scoreDiv = document.createElement('div');
+                    scoreDiv.className = 'player-score';
+                    scoreDiv.textContent = `${data.total_dots} dots`;
+                    playerBox.appendChild(scoreDiv);
+                    
+                    const colorsDiv = document.createElement('div');
+                    colorsDiv.style.cssText = 'display: flex; justify-content: center; gap: 5px; font-size: 0.85em; margin: 5px 0;';
+                    ['red', 'blue', 'purple', 'green'].forEach(color => {
+                        const scoreDot = document.createElement('div');
+                        scoreDot.className = `dot ${color}`;
+                        scoreDot.style.cssText = 'width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.8em;';
+                        scoreDot.textContent = data.score ? (data.score[color] || 0) : 0;
+                        colorsDiv.appendChild(scoreDot);
+                    });
+                    playerBox.appendChild(colorsDiv);
+                    
+                    const handDiv = document.createElement('div');
+                    handDiv.className = 'player-stats';
+                    handDiv.textContent = `Hand: ${data.hand_size}/5`;
+                    playerBox.appendChild(handDiv);
                 }
-                
-                playersDiv.appendChild(playerCard);
+            });
             }
         }
         
@@ -976,6 +1093,17 @@
             document.querySelectorAll('.card.selected').forEach(card => {
                 card.classList.remove('selected');
             });
+        }
+        
+        function clearSelection() {
+            selectedCards = [];
+            document.querySelectorAll('.card.selected').forEach(card => {
+                card.classList.remove('selected');
+            });
+            if (currentGameState) {
+                const isMyTurn = currentGameState.current_turn === playerName;
+                document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0;
+            }
         }
         
         function endTurn() {
