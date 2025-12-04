@@ -443,8 +443,14 @@ def handle_play_cards(data):
     
     current_player = game_session.game.get_current_player()
     
-    # Ensure current player's card counter is 0 at start of turn
+    # Always reset counter if player hasn't played yet this turn or if it's somehow still at 2
+    # (this can happen if there's any desync between client and server)
     if current_player not in game_session.game.turn_cards_played:
+        game_session.game.turn_cards_played[current_player] = 0
+    
+    # If counter is at 2, reset it (means we just started this player's turn after advancing)
+    if game_session.game.turn_cards_played[current_player] >= 2:
+        print(f"[PLAY_CARDS] Resetting {current_player}'s counter from {game_session.game.turn_cards_played[current_player]} to 0")
         game_session.game.turn_cards_played[current_player] = 0
     
     cards_played_this_turn = game_session.game.turn_cards_played[current_player]
@@ -453,6 +459,7 @@ def handle_play_cards(data):
     total_played_this_turn = cards_played_this_turn + len(cards_to_play)
     if total_played_this_turn > 2:
         emit('error', {'message': f'Can only play 2 cards per turn. Already played {cards_played_this_turn}'})
+        print(f"[PLAY_CARDS] ERROR: {current_player} tried to play {len(cards_to_play)} cards but already played {cards_played_this_turn} this turn")
         return
     
     # Play each card
@@ -526,6 +533,7 @@ def handle_play_cards(data):
     # Auto-advance turn after playing 2 cards THIS TURN
     total_played_this_turn = cards_played_this_turn + len(cards_to_play)
     game_session.game.turn_cards_played[current_player] = total_played_this_turn
+    print(f"[PLAY_CARDS] Updated {current_player}'s counter to {total_played_this_turn}")
     
     # Only draw cards when turn is ending (at 2 cards played)
     if total_played_this_turn >= 2:
