@@ -691,6 +691,13 @@
         }
 
         function toggleCardSelection(index, cardDiv) {
+            // Prevent card selection if dice hasn't been rolled yet
+            const canRoll = currentGameState && currentGameState.can_roll_dice;
+            if (canRoll) {
+                console.log('Cannot select cards - must roll dice first');
+                return;
+            }
+            
             if (selectedCards.includes(index)) {
                 selectedCards.splice(selectedCards.indexOf(index), 1);
                 cardDiv.classList.remove('selected');
