@@ -267,9 +267,12 @@ def handle_join_game(data):
         game_session.game.deal_cards(5)
         game_session.started = True
         
-        # Initialize discard piles for all players
+        # Initialize discard piles and turn card counters for all players
+        game_session.game.turn_cards_played = {}
+        game_session.game.must_advance_after_roll = {}
         for pname in game_session.player_order:
             game_session.discard_piles[pname] = []
+            game_session.game.turn_cards_played[pname] = 0
         
         # Player 1 must roll wild dot first - enable roll dice
         game_session.game.can_roll_dice = True
@@ -439,6 +442,8 @@ def handle_play_cards(data):
         game_session.game.turn_cards_played = {}
     
     current_player = game_session.game.get_current_player()
+    
+    # Ensure current player's card counter is 0 at start of turn
     if current_player not in game_session.game.turn_cards_played:
         game_session.game.turn_cards_played[current_player] = 0
     
