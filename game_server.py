@@ -480,6 +480,8 @@ def handle_play_cards(data):
     # Auto-advance turn after playing 2 cards
     if len(game_session.discard_piles.get(player_name, [])) >= 2:
         print(f"[PLAY_CARDS] {player_name} has played 2 cards, auto-advancing turn")
+        # Reset current player's discard pile for their next turn
+        game_session.discard_piles[player_name] = []
         # Don't enable roll dice on turn advance - only enable if yellow was affected
         if not (matches_made or yellow_replaced):
             game_session.game.can_roll_dice = False
