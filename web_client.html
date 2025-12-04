@@ -534,6 +534,18 @@
             
             // Play Cards button: only enabled if it's your turn, you have cards selected, AND you've already rolled (canRoll is false)
             document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0 || canRoll;
+            
+            // Disable card selection if player must roll first
+            const cardDivs = document.querySelectorAll('.card');
+            cardDivs.forEach(card => {
+                if (!isMyTurn || canRoll) {
+                    card.style.pointerEvents = 'none';
+                    card.style.opacity = '0.5';
+                } else {
+                    card.style.pointerEvents = 'auto';
+                    card.style.opacity = '1';
+                }
+            });
         }
 
         function updateBoard(board, yellowDotPosition) {

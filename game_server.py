@@ -508,17 +508,18 @@ def handle_play_cards(data):
         game_session.game.next_player()
         print(f"[PLAY_CARDS] Turn advanced to {game_session.game.get_current_player()}")
     
-    # Draw cards back to 5 AFTER turn logic
+    # Draw cards back to 5 AFTER turn logic - this will draw 2 cards after playing 2
+    cards_drawn = 0
     while len(hand) < 5 and game_session.game.deck:
         game_session.game.draw_card(player_name)
+        cards_drawn += 1
+    print(f"[PLAY_CARDS] Drew {cards_drawn} cards")
     
-    # Broadcast updated game state BEFORE resetting discard pile
+    # Broadcast updated game state BEFORE modifying discard pile
     game_state = game_session.get_game_state()
     emit('game_updated', game_state, room=game_id)
     
-    # Reset discard pile AFTER broadcasting so UI can see the cards
-    if new_discard_count >= 2:
-        game_session.discard_piles[player_name] = []
+    # Don't reset discard pile - keep it visible to show what was played
     
     # Send updated hand to all players
     for sid, player_info in game_session.players.items():
