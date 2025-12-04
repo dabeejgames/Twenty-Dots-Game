@@ -245,9 +245,9 @@ def handle_join_game(data):
         print(f"[AUTO_START] Auto-starting game {game_id} with {len(game_session.player_order)} players")
         print(f"[AUTO_START] Player order: {game_session.player_order}")
         
-        # Initialize game
+        # Initialize game with correct parameters
         num_players = len(game_session.player_order)
-        game_session.game = TwentyDots(num_players=num_players, difficulty='easy', ai_opponents={})
+        game_session.game = TwentyDots(num_players=num_players, difficulty='easy', ai_opponents={}, power_cards=False)
         print(f"[AUTO_START] Created TwentyDots with num_players={num_players}. Initial player names: {list(game_session.game.players.keys())}")
         game_session.game.shuffle_deck()  # SHUFFLE THE NEW GAME!
         
