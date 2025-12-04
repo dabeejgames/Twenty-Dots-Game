@@ -16,8 +16,20 @@
             overflow: hidden;
         }
         
-        .main-container { display: none; width: 100vw; height: 100vh; }
-        .main-container.active { display: flex; }
+        .main-container { 
+            display: none; 
+            width: 100vw; 
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            flex-direction: column;
+            z-index: 1;
+        }
+        .main-container.active { 
+            display: flex;
+            z-index: 200;
+        }
         
         /* Header */
         .header {
@@ -257,6 +269,13 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+            z-index: 100;
         }
         
         .mode-selection {
@@ -295,6 +314,17 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+            z-index: 50;
+        }
+        
+        #joinScreen.active {
+            display: flex;
         }
         
         .join-form {
@@ -503,7 +533,10 @@
 
         function showJoinScreen() {
             document.getElementById('modeScreen').style.display = 'none';
-            document.getElementById('joinScreen').style.display = 'flex';
+            document.getElementById('joinScreen').classList.add('active');
+            document.getElementById('modeSelection').style.display = 'block';
+            document.getElementById('createForm').style.display = 'none';
+            document.getElementById('joinForm').style.display = 'none';
         }
 
         function showSinglePlayerMessage() {
@@ -511,18 +544,21 @@
         }
 
         function showModeSelection() {
+            document.getElementById('joinScreen').classList.add('active');
             document.getElementById('modeSelection').style.display = 'block';
             document.getElementById('createForm').style.display = 'none';
             document.getElementById('joinForm').style.display = 'none';
         }
 
         function showCreateForm() {
+            document.getElementById('joinScreen').classList.add('active');
             document.getElementById('modeSelection').style.display = 'none';
             document.getElementById('createForm').style.display = 'block';
             document.getElementById('joinForm').style.display = 'none';
         }
 
         function showJoinForm() {
+            document.getElementById('joinScreen').classList.add('active');
             document.getElementById('modeSelection').style.display = 'none';
             document.getElementById('createForm').style.display = 'none';
             document.getElementById('joinForm').style.display = 'block';
@@ -572,7 +608,7 @@
             });
             
             socket.on('join_success', () => {
-                document.getElementById('joinScreen').style.display = 'none';
+                document.getElementById('joinScreen').classList.remove('active');
                 document.getElementById('gameScreen').classList.add('active');
             });
             
