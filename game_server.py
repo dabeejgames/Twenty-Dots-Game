@@ -543,6 +543,10 @@ def handle_play_cards(data):
             print(f"[PLAY_CARDS] Turn advanced to {new_player}")
         else:
             print(f"[PLAY_CARDS] Yellow was affected - {player_name} must roll again")
+            # Mark that this player must advance their turn after rolling
+            if not hasattr(game_session.game, 'must_advance_after_roll'):
+                game_session.game.must_advance_after_roll = {}
+            game_session.game.must_advance_after_roll[current_player] = True
             # Reset card counter for same player to play again after rolling
             game_session.game.turn_cards_played[current_player] = 0
     else:
@@ -639,6 +643,27 @@ def handle_roll_dice(data):
     
     if game_session.game.get_current_player() != player_name:
         emit('error', {'message': 'Not your turn'})
+        return
+    
+    # Check if this player needs to advance their turn after rolling
+    if not hasattr(game_session.game, 'must_advance_after_roll'):
+        game_session.game.must_advance_after_roll = {}
+    
+    if player_name in game_session.game.must_advance_after_roll and game_session.game.must_advance_after_roll[player_name]:
+        print(f"[ROLL_DICE] {player_name} must now advance turn after rolling")
+        # Advance to next player
+        game_session.game.next_player()
+        game_session.game.can_roll_dice = False
+        # Clear the flag
+        game_session.game.must_advance_after_roll[player_name] = False
+        # Reset card counter for new player
+        new_player = game_session.game.get_current_player()
+        if not hasattr(game_session.game, 'turn_cards_played'):\n            game_session.game.turn_cards_played = {}
+        game_session.game.turn_cards_played[new_player] = 0
+        print(f"[ROLL_DICE] Turn advanced to {new_player}")
+        # Don't place a new yellow dot - just end this player's turn
+        game_state = game_session.get_game_state()
+        emit('game_updated', game_state, room=game_id)
         return
     
     # Roll for yellow dot position (returns row, col as strings like 'A', '1')
