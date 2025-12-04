@@ -608,8 +608,11 @@
             });
             
             socket.on('join_success', () => {
+                console.log('=== JOIN_SUCCESS ===');
+                console.log('Removing active from joinScreen, adding to gameScreen');
                 document.getElementById('joinScreen').classList.remove('active');
                 document.getElementById('gameScreen').classList.add('active');
+                console.log('gameScreen now has classes:', document.getElementById('gameScreen').classList);
             });
             
             socket.on('game_started', (gameState) => {
@@ -660,6 +663,11 @@
         }
 
         function updateGameState(state) {
+            console.log('=== UPDATE_GAME_STATE ===');
+            console.log('gameScreen element:', document.getElementById('gameScreen'));
+            console.log('gameScreen.classList:', document.getElementById('gameScreen').classList);
+            console.log('gameScreen.style.display:', document.getElementById('gameScreen').style.display);
+            console.log('gameScreen visible check:', window.getComputedStyle(document.getElementById('gameScreen')).display);
             currentGameState = state;
             updateBoard(state.board, state.yellow_dot_position);
             updatePlayers(state.players, state.current_turn);
