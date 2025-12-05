@@ -328,7 +328,23 @@
             font-size: 1em;
         }
         
-        .form-group input:focus {
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #6c5ce7;
+            border-radius: 6px;
+            background: rgba(108,92,231,0.1);
+            color: white;
+            font-size: 1em;
+        }
+        
+        .form-group select option {
+            background: #2a2a3e;
+            color: white;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
             outline: none;
             border-color: #ffd700;
             box-shadow: 0 0 10px rgba(255,215,0,0.3);
@@ -353,6 +369,331 @@
         }
         
         .error-message.show { display: block; }
+        
+        /* Mobile Responsive Design */
+        @media (max-width: 1200px) {
+            .board {
+                grid-template-columns: repeat(7, 60px);
+                grid-template-rows: repeat(7, 60px);
+                gap: 2px;
+                padding: 10px;
+            }
+            
+            .dot {
+                width: 30px;
+                height: 30px;
+                font-size: 10px;
+            }
+            
+            .left-panel {
+                width: 120px;
+            }
+            
+            .right-panel {
+                width: 220px;
+            }
+        }
+        
+        @media (max-width: 992px) {
+            /* Tablet: Stack layout vertically */
+            .game-container {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .left-panel {
+                width: 100%;
+                height: 80px;
+                flex-direction: row;
+                justify-content: flex-start;
+            }
+            
+            .logo-box {
+                width: 80px;
+                height: 80px;
+                padding: 5px;
+            }
+            
+            .center-panel {
+                flex: none;
+                width: 100%;
+            }
+            
+            .players-top, .players-bottom {
+                height: 90px;
+                gap: 10px;
+            }
+            
+            .player-box {
+                width: auto;
+                flex: 1;
+                padding: 8px;
+            }
+            
+            .player-score { font-size: 1em; }
+            .player-name { font-size: 0.85em; }
+            
+            .board {
+                grid-template-columns: repeat(7, 50px);
+                grid-template-rows: repeat(7, 50px);
+                gap: 2px;
+                padding: 8px;
+            }
+            
+            .dot {
+                width: 25px;
+                height: 25px;
+                font-size: 8px;
+            }
+            
+            .right-panel {
+                width: 100%;
+                height: auto;
+                max-height: 180px;
+                flex-direction: row;
+                border: 2px solid #6c5ce7;
+            }
+            
+            .hand-title {
+                min-width: 100px;
+            }
+            
+            .cards-container {
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                gap: 5px;
+                margin-bottom: 0;
+            }
+            
+            .card {
+                min-width: 80px;
+                min-height: 50px;
+                padding: 6px;
+                font-size: 0.85em;
+                flex-shrink: 0;
+            }
+            
+            .controls {
+                flex-direction: column;
+                gap: 5px;
+                min-width: 120px;
+            }
+            
+            button {
+                padding: 8px;
+                font-size: 0.8em;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            /* Mobile: Optimize for smaller screens */
+            .header h1 { font-size: 1.3em; }
+            .turn-info { font-size: 1em; }
+            
+            .game-container {
+                gap: 5px;
+                padding: 5px;
+            }
+            
+            .players-top, .players-bottom {
+                height: 70px;
+                gap: 5px;
+                flex-wrap: wrap;
+            }
+            
+            .player-box {
+                flex: 1;
+                min-width: 45%;
+                padding: 5px;
+                font-size: 0.85em;
+            }
+            
+            .player-name { font-size: 0.75em; }
+            .player-score { font-size: 0.9em; }
+            .score-dot { width: 12px; height: 12px; font-size: 0.6em; }
+            .discard-card { width: 25px; height: 15px; font-size: 0.5em; }
+            
+            .board {
+                grid-template-columns: repeat(7, 40px);
+                grid-template-rows: repeat(7, 40px);
+                gap: 1px;
+                padding: 5px;
+            }
+            
+            .dot {
+                width: 20px;
+                height: 20px;
+                font-size: 7px;
+            }
+            
+            .right-panel {
+                max-height: 140px;
+                gap: 5px;
+                padding: 5px;
+            }
+            
+            .hand-title { font-size: 0.95em; margin-bottom: 5px; }
+            
+            .card {
+                min-width: 70px;
+                min-height: 45px;
+                padding: 4px;
+                font-size: 0.75em;
+            }
+            
+            .join-form {
+                width: 90%;
+                max-width: 400px;
+                padding: 20px;
+                border-radius: 10px;
+            }
+            
+            .mode-buttons {
+                flex-direction: column;
+                gap: 20px;
+                margin: 20px 0;
+            }
+            
+            .mode-button {
+                width: 90%;
+                max-width: 250px;
+                padding: 20px;
+            }
+            
+            .mode-icon { font-size: 40px; }
+            .mode-title { font-size: 1.2em; }
+            .mode-description { font-size: 0.85em; }
+        }
+        
+        @media (max-width: 480px) {
+            /* Small phone screens */
+            .header {
+                padding: 5px;
+            }
+            
+            .header h1 { font-size: 1.1em; }
+            .turn-info { font-size: 0.9em; margin: 5px 0; }
+            
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .game-container {
+                gap: 3px;
+                padding: 3px;
+            }
+            
+            .left-panel {
+                height: 60px;
+                margin-bottom: 3px;
+            }
+            
+            .logo-box {
+                width: 60px;
+                height: 60px;
+                padding: 3px;
+            }
+            
+            .players-top, .players-bottom {
+                height: 60px;
+                gap: 3px;
+            }
+            
+            .player-box {
+                min-width: 40%;
+                padding: 3px;
+                font-size: 0.75em;
+            }
+            
+            .player-name { font-size: 0.65em; }
+            .player-score { font-size: 0.8em; }
+            .player-hand { font-size: 0.65em; }
+            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
+            
+            .board {
+                grid-template-columns: repeat(7, 35px);
+                grid-template-rows: repeat(7, 35px);
+                gap: 1px;
+                padding: 3px;
+            }
+            
+            .dot {
+                width: 18px;
+                height: 18px;
+                font-size: 6px;
+            }
+            
+            .right-panel {
+                max-height: 130px;
+                gap: 3px;
+                padding: 3px;
+            }
+            
+            .hand-title { font-size: 0.85em; margin-bottom: 3px; }
+            
+            .cards-container {
+                gap: 3px;
+            }
+            
+            .card {
+                min-width: 60px;
+                min-height: 40px;
+                padding: 3px;
+                font-size: 0.7em;
+                border-width: 2px;
+            }
+            
+            .controls {
+                gap: 3px;
+            }
+            
+            button {
+                padding: 6px;
+                font-size: 0.7em;
+                border-radius: 4px;
+            }
+            
+            .join-form {
+                width: 95%;
+                max-width: 100%;
+                padding: 15px;
+                margin: 10px;
+            }
+            
+            .mode-buttons {
+                width: 100%;
+            }
+            
+            .mode-button {
+                width: 100%;
+                max-width: 100%;
+                padding: 15px;
+            }
+            
+            .mode-icon { font-size: 30px; margin-bottom: 10px; }
+            .mode-title { font-size: 1em; }
+            .mode-description { font-size: 0.8em; }
+        }
+        
+        /* Touch-friendly adjustments */
+        @media (hover: none) and (pointer: coarse) {
+            .card {
+                min-height: 60px;
+                padding: 10px;
+            }
+            
+            button {
+                padding: 12px;
+                min-height: 44px;
+            }
+            
+            .cell {
+                min-width: 50px;
+                min-height: 50px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -392,7 +733,7 @@
             </div>
             <div class="form-group">
                 <label>Win Condition</label>
-                <select id="winCondition" style="width: 100%; padding: 10px; border-radius: 5px; background: #2a2a3e; color: white; border: 2px solid #ffd700;">
+                <select id="winCondition">
                     <option value="twenty_dots">First to 20 Total Dots</option>
                     <option value="five_colors">First to 5 of Each Color</option>
                     <option value="five_with_yellow">First to 5 of Each Color + 5 Yellow</option>
