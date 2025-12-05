@@ -105,8 +105,8 @@
         .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
         .player-hand { font-size: 0.85em; color: #aaa; }
         .player-discard { font-size: 0.75em; color: #888; margin-top: 5px; }
-        .discard-cards { display: flex; justify-content: center; gap: 2px; margin-top: 3px; flex-wrap: nowrap; max-width: 100px; }
-        .discard-card { width: 25px; height: 14px; border-radius: 2px; font-size: 0.55em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .discard-cards { display: flex; justify-content: center; gap: 2px; margin-top: 3px; flex-wrap: wrap; max-width: 110px; }
+        .discard-card { width: 25px; height: 14px; border-radius: 2px; font-size: 0.55em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
         
         /* Board */
         .board-section {
@@ -165,7 +165,7 @@
             gap: 20px;
             justify-content: space-between;
             height: 140px;
-            margin-top: -50px;
+            margin-top: -100px;
         }
         
         /* Right panel - Hand and Controls */
@@ -598,8 +598,8 @@
             .score-dot { width: 8px; height: 8px; font-size: 0.4em; }
             .player-hand { font-size: 0.5em; }
             .player-discard { font-size: 0.45em; margin-top: 2px; }
-            .discard-card { width: 12px; height: 8px; font-size: 0.3em; }
-            .discard-cards { gap: 1px; display: flex; flex-wrap: nowrap; max-width: 50px; overflow: hidden; }
+            .discard-card { width: 10px; height: 7px; font-size: 0.25em; flex-shrink: 0; }
+            .discard-cards { gap: 1px; display: flex; flex-wrap: wrap; max-width: 60px; overflow: visible; }
             
             .board {
                 grid-template-columns: repeat(7, 38px);
