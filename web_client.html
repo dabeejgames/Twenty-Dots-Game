@@ -105,8 +105,8 @@
         .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
         .player-hand { font-size: 0.85em; color: #aaa; }
         .player-discard { font-size: 0.75em; color: #888; margin-top: 5px; }
-        .discard-cards { display: flex; justify-content: center; gap: 3px; margin-top: 3px; flex-wrap: wrap; max-width: 220px; }
-        .discard-card { width: 35px; height: 20px; border-radius: 3px; font-size: 0.65em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .discard-cards { display: flex; justify-content: center; gap: 2px; margin-top: 3px; flex-wrap: nowrap; max-width: 100px; }
+        .discard-card { width: 25px; height: 14px; border-radius: 2px; font-size: 0.55em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; }
         
         /* Board */
         .board-section {
@@ -423,7 +423,7 @@
                 flex-direction: column;
                 min-height: 0;
                 overflow: hidden;
-                padding-bottom: 130px;
+                padding-bottom: 105px;
             }
             
             .board-section {
@@ -555,7 +555,7 @@
             
             .players-bottom {
                 position: absolute;
-                bottom: 105px;
+                bottom: 155px;
                 left: 0;
                 right: 50px;
                 width: auto;
@@ -601,16 +601,16 @@
             .discard-cards { gap: 1px; flex-wrap: nowrap; max-width: 55px; }
             
             .board {
-                grid-template-columns: repeat(7, 40px);
-                grid-template-rows: repeat(7, 40px);
+                grid-template-columns: repeat(7, 38px);
+                grid-template-rows: repeat(7, 38px);
                 gap: 1px;
-                padding: 5px;
+                padding: 3px;
             }
             
             .dot {
-                width: 20px;
-                height: 20px;
-                font-size: 7px;
+                width: 19px;
+                height: 19px;
+                font-size: 6px;
             }
             
             .right-panel {
@@ -748,6 +748,7 @@
                 flex-direction: column;
                 min-height: 0;
                 overflow: hidden;
+                padding-bottom: 100px;
             }
             
             .players-top, .players-bottom {
@@ -770,7 +771,7 @@
             
             .players-bottom {
                 position: absolute;
-                bottom: 100px;
+                bottom: 145px;
                 left: 0;
                 right: 45px;
                 width: auto;
@@ -950,6 +951,14 @@
                 <input type="text" id="playerName" placeholder="e.g., Brandon" value="Brandon">
             </div>
             <div class="form-group">
+                <label>Number of Players</label>
+                <select id="playerCount">
+                    <option value="2">2 Players</option>
+                    <option value="3">3 Players</option>
+                    <option value="4">4 Players</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label>Win Condition</label>
                 <select id="winCondition">
                     <option value="twenty_dots">First to 20 Total Dots</option>
@@ -1039,6 +1048,7 @@
             gameId = document.getElementById('gameId').value || 'demo';
             playerName = document.getElementById('playerName').value || 'Player';
             const gameMode = document.getElementById('winCondition').value;
+            const playerCount = parseInt(document.getElementById('playerCount').value);
             
             if (!gameId || !playerName) {
                 showError('joinError', 'Please enter Game ID and your name');
@@ -1054,7 +1064,8 @@
                 socket.emit('join_game', {
                     game_id: gameId,
                     player_name: playerName,
-                    game_mode: gameMode
+                    game_mode: gameMode,
+                    player_count: playerCount
                 });
             });
             
