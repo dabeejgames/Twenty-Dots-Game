@@ -465,8 +465,14 @@ class TwentyDots:
         for col_idx, row_idx in positions:
             dot = self.grid[row_idx][col_idx]
             if dot:
-                self.players[player_name]['score'][color] += multiplier
-                self.players[player_name]['total_dots'] += multiplier
+                # If it's a yellow dot, track it separately
+                if dot.color == 'yellow':
+                    self.players[player_name]['yellow_dots'] += multiplier
+                    print(f"[COLLECT_DOTS] {player_name} collected yellow dot! Total yellow: {self.players[player_name]['yellow_dots']}")
+                else:
+                    # Award points for the actual dot color collected
+                    self.players[player_name]['score'][dot.color] += multiplier
+                    self.players[player_name]['total_dots'] += multiplier
                 self.grid[row_idx][col_idx] = None
         
         # Reset double score flag after use
