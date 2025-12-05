@@ -99,6 +99,7 @@ class GameSession:
             'players': {name: {
                 'score': data['score'],
                 'total_dots': data['total_dots'],
+                'yellow_dots': data.get('yellow_dots', 0),
                 'hand_size': len(data['hand']),
                 'discard_pile': self.discard_piles.get(name, [])
             } for name, data in self.game.players.items()},
@@ -532,6 +533,11 @@ def handle_play_cards(data):
                 game_session.game.players[player_name]['score'][replaced_color] += 1
                 game_session.game.players[player_name]['total_dots'] += 1
                 print(f"[PLAY_CARDS] Awarded point for replacing {replaced_color} dot")
+            
+            # Track yellow dots collected
+            if replaced_color == 'yellow':
+                game_session.game.players[player_name]['yellow_dots'] += 1
+                print(f"[PLAY_CARDS] {player_name} collected a yellow dot! Total yellow: {game_session.game.players[player_name]['yellow_dots']}")
             
             # Check for matches
             match_result = game_session.game.check_line_match(row, col, card.color)

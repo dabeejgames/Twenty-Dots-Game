@@ -657,6 +657,15 @@
                         scoreDot.textContent = data.score ? (data.score[color] || 0) : 0;
                         colorsDiv.appendChild(scoreDot);
                     });
+                    
+                    // Add yellow dot display if game mode is five_with_yellow
+                    if (currentGameState && currentGameState.game_mode === 'five_with_yellow') {
+                        const yellowDot = document.createElement('div');
+                        yellowDot.className = 'score-dot dot yellow';
+                        yellowDot.textContent = data.yellow_dots || 0;
+                        colorsDiv.appendChild(yellowDot);
+                    }
+                    
                     playerBox.appendChild(colorsDiv);
                     
                     const handDiv = document.createElement('div');

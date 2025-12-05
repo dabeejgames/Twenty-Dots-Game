@@ -136,6 +136,7 @@ class TwentyDots:
             'hand': [], 
             'score': {color: 0 for color in self.colors}, 
             'total_dots': 0,
+            'yellow_dots': 0,
             'is_ai': f"Player {i+1}" in self.ai_opponents,
             'double_next_match': False
         } for i in range(num_players)}
