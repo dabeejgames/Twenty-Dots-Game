@@ -542,9 +542,23 @@
                     conditionText = 'First to collect 5 of each color including yellow!';
                 }
                 
+                // Track wins/losses in localStorage
+                const stats = JSON.parse(localStorage.getItem('playerStats') || '{}');
+                if (!stats[playerName]) stats[playerName] = { wins: 0, losses: 0 };
+                if (winner === playerName) {
+                    stats[playerName].wins += 1;
+                } else {
+                    stats[playerName].losses += 1;
+                }
+                localStorage.setItem('playerStats', JSON.stringify(stats));
+                
                 setTimeout(() => {
-                    alert(`🎉 ${winner} WINS! 🎉\n\n${conditionText}`);
-                    location.reload();
+                    const playAgain = confirm(`🎉 ${winner} WINS! 🎉\n\n${conditionText}\n\nClick OK to play again, or Cancel to go back to lobby`);
+                    if (playAgain) {
+                        location.reload();
+                    } else {
+                        location.href = window.location.origin;
+                    }
                 }, 500);
             });
         }
@@ -701,6 +715,17 @@
                         });
                         playerBox.appendChild(discardContainer);
                     }
+                    
+                    // Add wins/losses stats
+                    const stats = JSON.parse(localStorage.getItem('playerStats') || '{}');
+                    const playerStats = stats[name] || { wins: 0, losses: 0 };
+                    const statsDiv = document.createElement('div');
+                    statsDiv.style.marginTop = '8px';
+                    statsDiv.style.fontSize = '0.85em';
+                    statsDiv.style.color = '#4CAF50';
+                    statsDiv.style.textAlign = 'center';
+                    statsDiv.innerHTML = `<div style="font-weight: bold;">Wins: ${playerStats.wins} | Loss: ${playerStats.losses}</div>`;
+                    playerBox.appendChild(statsDiv);
                 }
             });
         }
