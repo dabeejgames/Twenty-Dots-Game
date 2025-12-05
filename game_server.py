@@ -435,19 +435,27 @@ def handle_play_cards(data):
     cards_to_play = []
     
     for card_data in cards_data:
+        # Normalize card location to string format
+        if isinstance(card_data['location'], list):
+            req_loc = f"{card_data['location'][0]}{card_data['location'][1]}"
+        else:
+            req_loc = card_data['location']
+        
         # Find matching card in hand
         for card in hand:
+            # Normalize card location to string format
             card_loc = card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}"
-            req_loc = f"{card_data['location'][0]}{card_data['location'][1]}"
             
             if card.color == card_data['color'] and card_loc == req_loc:
                 cards_to_play.append(card)
+                print(f"[PLAY_CARDS] Found matching card: {card.color} at {card_loc}")
                 break
     
     print(f"[PLAY_CARDS] Found {len(cards_to_play)} cards to play")
     
     if len(cards_to_play) != len(cards_data):
         print(f"[PLAY_CARDS] ERROR: Could not find all cards. Expected {len(cards_data)}, found {len(cards_to_play)}")
+        print(f"[PLAY_CARDS] Requested: {[(c['color'], c['location']) for c in cards_data]}")
         emit('error', {'message': 'Invalid cards selected'})
         return
     
