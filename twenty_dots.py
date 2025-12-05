@@ -349,11 +349,11 @@ class TwentyDots:
             self.grid[row_idx][col_idx] = Dot(card.color)
             return (True, None)
         
-        # If yellow dot is here, replace it (no point awarded)
+        # If yellow dot is here, replace it and track it
         if current.color == 'yellow':
             self.grid[row_idx][col_idx] = Dot(card.color)
             self.yellow_dot_position = None
-            return (True, None)
+            return (True, 'yellow')
         
         # If a colored dot is here, replace it and award point
         if current.color in self.colors:
