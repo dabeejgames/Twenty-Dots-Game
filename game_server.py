@@ -528,13 +528,13 @@ def handle_play_cards(data):
         print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}, replaced={replaced_color}")
         
         if success:
-            # Award point if we replaced a colored dot
-            if replaced_color and replaced_color != 'yellow':
+            # Award point if we replaced a colored dot (red, blue, purple, green)
+            if replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
                 game_session.game.players[player_name]['score'][replaced_color] += 1
                 game_session.game.players[player_name]['total_dots'] += 1
                 print(f"[PLAY_CARDS] Awarded point for replacing {replaced_color} dot")
             
-            # Track yellow dots collected
+            # Track yellow dots collected - when a yellow dot is replaced
             if replaced_color == 'yellow':
                 game_session.game.players[player_name]['yellow_dots'] += 1
                 print(f"[PLAY_CARDS] {player_name} collected a yellow dot! Total yellow: {game_session.game.players[player_name]['yellow_dots']}")
