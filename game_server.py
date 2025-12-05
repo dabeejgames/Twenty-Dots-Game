@@ -537,6 +537,7 @@ def handle_play_cards(data):
             # Track yellow dots collected - when a yellow dot is replaced
             if replaced_color == 'yellow':
                 game_session.game.players[player_name]['yellow_dots'] += 1
+                game_session.game.players[player_name]['total_dots'] += 1
                 print(f"[PLAY_CARDS] {player_name} collected a yellow dot! Total yellow: {game_session.game.players[player_name]['yellow_dots']}")
             
             # Check for matches
