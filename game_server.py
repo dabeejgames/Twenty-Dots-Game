@@ -266,8 +266,8 @@ def handle_join_game(data):
     
     print(f"{player_name} joined game {game_id}")
     
-    # Auto-start game when 2 players join
-    if len(game_session.player_order) >= 2 and not game_session.started:
+    # Auto-start game when 4 players join
+    if len(game_session.player_order) >= 4 and not game_session.started:
         print(f"[AUTO_START] Auto-starting game {game_id} with {len(game_session.player_order)} players")
         print(f"[AUTO_START] Player order: {game_session.player_order}")
         

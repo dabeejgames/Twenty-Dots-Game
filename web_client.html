@@ -546,8 +546,8 @@
             .players-top {
                 position: absolute;
                 top: 50px;
-                left: 50px;
-                right: 0;
+                left: 0;
+                right: 50px;
                 width: auto;
                 justify-content: space-between;
                 z-index: 5;
@@ -555,9 +555,9 @@
             
             .players-bottom {
                 position: absolute;
-                bottom: 130px;
-                left: 50px;
-                right: 0;
+                bottom: 105px;
+                left: 0;
+                right: 50px;
                 width: auto;
                 justify-content: space-between;
                 z-index: 5;
@@ -582,22 +582,23 @@
             
             .player-box {
                 flex: 1;
-                min-width: 25%;
-                padding: 3px;
-                font-size: 0.65em;
+                min-width: 20%;
+                padding: 2px;
+                font-size: 0.55em;
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-start;
-                max-width: 120px;
+                max-width: 90px;
             }
             
-            .player-name { font-size: 0.65em; font-weight: bold; }
-            .player-score { font-size: 0.75em; margin: 2px 0; }
-            .player-score-dots { gap: 2px; margin: 2px 0; }
-            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
-            .player-hand { font-size: 0.6em; }
-            .discard-card { width: 20px; height: 12px; font-size: 0.45em; }
-            .discard-cards { gap: 2px; }
+            .player-name { font-size: 0.55em; font-weight: bold; }
+            .player-score { font-size: 0.65em; margin: 1px 0; }
+            .player-score-dots { gap: 1px; margin: 1px 0; }
+            .score-dot { width: 8px; height: 8px; font-size: 0.4em; }
+            .player-hand { font-size: 0.5em; }
+            .player-discard { font-size: 0.5em; }
+            .discard-card { width: 16px; height: 10px; font-size: 0.35em; }
+            .discard-cards { gap: 1px; flex-wrap: nowrap; max-width: 55px; }
             
             .board {
                 grid-template-columns: repeat(7, 40px);
@@ -618,7 +619,7 @@
                 height: auto;
                 max-height: auto;
                 gap: 2px;
-                padding: 3px;
+                padding: 2px;
                 flex-direction: column;
                 border-left: none;
                 border-top: 2px solid #6c5ce7;
@@ -628,7 +629,7 @@
                 position: absolute;
                 bottom: 0;
                 left: 0;
-                height: 130px;
+                height: 105px;
             }
             
             .hand-title { 
@@ -641,18 +642,18 @@
                 flex-direction: row;
                 overflow-x: auto;
                 overflow-y: hidden;
-                gap: 3px;
+                gap: 2px;
                 margin-bottom: 2px;
-                padding: 3px 0;
-                max-height: 65px;
+                padding: 2px 0;
+                max-height: 50px;
             }
             
             .card {
                 min-width: calc((100vw - 20px) / 5.2);
                 max-width: calc((100vw - 20px) / 5.2);
-                min-height: 55px;
-                padding: 3px;
-                font-size: 0.65em;
+                min-height: 45px;
+                padding: 2px;
+                font-size: 0.6em;
                 flex-shrink: 0;
             }
             
@@ -663,8 +664,8 @@
             
             .controls button {
                 flex: 1;
-                padding: 5px 2px;
-                font-size: 0.65em;
+                padding: 4px 2px;
+                font-size: 0.6em;
                 white-space: nowrap;
                 min-height: auto;
             }
@@ -760,8 +761,8 @@
             .players-top {
                 position: absolute;
                 top: 45px;
-                left: 45px;
-                right: 0;
+                left: 0;
+                right: 45px;
                 width: auto;
                 justify-content: space-between;
                 z-index: 5;
@@ -769,9 +770,9 @@
             
             .players-bottom {
                 position: absolute;
-                bottom: 120px;
-                left: 45px;
-                right: 0;
+                bottom: 100px;
+                left: 0;
+                right: 45px;
                 width: auto;
                 justify-content: space-between;
                 z-index: 5;
@@ -830,7 +831,7 @@
                 position: absolute;
                 bottom: 0;
                 left: 0;
-                height: 120px;
+                height: 100px;
             }
             
             .hand-title { 
