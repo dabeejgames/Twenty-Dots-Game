@@ -105,7 +105,7 @@
         .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
         .player-hand { font-size: 0.85em; color: #aaa; }
         .player-discard { font-size: 0.75em; color: #888; margin-top: 5px; }
-        .discard-cards { display: flex; justify-content: center; gap: 2px; margin-top: 3px; flex-wrap: wrap; max-width: 110px; }
+        .discard-cards { display: flex; justify-content: center; gap: 5px; margin-top: 3px; flex-wrap: nowrap; }
         .discard-card { width: 25px; height: 14px; border-radius: 2px; font-size: 0.55em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
         
         /* Board */
@@ -599,7 +599,7 @@
             .player-hand { font-size: 0.5em; }
             .player-discard { font-size: 0.45em; margin-top: 2px; }
             .discard-card { width: 10px; height: 7px; font-size: 0.25em; flex-shrink: 0; }
-            .discard-cards { gap: 1px; display: flex; flex-wrap: wrap; max-width: 60px; overflow: visible; }
+            .discard-cards { gap: 3px; display: flex; flex-wrap: nowrap; overflow: visible; }
             
             .board {
                 grid-template-columns: repeat(7, 38px);
@@ -1269,20 +1269,15 @@
                         
                         const discardContainer = document.createElement('div');
                         discardContainer.className = 'discard-cards';
-                        discardContainer.style.display = 'flex';
-                        discardContainer.style.gap = '5px';
-                        discardContainer.style.marginTop = '5px';
-                        discardContainer.style.flexWrap = 'wrap';
-                        discardContainer.style.justifyContent = 'center';
                         // Show last 2 cards as card boxes
                         const lastCards = data.discard_pile.slice(-2);
                         lastCards.forEach(card => {
                             const cardDiv = document.createElement('div');
                             cardDiv.className = `card ${card.color}`;
-                            cardDiv.style.width = '60px';
-                            cardDiv.style.minHeight = '40px';
+                            cardDiv.style.width = '55px';
+                            cardDiv.style.minHeight = '35px';
                             cardDiv.style.fontSize = '0.7em';
-                            cardDiv.style.padding = '4px';
+                            cardDiv.style.padding = '3px';
                             cardDiv.innerHTML = `<div>${card.location}</div><div style="font-size: 0.7em; opacity: 0.8;">${card.color.toUpperCase()}</div>`;
                             discardContainer.appendChild(cardDiv);
                         });
