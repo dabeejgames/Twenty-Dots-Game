@@ -19,13 +19,14 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 games = {}
 
 class GameSession:
-    def __init__(self, game_id, host_sid, game_mode='twenty_dots'):
+    def __init__(self, game_id, host_sid, game_mode='twenty_dots', player_count=2):
         self.game_id = game_id
         self.game_mode = game_mode
+        self.required_players = player_count  # Store the required player count
         self.game = TwentyDots(num_players=2, difficulty='easy', ai_opponents={}, power_cards=False)
         self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
         self.game.can_roll_dice = True  # First player must roll to place initial wild dot
-        print(f"Created new game {game_id} with mode {game_mode}. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
+        print(f"Created new game {game_id} with mode {game_mode}, requires {player_count} players. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
         self.players = {}  # sid -> player_info
         self.player_order = []  # List of player names in turn order
         self.ai_players = {}  # player_name -> AIPlayer instance
@@ -35,9 +36,11 @@ class GameSession:
         
     def add_player(self, sid, player_name, is_ai=False):
         """Add a player to the game"""
-        if len(self.players) >= 4:
-            return False, "Game is full"
+        if len(self.players) >= self.required_players:
+            print(f"[ADD_PLAYER] REJECTED: Game is full. Current: {len(self.players)}, Required: {self.required_players}")
+            return False, f"Game is full ({self.required_players} players required)"
         
+        print(f"[ADD_PLAYER] Adding {player_name} to game {self.game_id}. Current players: {len(self.players)}, Required: {self.required_players}")
         if player_name in self.player_order:
             return False, f"Player name '{player_name}' already taken"
             
@@ -208,14 +211,20 @@ def handle_create_game(data):
 def handle_join_game(data):
     """Player joins an existing game (creates if doesn't exist)"""
     game_id = data.get('game_id')
-    print(f"[JOIN_GAME] Received join_game request for game {game_id}")
+    player_count = data.get('player_count', 2)
+    # Ensure player_count is an integer
+    try:
+        player_count = int(player_count)
+    except (ValueError, TypeError):
+        player_count = 2
+    print(f"[JOIN_GAME] Received join_game request for game {game_id}, player_count: {player_count} (type: {type(player_count).__name__})")
     
     # Auto-create game if it doesn't exist (first player)
     if game_id not in games:
         player_name = data.get('player_name', 'Player 1')
         game_mode = data.get('game_mode', 'twenty_dots')
-        print(f"[JOIN_GAME] Game doesn't exist, creating. First player: {player_name}, mode: {game_mode}")
-        game_session = GameSession(game_id, request.sid, game_mode)
+        print(f"[JOIN_GAME] Game doesn't exist, creating. First player: {player_name}, mode: {game_mode}, player_count: {player_count}")
+        game_session = GameSession(game_id, request.sid, game_mode, player_count)
         success, message = game_session.add_player(request.sid, player_name)
         
         if not success:
@@ -236,7 +245,7 @@ def handle_join_game(data):
     # Game exists, join it
     game_session = games[game_id]
     player_name = data.get('player_name', f'Player {len(game_session.players) + 1}')
-    print(f"[JOIN_GAME] Game exists. Second player joining: {player_name}")
+    print(f"[JOIN_GAME] Game exists. Player joining: {player_name}")
     
     game_session = games[game_id]
     
@@ -266,9 +275,10 @@ def handle_join_game(data):
     
     print(f"{player_name} joined game {game_id}")
     
-    # Auto-start game when 4 players join
-    if len(game_session.player_order) >= 4 and not game_session.started:
-        print(f"[AUTO_START] Auto-starting game {game_id} with {len(game_session.player_order)} players")
+    # Auto-start game when required player count is reached
+    if len(game_session.player_order) >= game_session.required_players and not game_session.started:
+        print(f"[AUTO_START] Auto-starting game {game_id}")
+        print(f"[AUTO_START] Players joined: {len(game_session.player_order)}, Required: {game_session.required_players}")
         print(f"[AUTO_START] Player order: {game_session.player_order}")
         
         # Initialize game with correct parameters
