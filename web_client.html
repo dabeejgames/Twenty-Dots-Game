@@ -1274,6 +1274,9 @@
             console.log('Connecting to:', serverUrl);
             socket = io(serverUrl);
             
+            // Setup handlers BEFORE connecting
+            setupSocketHandlers();
+            
             socket.on('connect', () => {
                 console.log('Connected to server for single-player');
                 socket.emit('start_single_player', {
@@ -1283,8 +1286,6 @@
                     game_mode: gameMode
                 });
             });
-            
-            setupSocketHandlers();
         }
 
         function setupSocketHandlers() {
@@ -1296,6 +1297,10 @@
             
             socket.on('game_started', (gameState) => {
                 console.log('Game started!', gameState);
+                // Hide both forms and show game screen
+                document.getElementById('joinScreen').style.display = 'none';
+                document.getElementById('singlePlayerScreen').style.display = 'none';
+                document.getElementById('gameScreen').classList.add('active');
                 updateGameState(gameState);
             });
             
