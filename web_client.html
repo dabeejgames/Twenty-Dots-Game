@@ -511,7 +511,7 @@
         @media (max-width: 768px) {
             /* Mobile: Optimize for smaller screens */
             .header {
-                padding: 5px 5px 3px 50px;
+                padding: 5px;
                 flex-shrink: 0;
                 position: relative;
                 min-height: 50px;
@@ -522,14 +522,28 @@
             
             .header h1 { 
                 display: block;
-                font-size: 1.2em;
+                font-size: 1em;
                 flex: 1;
                 text-align: center;
+                color: #ffd700;
+                font-weight: bold;
             }
             
             .turn-info { 
                 font-size: 0.85em; 
                 margin: 3px 0;
+            }
+            
+            /* Logo positioning on mobile header */
+            .left-panel {
+                position: relative !important;
+                top: auto !important;
+                left: auto !important;
+                right: auto !important;
+                width: 40px !important;
+                height: 40px !important;
+                order: -1;
+                flex-shrink: 0;
             }
             
             .main-container {
@@ -558,7 +572,7 @@
             .players-top {
                 position: absolute;
                 top: 15px;
-                left: 30px;
+                left: 50px;
                 right: 50px;
                 width: auto;
                 justify-content: space-between;
@@ -568,7 +582,7 @@
             .players-bottom {
                 position: absolute;
                 bottom: 260px;
-                left: 30px;
+                left: 50px;
                 right: 50px;
                 width: auto;
                 justify-content: space-between;
@@ -778,7 +792,7 @@
             .players-top {
                 position: absolute;
                 top: 10px;
-                left: 25px;
+                left: 40px;
                 right: 45px;
                 width: auto;
                 justify-content: space-between;
@@ -788,7 +802,7 @@
             .players-bottom {
                 position: absolute;
                 bottom: 230px;
-                left: 25px;
+                left: 40px;
                 right: 45px;
                 width: auto;
                 justify-content: space-between;
