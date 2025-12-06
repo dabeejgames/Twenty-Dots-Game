@@ -509,6 +509,9 @@ def handle_start_single_player(data):
     game_session.game = TwentyDots(num_players=num_players, difficulty='easy', ai_opponents={}, power_cards=False)
     game_session.game.shuffle_deck()
     
+    # Deal initial cards to all players
+    game_session.game.deal_cards(5)
+    
     # Update player names in the game
     old_names = list(game_session.game.players.keys())
     for i, pname in enumerate(game_session.player_order):
