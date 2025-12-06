@@ -469,6 +469,7 @@
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-start;
+                z-index: 15;
             }
             
             .player-score { font-size: 1em; }
@@ -539,15 +540,9 @@
                 padding: 8px;
                 font-size: 0.8em;
             }
-        }
-        
-        @media (max-width: 768px) {
-            /* Mobile: Optimize for smaller screens */
+            
             .header {
-                padding: 5px;
-                flex-shrink: 0;
-                position: relative;
-                min-height: 70px;
+                min-height: 45px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
@@ -555,18 +550,38 @@
             }
             
             .header h1 { 
-                display: block !important;
-                font-size: 0.75em;
-                color: #ffd700;
-                font-weight: bold;
-                margin: 2px 0;
+                font-size: 0.55em;
                 text-align: center;
+                margin: 1px 0;
             }
             
-            .turn-info { 
-                font-size: 0.7em; 
-                margin: 2px 0;
+            .turn-info {\
+                font-size: 0.5em;
                 text-align: center;
+                margin: 1px 0;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            /* Mobile: Optimize for smaller screens */
+            .header {
+                min-height: 50px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            .header h1 { 
+                font-size: 0.6em;
+                text-align: center;
+                margin: 2px 0;
+            }
+            
+            .turn-info {
+                font-size: 0.55em;
+                text-align: center;
+                margin: 2px 0;
             }
             
             /* Logo positioning on mobile header - LEFT */
