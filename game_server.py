@@ -192,6 +192,7 @@ class GameSession:
                 # Recursively handle next player
                 import time
                 time.sleep(0.5)
+                self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
                 self.execute_ai_move()
                 return
             
@@ -249,16 +250,15 @@ class GameSession:
             
             # If yellow was replaced or collected, allow AI to roll again for new yellow
             if yellow_replaced or yellow_collected:
-                self.game.can_roll_dice = True
-                print(f"[AI_MOVE] {current_player} made a match with yellow - can roll again")
-                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                # AI must roll again, so continue the move
-                import time
-                time.sleep(0.5)
-                self.execute_ai_move()
-                return
-            
-            # Draw replacement cards
+                    self.game.can_roll_dice = True
+                    print(f"[AI_MOVE] {current_player} made a match with yellow - can roll again")
+                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                    # AI must roll again, so continue the move
+                    import time
+                    time.sleep(0.5)
+                    self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
+                    self.execute_ai_move()
+                    return            # Draw replacement cards
             while len(hand) < 5 and self.game.deck:
                 self.game.draw_card(current_player)
             
@@ -283,14 +283,13 @@ class GameSession:
                 }, room=self.game_id)
                 return
             
-            # Recursively check if next player is also AI
-            import time
-            time.sleep(0.5)  # Small delay to avoid overwhelming the system
-            self.execute_ai_move()
+                # Recursively check if next player is also AI
+                import time
+                time.sleep(0.5)  # Small delay to avoid overwhelming the system
+                self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
+                self.execute_ai_move()
         finally:
-            self.ai_move_in_progress = False
-    
-    def check_winner(self):
+            self.ai_move_in_progress = False    def check_winner(self):
         """Check if anyone has won based on game_mode"""
         for player_name in self.player_order:
             player_data = self.game.players[player_name]
