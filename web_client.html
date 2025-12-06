@@ -1072,10 +1072,10 @@
                     <div class="mode-title">Multiplayer</div>
                     <div class="mode-description">Play online with friends<br>2-4 players</div>
                 </div>
-                <div class="mode-button" onclick="showSinglePlayerMessage()">
+                <div class="mode-button" onclick="showSinglePlayerScreen()">
                     <div class="mode-icon">🤖</div>
                     <div class="mode-title">Single Player</div>
-                    <div class="mode-description">Play against AI<br>Coming soon to web!</div>
+                    <div class="mode-description">Play against AI<br>2-4 players</div>
                 </div>
             </div>
         </div>
@@ -1113,6 +1113,45 @@
                 <button class="btn-join" onclick="joinGame()">🎮 Join Game</button>
             </div>
             <div class="error-message" id="joinError"></div>
+        </div>
+    </div>
+    
+    <!-- Single Player Screen -->
+    <div id="singlePlayerScreen" style="display: none; align-items: center; justify-content: center; min-height: 100vh;">
+        <div class="join-form">
+            <h2 style="color: #ffd700; margin-bottom: 30px;">Single Player Game</h2>
+            <div class="form-group">
+                <label>Your Name</label>
+                <input type="text" id="spPlayerName" placeholder="e.g., Brandon" value="Brandon">
+            </div>
+            <div class="form-group">
+                <label>Number of Players (including you)</label>
+                <select id="spPlayerCount">
+                    <option value="2">2 Players (1 AI)</option>
+                    <option value="3">3 Players (2 AI)</option>
+                    <option value="4">4 Players (3 AI)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>AI Difficulty</label>
+                <select id="spDifficulty">
+                    <option value="easy">Easy</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Win Condition</label>
+                <select id="spWinCondition">
+                    <option value="twenty_dots">First to 20 Total Dots</option>
+                    <option value="five_colors">First to 5 of Each Color</option>
+                    <option value="five_with_yellow">First to 5 of Each Color + 5 Yellow</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <button class="btn-join" onclick="startSinglePlayer()">🤖 Start Game</button>
+            </div>
+            <div class="error-message" id="spError"></div>
         </div>
     </div>
     
@@ -1183,6 +1222,11 @@
             document.getElementById('joinScreen').style.display = 'flex';
         }
 
+        function showSinglePlayerScreen() {
+            document.getElementById('modeScreen').style.display = 'none';
+            document.getElementById('singlePlayerScreen').style.display = 'flex';
+        }
+
         function showSinglePlayerMessage() {
             alert('🤖 Single Player Mode\n\nThe web version currently supports multiplayer only.\n\nFor single-player with AI opponents, please download and run the desktop version.');
         }
@@ -1212,8 +1256,41 @@
                 });
             });
             
+            setupSocketHandlers();
+        }
+
+        function startSinglePlayer() {
+            playerName = document.getElementById('spPlayerName').value || 'Player';
+            const numPlayers = parseInt(document.getElementById('spPlayerCount').value);
+            const difficulty = document.getElementById('spDifficulty').value;
+            const gameMode = document.getElementById('spWinCondition').value;
+            
+            if (!playerName) {
+                showError('spError', 'Please enter your name');
+                return;
+            }
+            
+            const serverUrl = window.location.origin;
+            console.log('Connecting to:', serverUrl);
+            socket = io(serverUrl);
+            
+            socket.on('connect', () => {
+                console.log('Connected to server for single-player');
+                socket.emit('start_single_player', {
+                    player_name: playerName,
+                    num_players: numPlayers,
+                    difficulty: difficulty,
+                    game_mode: gameMode
+                });
+            });
+            
+            setupSocketHandlers();
+        }
+
+        function setupSocketHandlers() {
             socket.on('join_success', () => {
                 document.getElementById('joinScreen').style.display = 'none';
+                document.getElementById('singlePlayerScreen').style.display = 'none';
                 document.getElementById('gameScreen').classList.add('active');
             });
             
@@ -1277,6 +1354,7 @@
                 }, 500);
             });
         }
+
 
         function updateGameState(state) {
             currentGameState = state;

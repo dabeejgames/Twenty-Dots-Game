@@ -33,6 +33,7 @@ class GameSession:
         self.host_sid = host_sid
         self.started = False
         self.discard_piles = {}  # Track discard piles for each player
+        self.ai_move_in_progress = False  # Flag to prevent overlapping AI moves
         
     def add_player(self, sid, player_name, is_ai=False):
         """Add a player to the game"""
@@ -141,6 +142,104 @@ class GameSession:
         
         print(f"Sending hand to {player_name}: colors = {[c.color for c in hand]}")
         return cards_data
+    
+    def execute_ai_move(self):
+        """Execute AI move if current player is AI"""
+        if self.ai_move_in_progress:
+            return  # Prevent recursive calls
+        
+        current_player = self.game.get_current_player()
+        if current_player not in self.ai_players:
+            return  # Not an AI player
+        
+        self.ai_move_in_progress = True
+        try:
+            ai_player = self.ai_players[current_player]
+            hand = self.game.players[current_player]['hand']
+            
+            # AI must roll first if can_roll_dice is True
+            if self.game.can_roll_dice:
+                print(f"[AI_MOVE] {current_player} must roll first")
+                # Simulate roll_dice
+                self.game.can_roll_dice = False
+                self.game.place_random_yellow_dot()
+                # Broadcast updated game state
+                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                return
+            
+            # Choose 2 cards to play
+            cards_to_play_indices = ai_player.choose_cards(hand)
+            if len(cards_to_play_indices) > 0:
+                cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
+                
+                # Play the cards (similar to handle_play_cards but for AI)
+                for card in cards_to_play:
+                    if card not in hand:
+                        continue
+                    
+                    # Add to discard pile
+                    if current_player not in self.discard_piles:
+                        self.discard_piles[current_player] = []
+                    
+                    card_info = {
+                        'location': card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}",
+                        'color': card.color
+                    }
+                    self.discard_piles[current_player].append(card_info)
+                    
+                    # Remove from hand
+                    hand.remove(card)
+                    
+                    # Place dot on board
+                    success, replaced_color = self.game.place_card_dot(card)
+                    if success:
+                        if replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
+                            self.game.players[current_player]['score'][replaced_color] += 1
+                            self.game.players[current_player]['total_dots'] += 1
+                        
+                        if replaced_color == 'yellow':
+                            self.game.players[current_player]['yellow_dots'] += 1
+                            self.game.players[current_player]['total_dots'] += 1
+                        
+                        # Check for matches
+                        row = card.location[0]
+                        col = card.location[1]
+                        row_idx = self.game.rows.index(row)
+                        col_idx = self.game.columns.index(col)
+                        match_result = self.game.check_line_match(row, col, card.color)
+                        match, match_color = match_result
+                        if match:
+                            self.game.collect_dots(match, current_player, match_color)
+                
+                # Draw replacement cards
+                while len(hand) < 5 and self.game.deck:
+                    self.game.draw_card(current_player)
+                
+                # Advance to next player
+                self.game.next_player()
+                if not hasattr(self.game, 'turn_cards_played'):
+                    self.game.turn_cards_played = {}
+                new_player = self.game.get_current_player()
+                self.game.turn_cards_played[new_player] = 0
+                
+                # Broadcast updated game state
+                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                
+                # Check for winner
+                winner_result = self.check_winner()
+                if winner_result:
+                    socketio.emit('game_over', {
+                        'winner': winner_result['winner'],
+                        'condition': winner_result['mode']
+                    }, room=self.game_id)
+                    return
+                
+                # Recursively check if next player is also AI
+                import time
+                time.sleep(1)  # Small delay to avoid overwhelming the system
+                self.execute_ai_move()
+        finally:
+            self.ai_move_in_progress = False
     
     def check_winner(self):
         """Check if anyone has won based on game_mode"""
@@ -324,6 +423,13 @@ def handle_join_game(data):
                 hand = game_session.get_player_hand(player_info['name'])
                 socketio.emit('your_hand', {'hand': hand}, room=sid)
         
+        # Execute AI move if starting player is AI (AI must roll first)
+        if game_session.game.get_current_player() in game_session.ai_players:
+            import threading
+            thread = threading.Thread(target=game_session.execute_ai_move)
+            thread.daemon = True
+            thread.start()
+        
         print(f"Game {game_id} auto-started with players: {game_session.player_order}")
 
 @socketio.on('add_ai_player')
@@ -360,6 +466,74 @@ def handle_add_ai(data):
     }, room=game_id)
     
     print(f"AI player {ai_name} added to game {game_id}")
+
+@socketio.on('start_single_player')
+def handle_start_single_player(data):
+    """Start a single-player game with AI opponents"""
+    player_name = data.get('player_name', 'Player')
+    num_players = data.get('num_players', 2)
+    difficulty = data.get('difficulty', 'medium')
+    game_mode = data.get('game_mode', 'twenty_dots')
+    
+    # Ensure num_players is an integer
+    try:
+        num_players = int(num_players)
+    except (ValueError, TypeError):
+        num_players = 2
+    
+    # Create a unique game ID for single-player
+    import uuid
+    game_id = f"sp_{uuid.uuid4().hex[:8]}"
+    
+    # Create game session
+    game_session = GameSession(game_id, request.sid, game_mode, num_players)
+    games[game_id] = game_session
+    join_room(game_id)
+    
+    # Add human player
+    success, message = game_session.add_player(request.sid, player_name, is_ai=False)
+    if not success:
+        emit('error', {'message': message})
+        return
+    
+    # Add AI players
+    ai_names = ['AI 1', 'AI 2', 'AI 3']
+    for i in range(num_players - 1):
+        ai_sid = f"ai_{game_id}_{i}"
+        ai_name = ai_names[i] if i < len(ai_names) else f"AI {i+1}"
+        success, msg = game_session.add_player(ai_sid, ai_name, is_ai=True)
+        if success:
+            game_session.ai_players[ai_name].difficulty = difficulty
+    
+    # Initialize game
+    game_session.game = TwentyDots(num_players=num_players, difficulty='easy', ai_opponents={}, power_cards=False)
+    game_session.game.shuffle_deck()
+    
+    # Update player names in the game
+    old_names = list(game_session.game.players.keys())
+    for i, pname in enumerate(game_session.player_order):
+        if i < len(old_names):
+            old_name = old_names[i]
+            game_session.game.players[pname] = game_session.game.players.pop(old_name)
+    
+    # Initialize discard piles
+    for pname in game_session.player_order:
+        game_session.discard_piles[pname] = []
+        game_session.game.turn_cards_played[pname] = 0
+    
+    # First player must roll wild dot
+    game_session.game.can_roll_dice = True
+    game_session.started = True
+    
+    # Send game state
+    game_state = game_session.get_game_state()
+    emit('game_started', game_state, room=game_id)
+    
+    # Send player their hand privately
+    hand = game_session.get_player_hand(player_name)
+    emit('your_hand', {'hand': hand})
+    
+    print(f"Single-player game {game_id} started with {player_name} vs {num_players - 1} AI opponents")
 
 @socketio.on('start_game')
 def handle_start_game(data):
@@ -638,7 +812,15 @@ def handle_play_cards(data):
             hand = game_session.get_player_hand(player_info['name'])
             socketio.emit('your_hand', {'hand': hand}, room=sid)
     
+    # Execute AI move if next player is AI
+    if game_session.game.get_current_player() in game_session.ai_players:
+        import threading
+        thread = threading.Thread(target=game_session.execute_ai_move)
+        thread.daemon = True
+        thread.start()
+    
     print(f"{player_name} played {len(cards_to_play)} card(s) in game {game_id}")
+
 
 @socketio.on('end_turn')
 def handle_end_turn(data):
@@ -697,7 +879,15 @@ def handle_end_turn(data):
             socketio.emit('your_hand', {'hand': player_hand}, room=sid)
             print(f"[END_TURN] Sent hand to {player_info['name']}")
     
+    # Execute AI move if next player is AI
+    if game_session.game.get_current_player() in game_session.ai_players:
+        import threading
+        thread = threading.Thread(target=game_session.execute_ai_move)
+        thread.daemon = True
+        thread.start()
+    
     print(f"[END_TURN] Turn ended successfully. Now: {game_session.game.get_current_player()}")
+
 
 @socketio.on('roll_dice')
 def handle_roll_dice(data):
