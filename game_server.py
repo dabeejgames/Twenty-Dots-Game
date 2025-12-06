@@ -884,11 +884,20 @@ def handle_play_cards(data):
             socketio.emit('your_hand', {'hand': hand}, room=sid)
     
     # Execute AI move if next player is AI
-    if game_session.game.get_current_player() in game_session.ai_players:
+    next_player_name = game_session.game.get_current_player()
+    print(f"[PLAY_CARDS] *** CHECKING FOR AI ***")
+    print(f"[PLAY_CARDS] Next player: {next_player_name}")
+    print(f"[PLAY_CARDS] AI players dict: {list(game_session.ai_players.keys())}")
+    print(f"[PLAY_CARDS] Is AI? {next_player_name in game_session.ai_players}")
+    
+    if next_player_name in game_session.ai_players:
+        print(f"[PLAY_CARDS] *** SPAWNING AI THREAD FOR {next_player_name} ***")
         import threading
         thread = threading.Thread(target=game_session.execute_ai_move)
         thread.daemon = True
         thread.start()
+    else:
+        print(f"[PLAY_CARDS] *** NOT SPAWNING THREAD - {next_player_name} IS NOT AI ***")
     
     print(f"{player_name} played {len(cards_to_play)} card(s) in game {game_id}")
 
