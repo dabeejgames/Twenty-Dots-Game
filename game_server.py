@@ -162,9 +162,19 @@ class GameSession:
             # AI must roll first if can_roll_dice is True
             if self.game.can_roll_dice:
                 print(f"[AI_MOVE] {current_player} must roll first (hand has {len(hand)} cards)")
-                # Simulate roll_dice
+                # Simulate roll_dice (same as human player)
                 self.game.can_roll_dice = False
-                self.game.place_random_yellow_dot()
+                row, col = self.game.roll_dice()
+                row_idx = self.game.rows.index(row)
+                col_idx = self.game.columns.index(col)
+                
+                # Place yellow dot
+                from twenty_dots import Dot
+                old_dot = self.game.grid[row_idx][col_idx]
+                self.game.grid[row_idx][col_idx] = Dot('yellow')
+                self.game.yellow_dot_position = (row_idx, col_idx)
+                print(f"[AI_MOVE] {current_player} rolled {row}{col}, placed yellow dot")
+                
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 # After rolling, AI needs to play cards, so continue
