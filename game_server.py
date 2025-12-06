@@ -166,95 +166,117 @@ class GameSession:
                 self.game.place_random_yellow_dot()
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                return
+                # After rolling, AI needs to play cards, so continue
             
             # Choose 2 cards to play
             cards_to_play_indices = ai_player.choose_cards(hand)
-            if len(cards_to_play_indices) > 0:
-                cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
-                yellow_replaced = False
-                yellow_collected = False
-                
-                # Play the cards (similar to handle_play_cards but for AI)
-                for card in cards_to_play:
-                    if card not in hand:
-                        continue
-                    
-                    # Add to discard pile
-                    if current_player not in self.discard_piles:
-                        self.discard_piles[current_player] = []
-                    
-                    card_info = {
-                        'location': card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}",
-                        'color': card.color
-                    }
-                    self.discard_piles[current_player].append(card_info)
-                    
-                    # Remove from hand
-                    hand.remove(card)
-                    
-                    # Place dot on board
-                    success, replaced_color = self.game.place_card_dot(card)
-                    if success:
-                        # Track if yellow was replaced
-                        if replaced_color == 'yellow':
-                            yellow_replaced = True
-                            self.game.players[current_player]['yellow_dots'] += 1
-                            self.game.players[current_player]['total_dots'] += 1
-                        elif replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
-                            self.game.players[current_player]['score'][replaced_color] += 1
-                            self.game.players[current_player]['total_dots'] += 1
-                        
-                        # Check for matches
-                        row = card.location[0]
-                        col = card.location[1]
-                        row_idx = self.game.rows.index(row)
-                        col_idx = self.game.columns.index(col)
-                        match_result = self.game.check_line_match(row, col, card.color)
-                        match, match_color = match_result
-                        if match:
-                            # Check if yellow dot is in the matched positions
-                            for col_idx_m, row_idx_m in match:
-                                dot = self.game.grid[row_idx_m][col_idx_m]
-                                if dot and dot.color == 'yellow':
-                                    yellow_collected = True
-                                    break
-                            self.game.collect_dots(match, current_player, match_color)
-                
-                # If yellow was replaced or collected, allow AI to roll again for new yellow
-                if yellow_replaced or yellow_collected:
-                    self.game.can_roll_dice = True
-                    print(f"[AI_MOVE] {current_player} made a match - can roll again")
-                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                    return
-                
-                # Draw replacement cards
-                while len(hand) < 5 and self.game.deck:
-                    self.game.draw_card(current_player)
-                
-                # Advance to next player
+            if len(cards_to_play_indices) == 0:
+                # No cards to play - advance to next player
+                print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
                 self.game.next_player()
                 if not hasattr(self.game, 'turn_cards_played'):
                     self.game.turn_cards_played = {}
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
-                
-                # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                
-                # Check for winner
-                winner_result = self.check_winner()
-                if winner_result:
-                    socketio.emit('game_over', {
-                        'winner': winner_result['winner'],
-                        'condition': winner_result['mode']
-                    }, room=self.game_id)
-                    return
-                
-                # Recursively check if next player is also AI
+                # Recursively handle next player
                 import time
-                time.sleep(1)  # Small delay to avoid overwhelming the system
+                time.sleep(0.5)
                 self.execute_ai_move()
+                return
+            
+            cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
+            yellow_replaced = False
+            yellow_collected = False
+            cards_played_count = 0
+            
+            # Play the cards (similar to handle_play_cards but for AI)
+            for card in cards_to_play:
+                if card not in hand:
+                    continue
+                
+                # Add to discard pile
+                if current_player not in self.discard_piles:
+                    self.discard_piles[current_player] = []
+                
+                card_info = {
+                    'location': card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}",
+                    'color': card.color
+                }
+                self.discard_piles[current_player].append(card_info)
+                
+                # Remove from hand
+                hand.remove(card)
+                cards_played_count += 1
+                
+                # Place dot on board
+                success, replaced_color = self.game.place_card_dot(card)
+                if success:
+                    # Track if yellow was replaced
+                    if replaced_color == 'yellow':
+                        yellow_replaced = True
+                        self.game.players[current_player]['yellow_dots'] += 1
+                        self.game.players[current_player]['total_dots'] += 1
+                    elif replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
+                        self.game.players[current_player]['score'][replaced_color] += 1
+                        self.game.players[current_player]['total_dots'] += 1
+                    
+                    # Check for matches
+                    row = card.location[0]
+                    col = card.location[1]
+                    row_idx = self.game.rows.index(row)
+                    col_idx = self.game.columns.index(col)
+                    match_result = self.game.check_line_match(row, col, card.color)
+                    match, match_color = match_result
+                    if match:
+                        # Check if yellow dot is in the matched positions
+                        for col_idx_m, row_idx_m in match:
+                            dot = self.game.grid[row_idx_m][col_idx_m]
+                            if dot and dot.color == 'yellow':
+                                yellow_collected = True
+                                break
+                        self.game.collect_dots(match, current_player, match_color)
+            
+            # If yellow was replaced or collected, allow AI to roll again for new yellow
+            if yellow_replaced or yellow_collected:
+                self.game.can_roll_dice = True
+                print(f"[AI_MOVE] {current_player} made a match with yellow - can roll again")
+                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                # AI must roll again, so continue the move
+                import time
+                time.sleep(0.5)
+                self.execute_ai_move()
+                return
+            
+            # Draw replacement cards
+            while len(hand) < 5 and self.game.deck:
+                self.game.draw_card(current_player)
+            
+            # Advance to next player after playing cards
+            print(f"[AI_MOVE] {current_player} played {cards_played_count} cards, advancing to next player")
+            self.game.next_player()
+            if not hasattr(self.game, 'turn_cards_played'):
+                self.game.turn_cards_played = {}
+            new_player = self.game.get_current_player()
+            self.game.turn_cards_played[new_player] = 0
+            print(f"[AI_MOVE] Advanced to {new_player}")
+            
+            # Broadcast updated game state
+            socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+            
+            # Check for winner
+            winner_result = self.check_winner()
+            if winner_result:
+                socketio.emit('game_over', {
+                    'winner': winner_result['winner'],
+                    'condition': winner_result['mode']
+                }, room=self.game_id)
+                return
+            
+            # Recursively check if next player is also AI
+            import time
+            time.sleep(0.5)  # Small delay to avoid overwhelming the system
+            self.execute_ai_move()
         finally:
             self.ai_move_in_progress = False
     
