@@ -516,7 +516,8 @@ def handle_start_single_player(data):
             old_name = old_names[i]
             game_session.game.players[pname] = game_session.game.players.pop(old_name)
     
-    # Initialize discard piles
+    # Initialize discard piles and turn_cards_played tracking
+    game_session.game.turn_cards_played = {}
     for pname in game_session.player_order:
         game_session.discard_piles[pname] = []
         game_session.game.turn_cards_played[pname] = 0
