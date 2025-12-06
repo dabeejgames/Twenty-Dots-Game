@@ -73,6 +73,7 @@
             flex-direction: column;
             flex: 1;
             gap: 15px;
+            position: relative;
         }
         
         /* Top players row */
@@ -165,7 +166,11 @@
             gap: 20px;
             justify-content: space-between;
             height: 140px;
-            margin-top: -270px;
+            position: absolute;
+            bottom: 80px;
+            left: 0;
+            right: 0;
+            z-index: 10;
         }
         
         /* Right panel - Hand and Controls */
@@ -556,7 +561,7 @@
             
             .players-bottom {
                 position: absolute;
-                bottom: 270px;
+                bottom: 220px;
                 left: 40px;
                 right: 50px;
                 width: auto;
@@ -606,7 +611,7 @@
                 grid-template-rows: repeat(7, 38px);
                 gap: 1px;
                 padding: 3px;
-                margin-top: -70px;
+                margin-top: -30px;
             }
             
             .dot {
