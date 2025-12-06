@@ -950,11 +950,19 @@ def handle_end_turn(data):
             print(f"[END_TURN] Sent hand to {player_info['name']}")
     
     # Execute AI move if next player is AI
-    if game_session.game.get_current_player() in game_session.ai_players:
+    next_player = game_session.game.get_current_player()
+    print(f"[END_TURN] Next player: {next_player}")
+    print(f"[END_TURN] AI players: {list(game_session.ai_players.keys())}")
+    print(f"[END_TURN] Is next player AI? {next_player in game_session.ai_players}")
+    
+    if next_player in game_session.ai_players:
+        print(f"[END_TURN] Spawning thread to execute AI move for {next_player}")
         import threading
         thread = threading.Thread(target=game_session.execute_ai_move)
         thread.daemon = True
         thread.start()
+    else:
+        print(f"[END_TURN] Next player {next_player} is not AI, waiting for player action")
     
     print(f"[END_TURN] Turn ended successfully. Now: {game_session.game.get_current_player()}")
 
