@@ -560,10 +560,16 @@ def handle_start_single_player(data):
     
     # Update player names in the game
     old_names = list(game_session.game.players.keys())
+    print(f"[SINGLE_PLAYER] Old player names: {old_names}")
+    print(f"[SINGLE_PLAYER] New player order: {game_session.player_order}")
     for i, pname in enumerate(game_session.player_order):
         if i < len(old_names):
             old_name = old_names[i]
             game_session.game.players[pname] = game_session.game.players.pop(old_name)
+            print(f"[SINGLE_PLAYER] Renamed {old_name} -> {pname}")
+    
+    print(f"[SINGLE_PLAYER] Final player names: {list(game_session.game.players.keys())}")
+    print(f"[SINGLE_PLAYER] Current player: {game_session.game.get_current_player()}")
     
     # Initialize discard piles and turn_cards_played tracking
     game_session.game.turn_cards_played = {}
