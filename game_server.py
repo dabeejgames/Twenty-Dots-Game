@@ -152,7 +152,7 @@ class GameSession:
         
         current_player = self.game.get_current_player()
         print(f"[AI_MOVE] Current player: '{current_player}'")
-        print(f"[AI_MOVE] AI players dict: {list(self.ai_players.keys())}")
+        print(f"[AI_MOVE] AI players dict keys: {list(self.ai_players.keys())}")
         print(f"[AI_MOVE] Is '{current_player}' in ai_players? {current_player in self.ai_players}")
         
         if current_player not in self.ai_players:
@@ -193,7 +193,10 @@ class GameSession:
                 import time
                 time.sleep(0.5)
                 self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
-                self.execute_ai_move()
+                try:
+                    self.execute_ai_move()
+                except Exception as e:
+                    print(f"[AI_MOVE] ERROR in recursive call: {type(e).__name__}: {e}")
                 return
             
             cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
@@ -257,7 +260,10 @@ class GameSession:
                     import time
                     time.sleep(0.5)
                     self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
-                    self.execute_ai_move()
+                    try:
+                        self.execute_ai_move()
+                    except Exception as e:
+                        print(f"[AI_MOVE] ERROR in yellow re-roll: {type(e).__name__}: {e}")
                     return            # Draw replacement cards
             while len(hand) < 5 and self.game.deck:
                 self.game.draw_card(current_player)
@@ -288,6 +294,10 @@ class GameSession:
                 time.sleep(0.5)  # Small delay to avoid overwhelming the system
                 self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
                 self.execute_ai_move()
+        except Exception as e:
+            print(f"[AI_MOVE] ERROR: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             self.ai_move_in_progress = False
     
