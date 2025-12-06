@@ -53,7 +53,7 @@ class GameSession:
         self.player_order.append(player_name)
         
         if is_ai:
-            self.ai_players[player_name] = AIPlayer('medium')
+            self.ai_players[player_name] = AIPlayer('medium')  # Will be updated later if needed
         
         return True, "Player added"
     
@@ -151,7 +151,10 @@ class GameSession:
             return  # Prevent recursive calls
         
         current_player = self.game.get_current_player()
-        print(f"[AI_MOVE] Checking if {current_player} is AI. AI players: {list(self.ai_players.keys())}")
+        print(f"[AI_MOVE] Current player: '{current_player}'")
+        print(f"[AI_MOVE] AI players dict: {list(self.ai_players.keys())}")
+        print(f"[AI_MOVE] Is '{current_player}' in ai_players? {current_player in self.ai_players}")
+        
         if current_player not in self.ai_players:
             print(f"[AI_MOVE] {current_player} is not an AI player, returning")
             return  # Not an AI player
