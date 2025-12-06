@@ -514,19 +514,20 @@
                 padding: 5px;
                 flex-shrink: 0;
                 position: relative;
-                min-height: 50px;
+                min-height: 55px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
             }
             
             .header h1 { 
-                display: block;
-                font-size: 1em;
+                display: block !important;
+                font-size: 0.9em;
                 flex: 1;
                 text-align: center;
                 color: #ffd700;
                 font-weight: bold;
+                margin: 0;
             }
             
             .turn-info { 
@@ -534,16 +535,29 @@
                 margin: 3px 0;
             }
             
-            /* Logo positioning on mobile header */
+            /* Logo positioning on mobile header - LEFT */
             .left-panel {
-                position: relative !important;
-                top: auto !important;
-                left: auto !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
                 right: auto !important;
                 width: 40px !important;
                 height: 40px !important;
                 order: -1;
                 flex-shrink: 0;
+                z-index: 10;
+            }
+            
+            /* Logo positioning on mobile header - RIGHT (using turn-info wrapper hack) */
+            .header::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 40px;
+                height: 40px;
+                background: url('Twenty Dots Logo.png') center/contain no-repeat;
+                border: 2px solid #ffd700;
             }
             
             .main-container {
@@ -726,13 +740,56 @@
         @media (max-width: 480px) {
             /* Small phone screens */
             .header {
-                padding: 5px 5px 3px 45px;
+                padding: 5px;
                 position: relative;
-                min-height: 45px;
+                min-height: 50px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
             }
             
             .header h1 { 
-                display: none; 
+                display: block !important;
+                font-size: 0.8em;
+                flex: 1;
+                text-align: center;
+                color: #ffd700;
+                font-weight: bold;
+                margin: 0;
+            }
+            
+            /* Logo positioning on 480px header - LEFT */
+            .left-panel {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: auto !important;
+                height: 35px;
+                width: 35px;
+                order: -1;
+                flex-direction: row;
+                justify-content: center;
+                flex-shrink: 0;
+                z-index: 10;
+            }
+            
+            .logo-box {
+                width: 35px;
+                height: 35px;
+                padding: 2px;
+                border: 2px solid #ffd700;
+            }
+            
+            /* Logo positioning on 480px header - RIGHT */
+            .header::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 35px;
+                height: 35px;
+                background: url('Twenty Dots Logo.png') center/contain no-repeat;
+                border: 2px solid #ffd700;
             }
             
             .turn-info { font-size: 0.8em; margin: 2px 0; }
