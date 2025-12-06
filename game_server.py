@@ -147,29 +147,35 @@ class GameSession:
     def execute_ai_move(self):
         """Execute AI move if current player is AI"""
         if self.ai_move_in_progress:
+            print(f"[AI_MOVE] Skipping - already in progress")
             return  # Prevent recursive calls
         
         current_player = self.game.get_current_player()
+        print(f"[AI_MOVE] Checking if {current_player} is AI. AI players: {list(self.ai_players.keys())}")
         if current_player not in self.ai_players:
+            print(f"[AI_MOVE] {current_player} is not an AI player, returning")
             return  # Not an AI player
         
         self.ai_move_in_progress = True
+        print(f"[AI_MOVE] Starting move for {current_player}")
         try:
             ai_player = self.ai_players[current_player]
             hand = self.game.players[current_player]['hand']
             
             # AI must roll first if can_roll_dice is True
             if self.game.can_roll_dice:
-                print(f"[AI_MOVE] {current_player} must roll first")
+                print(f"[AI_MOVE] {current_player} must roll first (hand has {len(hand)} cards)")
                 # Simulate roll_dice
                 self.game.can_roll_dice = False
                 self.game.place_random_yellow_dot()
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 # After rolling, AI needs to play cards, so continue
+                print(f"[AI_MOVE] {current_player} rolled, now choosing cards to play")
             
             # Choose 2 cards to play
             cards_to_play_indices = ai_player.choose_cards(hand)
+            print(f"[AI_MOVE] {current_player} chose {len(cards_to_play_indices)} cards: {cards_to_play_indices}")
             if len(cards_to_play_indices) == 0:
                 # No cards to play - advance to next player
                 print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
@@ -178,6 +184,7 @@ class GameSession:
                     self.game.turn_cards_played = {}
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
+                print(f"[AI_MOVE] Advanced to {new_player}")
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 # Recursively handle next player
                 import time
