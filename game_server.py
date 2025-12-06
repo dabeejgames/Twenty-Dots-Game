@@ -172,6 +172,8 @@ class GameSession:
             cards_to_play_indices = ai_player.choose_cards(hand)
             if len(cards_to_play_indices) > 0:
                 cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
+                yellow_replaced = False
+                yellow_collected = False
                 
                 # Play the cards (similar to handle_play_cards but for AI)
                 for card in cards_to_play:
@@ -194,12 +196,13 @@ class GameSession:
                     # Place dot on board
                     success, replaced_color = self.game.place_card_dot(card)
                     if success:
-                        if replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
-                            self.game.players[current_player]['score'][replaced_color] += 1
-                            self.game.players[current_player]['total_dots'] += 1
-                        
+                        # Track if yellow was replaced
                         if replaced_color == 'yellow':
+                            yellow_replaced = True
                             self.game.players[current_player]['yellow_dots'] += 1
+                            self.game.players[current_player]['total_dots'] += 1
+                        elif replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
+                            self.game.players[current_player]['score'][replaced_color] += 1
                             self.game.players[current_player]['total_dots'] += 1
                         
                         # Check for matches
@@ -210,7 +213,20 @@ class GameSession:
                         match_result = self.game.check_line_match(row, col, card.color)
                         match, match_color = match_result
                         if match:
+                            # Check if yellow dot is in the matched positions
+                            for col_idx_m, row_idx_m in match:
+                                dot = self.game.grid[row_idx_m][col_idx_m]
+                                if dot and dot.color == 'yellow':
+                                    yellow_collected = True
+                                    break
                             self.game.collect_dots(match, current_player, match_color)
+                
+                # If yellow was replaced or collected, allow AI to roll again for new yellow
+                if yellow_replaced or yellow_collected:
+                    self.game.can_roll_dice = True
+                    print(f"[AI_MOVE] {current_player} made a match - can roll again")
+                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                    return
                 
                 # Draw replacement cards
                 while len(hand) < 5 and self.game.deck:
