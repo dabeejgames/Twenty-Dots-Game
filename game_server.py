@@ -146,22 +146,15 @@ class GameSession:
     
     def execute_ai_move(self):
         """Execute AI move if current player is AI"""
-        print(f"[AI_MOVE] *** EXECUTE_AI_MOVE CALLED ***")
         if self.ai_move_in_progress:
-            print(f"[AI_MOVE] Skipping - already in progress")
-            return  # Prevent recursive calls
+            return
         
         current_player = self.game.get_current_player()
-        print(f"[AI_MOVE] Current player: '{current_player}'")
-        print(f"[AI_MOVE] AI players dict keys: {list(self.ai_players.keys())}")
-        print(f"[AI_MOVE] Is '{current_player}' in ai_players? {current_player in self.ai_players}")
         
         if current_player not in self.ai_players:
-            print(f"[AI_MOVE] {current_player} is not an AI player, returning")
-            return  # Not an AI player
+            return
         
         self.ai_move_in_progress = True
-        print(f"[AI_MOVE] Starting move for {current_player}")
         try:
             ai_player = self.ai_players[current_player]
             hand = self.game.players[current_player]['hand']
@@ -179,25 +172,22 @@ class GameSession:
             
             # Choose 2 cards to play
             cards_to_play_indices = ai_player.choose_cards(hand)
-            print(f"[AI_MOVE] {current_player} chose {len(cards_to_play_indices)} cards: {cards_to_play_indices}")
             if len(cards_to_play_indices) == 0:
                 # No cards to play - advance to next player
-                print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
                 self.game.next_player()
                 if not hasattr(self.game, 'turn_cards_played'):
                     self.game.turn_cards_played = {}
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
-                print(f"[AI_MOVE] Advanced to {new_player}")
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 # Recursively handle next player
                 import time
                 time.sleep(0.5)
-                self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
+                self.ai_move_in_progress = False
                 try:
                     self.execute_ai_move()
                 except Exception as e:
-                    print(f"[AI_MOVE] ERROR in recursive call: {type(e).__name__}: {e}")
+                    pass
                 return
             
             cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
@@ -255,16 +245,15 @@ class GameSession:
             # If yellow was replaced or collected, allow AI to roll again for new yellow
             if yellow_replaced or yellow_collected:
                     self.game.can_roll_dice = True
-                    print(f"[AI_MOVE] {current_player} made a match with yellow - can roll again")
                     socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                     # AI must roll again, so continue the move
                     import time
                     time.sleep(0.5)
-                    self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
+                    self.ai_move_in_progress = False
                     try:
                         self.execute_ai_move()
                     except Exception as e:
-                        print(f"[AI_MOVE] ERROR in yellow re-roll: {type(e).__name__}: {e}")
+                        pass
                     return            # Draw replacement cards
             while len(hand) < 5 and self.game.deck:
                 self.game.draw_card(current_player)
@@ -290,19 +279,15 @@ class GameSession:
                 }, room=self.game_id)
                 return
             
-                # Recursively check if next player is also AI
-                import time
-                time.sleep(0.5)  # Small delay to avoid overwhelming the system
-                self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
-                self.execute_ai_move()
-        except Exception as e:
-            print(f"[AI_MOVE] ERROR: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
+            # Recursively check if next player is also AI
+            import time
+            time.sleep(0.5)
             self.ai_move_in_progress = False
-    
-    def check_winner(self):
+            self.execute_ai_move()
+        except Exception as e:
+            pass
+        finally:
+            self.ai_move_in_progress = False    def check_winner(self):
         """Check if anyone has won based on game_mode"""
         for player_name in self.player_order:
             player_data = self.game.players[player_name]
@@ -885,19 +870,12 @@ def handle_play_cards(data):
     
     # Execute AI move if next player is AI
     next_player_name = game_session.game.get_current_player()
-    print(f"[PLAY_CARDS] *** CHECKING FOR AI ***")
-    print(f"[PLAY_CARDS] Next player: {next_player_name}")
-    print(f"[PLAY_CARDS] AI players dict: {list(game_session.ai_players.keys())}")
-    print(f"[PLAY_CARDS] Is AI? {next_player_name in game_session.ai_players}")
     
     if next_player_name in game_session.ai_players:
-        print(f"[PLAY_CARDS] *** SPAWNING AI THREAD FOR {next_player_name} ***")
         import threading
         thread = threading.Thread(target=game_session.execute_ai_move)
         thread.daemon = True
         thread.start()
-    else:
-        print(f"[PLAY_CARDS] *** NOT SPAWNING THREAD - {next_player_name} IS NOT AI ***")
     
     print(f"{player_name} played {len(cards_to_play)} card(s) in game {game_id}")
 
