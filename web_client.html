@@ -1297,6 +1297,11 @@
             
             socket.on('game_started', (gameState) => {
                 console.log('Game started!', gameState);
+                // Capture game_id from the game state (for single-player and multiplayer)
+                if (gameState.game_id) {
+                    gameId = gameState.game_id;
+                    console.log('Set gameId to:', gameId);
+                }
                 // Hide both forms and show game screen
                 document.getElementById('joinScreen').style.display = 'none';
                 document.getElementById('singlePlayerScreen').style.display = 'none';

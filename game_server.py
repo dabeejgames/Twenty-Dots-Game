@@ -99,6 +99,7 @@ class GameSession:
             yellow_position = [self.game.rows[row_idx], self.game.columns[col_idx]]
         
         return {
+            'game_id': self.game_id,
             'board': board_data,
             'players': {name: {
                 'score': data['score'],
