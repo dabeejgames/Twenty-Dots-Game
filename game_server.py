@@ -289,7 +289,9 @@ class GameSession:
                 self.ai_move_in_progress = False  # CLEAR flag BEFORE recursive call
                 self.execute_ai_move()
         finally:
-            self.ai_move_in_progress = False    def check_winner(self):
+            self.ai_move_in_progress = False
+    
+    def check_winner(self):
         """Check if anyone has won based on game_mode"""
         for player_name in self.player_order:
             player_data = self.game.players[player_name]
