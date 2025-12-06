@@ -442,7 +442,7 @@
             }
             
             .players-top, .players-bottom {
-                height: 90px;
+                height: auto;
                 gap: 10px;
             }
             
@@ -450,10 +450,13 @@
                 width: auto;
                 flex: 1;
                 padding: 8px;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
             }
             
             .player-score { font-size: 1em; }
-            .player-name { font-size: 0.85em; }
+            .player-name { font-size: 0.85em; margin-bottom: 3px; }
             
             .board {
                 grid-template-columns: repeat(7, 50px);
