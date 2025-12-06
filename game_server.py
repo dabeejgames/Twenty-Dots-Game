@@ -146,6 +146,7 @@ class GameSession:
     
     def execute_ai_move(self):
         """Execute AI move if current player is AI"""
+        print(f"[AI_MOVE] *** EXECUTE_AI_MOVE CALLED ***")
         if self.ai_move_in_progress:
             print(f"[AI_MOVE] Skipping - already in progress")
             return  # Prevent recursive calls
