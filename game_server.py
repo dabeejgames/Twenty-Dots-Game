@@ -435,8 +435,42 @@ def handle_join_game(data):
     
     game_session = games[game_id]
     
-    if game_session.started:
-        emit('error', {'message': 'Game already started'})
+    # Check if this is a reconnecting player
+    existing_player_name = None
+    for sid, player_info in game_session.players.items():
+        if player_info['name'] == player_name:
+            existing_player_name = player_name
+            print(f"[JOIN_GAME] Player {player_name} is reconnecting to game {game_id}")
+            # Update their session ID
+            old_sid = sid
+            break
+    
+    if game_session.started and not existing_player_name:
+        emit('error', {'message': 'Game already started - cannot add new players'})
+        return
+    
+    if existing_player_name:
+        # Reconnecting player - update their session ID
+        for sid in list(game_session.players.keys()):
+            if game_session.players[sid]['name'] == player_name:
+                # Transfer player data to new session
+                player_data = game_session.players[sid]
+                del game_session.players[sid]
+                game_session.players[request.sid] = player_data
+                game_session.players[request.sid]['connected'] = True
+                print(f"[JOIN_GAME] Updated {player_name}'s session ID from {sid} to {request.sid}")
+                break
+        
+        join_room(game_id)
+        
+        # Send current game state to reconnecting player
+        emit('game_started', game_session.get_game_state())
+        
+        # Send their hand
+        hand = game_session.game.players[player_name]['hand']
+        emit('your_hand', {'hand': [card.__dict__ for card in hand]})
+        
+        print(f"[JOIN_GAME] {player_name} reconnected to game {game_id}")
         return
     
     success, message = game_session.add_player(request.sid, player_name)
