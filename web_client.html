@@ -1387,16 +1387,19 @@
             const canRoll = state.can_roll_dice || false;
             
             // Show/hide entire hand section based on whose turn it is
+            // Use visibility instead of display to preserve layout and positioning
             const handSection = document.querySelector('.right-panel');
             const controlsSection = document.querySelector('.controls');
             if (isMyTurn) {
-                handSection.style.display = 'flex';
-                handSection.style.flexDirection = 'column';
-                controlsSection.style.display = 'flex';
-                controlsSection.style.flexDirection = 'column';
+                handSection.style.visibility = 'visible';
+                handSection.style.pointerEvents = 'auto';
+                controlsSection.style.visibility = 'visible';
+                controlsSection.style.pointerEvents = 'auto';
             } else {
-                handSection.style.display = 'none';
-                controlsSection.style.display = 'none';
+                handSection.style.visibility = 'hidden';
+                handSection.style.pointerEvents = 'none';
+                controlsSection.style.visibility = 'hidden';
+                controlsSection.style.pointerEvents = 'none';
             }
             
             // Roll Dice button: only visible when it's your turn, enabled only when can_roll_dice is true
