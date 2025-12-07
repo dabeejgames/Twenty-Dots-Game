@@ -264,23 +264,26 @@ class GameSession:
                                 break
                         self.game.collect_dots(match, current_player, match_color)
             
-            # If yellow was replaced or collected, allow AI to roll again for new yellow
-            if yellow_replaced or yellow_collected:
-                    self.game.can_roll_dice = True
-                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                    # AI must roll again, so continue the move
-                    import time
-                    time.sleep(0.5)
-                    self.ai_move_in_progress = False
-                    try:
-                        self.execute_ai_move()
-                    except Exception as e:
-                        pass
-                    return            # Draw replacement cards
+            # Draw replacement cards
             while len(hand) < 5 and self.game.deck:
                 self.game.draw_card(current_player)
             
-            # Advance to next player after playing cards
+            # If yellow was replaced or collected, allow AI to roll again for new yellow
+            if yellow_replaced or yellow_collected:
+                self.game.can_roll_dice = True
+                print(f"[AI_MOVE] {current_player} replaced/collected yellow, can roll again")
+                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                # AI must roll again, so continue the move
+                import time
+                time.sleep(0.5)
+                self.ai_move_in_progress = False
+                try:
+                    self.execute_ai_move()
+                except Exception as e:
+                    pass
+                return
+            
+            # Advance to next player after playing cards (only if yellow not affected)
             print(f"[AI_MOVE] {current_player} played {cards_played_count} cards, advancing to next player")
             self.game.next_player()
             if not hasattr(self.game, 'turn_cards_played'):
