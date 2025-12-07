@@ -588,7 +588,7 @@
             
             /* Logo positioning on mobile header - LEFT */
             .left-panel {
-                position: absolute !important;
+                position: fixed !important;
                 top: 0 !important;
                 left: 0 !important;
                 right: auto !important;
@@ -596,7 +596,8 @@
                 height: 40px !important;
                 order: -1;
                 flex-shrink: 0;
-                z-index: 10;
+                z-index: 1000;
+                background: rgba(26, 26, 46, 0.95);
             }
             
             /* Logo positioning on mobile header - RIGHT (using turn-info wrapper hack) */
@@ -818,7 +819,7 @@
             
             /* Logo positioning on 480px header - LEFT */
             .left-panel {
-                position: absolute !important;
+                position: fixed !important;
                 top: 0 !important;
                 left: 0 !important;
                 right: auto !important;
@@ -828,7 +829,8 @@
                 flex-direction: row;
                 justify-content: center;
                 flex-shrink: 0;
-                z-index: 10;
+                z-index: 1000;
+                background: rgba(26, 26, 46, 0.95);
             }
             
             .logo-box {
