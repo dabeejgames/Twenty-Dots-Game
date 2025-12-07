@@ -1098,7 +1098,12 @@
             <h2 style="color: #ffd700; margin-bottom: 30px;">Join a Game</h2>
             <div class="form-group">
                 <label>Game ID</label>
-                <input type="text" id="gameId" placeholder="e.g., game123">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="gameId" placeholder="e.g., game123" oninput="toggleShareButton()" style="flex: 1;">
+                    <button id="shareButton" onclick="shareGameRoom()" disabled style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; opacity: 0.5; white-space: nowrap;">
+                        📤 Share
+                    </button>
+                </div>
             </div>
             <div class="form-group">
                 <label>Your Name</label>
@@ -1176,9 +1181,6 @@
             <div class="header">
                 <h1>Twenty Dots - Online Multiplayer</h1>
                 <div class="turn-info" id="turnInfo">Waiting for game to start...</div>
-                <button id="shareButton" onclick="shareGameRoom()" style="position: absolute; right: 20px; top: 50%; transform: translateY(-50%); background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; display: none;">
-                    📤 Share Room
-                </button>
             </div>
             
             <!-- Game Content -->
@@ -1384,8 +1386,6 @@
                         timestamp: Date.now()
                     }));
                 }
-                // Show share button
-                document.getElementById('shareButton').style.display = 'block';
                 // Hide both forms and show game screen
                 document.getElementById('joinScreen').style.display = 'none';
                 document.getElementById('singlePlayerScreen').style.display = 'none';
@@ -1725,15 +1725,30 @@
             setTimeout(() => errorDiv.classList.remove('show'), 5000);
         }
 
+        function toggleShareButton() {
+            const gameIdInput = document.getElementById('gameId').value.trim();
+            const shareBtn = document.getElementById('shareButton');
+            if (gameIdInput) {
+                shareBtn.disabled = false;
+                shareBtn.style.opacity = '1';
+                shareBtn.style.cursor = 'pointer';
+            } else {
+                shareBtn.disabled = true;
+                shareBtn.style.opacity = '0.5';
+                shareBtn.style.cursor = 'not-allowed';
+            }
+        }
+
         function shareGameRoom() {
-            if (!gameId || !playerName) {
-                alert('Game not started yet');
+            const gameIdValue = document.getElementById('gameId').value.trim();
+            if (!gameIdValue) {
+                alert('Please enter a Game ID first');
                 return;
             }
             
             // Create shareable URL with game ID
-            const shareUrl = `${window.location.origin}${window.location.pathname}?gameId=${encodeURIComponent(gameId)}`;
-            const shareText = `Join my Twenty Dots game!\n\nGame ID: ${gameId}\n\nJoin here: ${shareUrl}\n\nJust enter the Game ID and your name to play!`;
+            const shareUrl = `${window.location.origin}${window.location.pathname}?gameId=${encodeURIComponent(gameIdValue)}`;
+            const shareText = `Join my Twenty Dots game!\n\nGame ID: ${gameIdValue}\n\nJoin here: ${shareUrl}\n\nJust enter the Game ID and your name to play!`;
             
             // Try to copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {
