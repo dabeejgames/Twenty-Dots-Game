@@ -906,59 +906,58 @@
             .players-top {
                 position: absolute;
                 top: 10px;
-                left: 10px;
-                right: 50px;
+                left: 40px;
+                right: 45px;
                 width: auto;
                 justify-content: space-between;
                 z-index: 5;
-                height: 70px;
             }
             
             .players-bottom {
-                display: none;
+                position: absolute;
+                bottom: 230px;
+                left: 40px;
+                right: 45px;
+                width: auto;
+                justify-content: space-between;
+                z-index: 5;
             }
             
             .player-box {
                 flex: 1;
-                min-width: 23%;
-                padding: 4px;
-                font-size: 0.65em;
+                min-width: 25%;
+                padding: 2px;
+                font-size: 0.6em;
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-start;
-                border: 1px solid #444;
             }
             
-            .player-name { font-size: 0.6em; margin-bottom: 2px; }
-            .player-score { font-size: 0.7em; margin: 2px 0; }
-            .player-hand { font-size: 0.6em; }
-            .player-score-dots { gap: 2px; margin: 2px 0; }
-            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
-            .discard-cards { gap: 2px; margin-top: 2px; }
-            .discard-card { width: 20px; height: 12px; font-size: 0.5em; }
+            .player-name { font-size: 0.55em; }
+            .player-score { font-size: 0.65em; margin: 1px 0; }
+            .player-hand { font-size: 0.55em; }
+            .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
             
             .board {
-                grid-template-columns: repeat(7, 28px);
-                grid-template-rows: repeat(7, 28px);
+                grid-template-columns: repeat(7, 35px);
+                grid-template-rows: repeat(7, 35px);
                 gap: 1px;
                 padding: 2px;
             }
             
             .dot {
-                width: 15px;
-                height: 15px;
-                font-size: 5px;
+                width: 18px;
+                height: 18px;
+                font-size: 6px;
             }
             
             .board-section {
-                flex: 0 0 auto;
-                height: 240px;
+                flex: 1;
                 min-height: 0;
                 overflow: auto;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                margin-top: 80px;
             }
             
             .right-panel {
@@ -974,10 +973,10 @@
                 margin-top: 0;
                 flex-shrink: 0;
                 background: rgba(26, 26, 46, 0.95);
-                position: relative;
-                bottom: auto;
-                left: auto;
-                height: auto;
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                height: 100px;
             }
             
             .hand-title { 
@@ -993,15 +992,15 @@
                 gap: 2px;
                 margin-bottom: 2px;
                 padding: 2px 0;
-                max-height: 90px;
+                max-height: 60px;
             }
             
             .card {
                 min-width: calc((100vw - 15px) / 5.2);
                 max-width: calc((100vw - 15px) / 5.2);
-                min-height: 70px;
-                padding: 3px;
-                font-size: 0.65em;
+                min-height: 50px;
+                padding: 2px;
+                font-size: 0.6em;
                 flex-shrink: 0;
             }
             
@@ -1012,8 +1011,8 @@
             
             .controls button {
                 flex: 1;
-                padding: 8px 2px;
-                font-size: 0.65em;
+                padding: 4px 2px;
+                font-size: 0.6em;
                 white-space: nowrap;
                 min-height: auto;
                 border-radius: 3px;
