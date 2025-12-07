@@ -175,9 +175,21 @@ class GameSession:
                 self.game.yellow_dot_position = (row_idx, col_idx)
                 print(f"[AI_MOVE] {current_player} rolled {row}{col}, placed yellow dot")
                 
+                # Check for matches created by yellow dot (same as human player)
+                match_result = self.game.check_line_match(row, col, 'yellow')
+                match, match_color = match_result
+                
+                if match:  # Check if match list has items
+                    print(f"[AI_MOVE] Match found! Collecting {len(match)} positions for color {match_color}")
+                    self.game.collect_dots(match, current_player, match_color)
+                    # Can roll again if matched
+                    self.game.can_roll_dice = True
+                else:
+                    print(f"[AI_MOVE] No match detected at {row}{col}")
+                
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                # After rolling, AI needs to play cards, so continue
+                # After rolling, AI needs to play cards (or roll again if matched), so continue
                 print(f"[AI_MOVE] {current_player} rolled, now choosing cards to play")
             
             # Choose 2 cards to play
