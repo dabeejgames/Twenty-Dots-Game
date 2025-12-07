@@ -1097,12 +1097,12 @@
         <div class="join-form">
             <h2 style="color: #ffd700; margin-bottom: 30px;">Join a Game</h2>
             <div class="form-group">
-                <label>Game ID (or leave blank for demo)</label>
-                <input type="text" id="gameId" placeholder="e.g., game123" value="demo">
+                <label>Game ID</label>
+                <input type="text" id="gameId" placeholder="e.g., game123">
             </div>
             <div class="form-group">
                 <label>Your Name</label>
-                <input type="text" id="playerName" placeholder="e.g., Brandon" value="Brandon">
+                <input type="text" id="playerName" placeholder="e.g., Brandon">
             </div>
             <div class="form-group">
                 <label>Number of Players</label>
@@ -1136,7 +1136,7 @@
             <h2 style="color: #ffd700; margin-bottom: 30px;">Single Player Game</h2>
             <div class="form-group">
                 <label>Your Name</label>
-                <input type="text" id="spPlayerName" placeholder="e.g., Brandon" value="Brandon">
+                <input type="text" id="spPlayerName" placeholder="e.g., Brandon">
             </div>
             <div class="form-group">
                 <label>Number of Players (including you)</label>
@@ -1228,8 +1228,8 @@
 
     <script>
         let socket;
-        let gameId = 'demo';
-        let playerName = 'Brandon';
+        let gameId = '';
+        let playerName = '';
         let myHand = [];
         let selectedCards = [];
         let currentGameState = null;
@@ -1276,8 +1276,8 @@
         }
 
         function joinGame() {
-            gameId = document.getElementById('gameId').value || 'demo';
-            playerName = document.getElementById('playerName').value || 'Player';
+            gameId = document.getElementById('gameId').value.trim();
+            playerName = document.getElementById('playerName').value.trim();
             const gameMode = document.getElementById('winCondition').value;
             const playerCount = parseInt(document.getElementById('playerCount').value);
             
