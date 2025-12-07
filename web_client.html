@@ -1123,6 +1123,9 @@
             <div class="form-group">
                 <button class="btn-join" onclick="joinGame()">🎮 Join Game</button>
             </div>
+            <div class="form-group" id="rejoinSection" style="display: none;">
+                <button class="btn-join" onclick="rejoinGame()" style="background: #4CAF50;">🔄 Rejoin Last Game</button>
+            </div>
             <div class="error-message" id="joinError"></div>
         </div>
     </div>
@@ -1228,6 +1231,25 @@
         let selectedCards = [];
         let currentGameState = null;
 
+        // Check for saved game on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedGame = localStorage.getItem('currentGame');
+            if (savedGame) {
+                try {
+                    const gameInfo = JSON.parse(savedGame);
+                    // Check if game is less than 24 hours old
+                    const ageHours = (Date.now() - gameInfo.timestamp) / (1000 * 60 * 60);
+                    if (ageHours < 24) {
+                        document.getElementById('rejoinSection').style.display = 'block';
+                    } else {
+                        localStorage.removeItem('currentGame');
+                    }
+                } catch (e) {
+                    localStorage.removeItem('currentGame');
+                }
+            }
+        });
+
         function showJoinScreen() {
             document.getElementById('modeScreen').style.display = 'none';
             document.getElementById('joinScreen').style.display = 'flex';
@@ -1264,6 +1286,38 @@
                     player_name: playerName,
                     game_mode: gameMode,
                     player_count: playerCount
+                });
+            });
+            
+            setupSocketHandlers();
+        }
+
+        function rejoinGame() {
+            const savedGame = localStorage.getItem('currentGame');
+            if (!savedGame) {
+                showError('joinError', 'No saved game found');
+                return;
+            }
+            
+            const gameInfo = JSON.parse(savedGame);
+            gameId = gameInfo.gameId;
+            playerName = gameInfo.playerName;
+            
+            // Populate the form fields
+            document.getElementById('gameId').value = gameId;
+            document.getElementById('playerName').value = playerName;
+            
+            const serverUrl = window.location.origin;
+            console.log('Rejoining game:', gameId);
+            socket = io(serverUrl);
+            
+            socket.on('connect', () => {
+                console.log('Connected to server, rejoining...');
+                socket.emit('join_game', {
+                    game_id: gameId,
+                    player_name: playerName,
+                    game_mode: 'twenty_dots',  // Default, server will use existing game mode
+                    player_count: 4  // Default, server will use existing player count
                 });
             });
             
@@ -1312,6 +1366,12 @@
                 if (gameState.game_id) {
                     gameId = gameState.game_id;
                     console.log('Set gameId to:', gameId);
+                    // Save game info to localStorage for rejoin
+                    localStorage.setItem('currentGame', JSON.stringify({
+                        gameId: gameId,
+                        playerName: playerName,
+                        timestamp: Date.now()
+                    }));
                 }
                 // Hide both forms and show game screen
                 document.getElementById('joinScreen').style.display = 'none';
@@ -1366,6 +1426,9 @@
                     stats[playerName].losses += 1;
                 }
                 localStorage.setItem('playerStats', JSON.stringify(stats));
+                
+                // Clear saved game on game over
+                localStorage.removeItem('currentGame');
                 
                 setTimeout(() => {
                     const playAgain = confirm(`🎉 ${winner} WINS! 🎉\n\n${conditionText}\n\nClick OK to play again, or Cancel to go back to lobby`);
