@@ -865,8 +865,8 @@ def handle_play_cards(data):
             if not hasattr(game_session.game, 'must_advance_after_roll'):
                 game_session.game.must_advance_after_roll = {}
             game_session.game.must_advance_after_roll[current_player] = True
-            # Reset card counter for same player to play again after rolling
-            game_session.game.turn_cards_played[current_player] = 0
+            # Keep the current card counter - player will continue from where they left off after rolling
+            # DO NOT reset to 0 - they've already played some cards this turn
     else:
         print(f"[PLAY_CARDS] {player_name} has played {total_played_this_turn} card(s) this turn, waiting for more or 2nd card")
     
