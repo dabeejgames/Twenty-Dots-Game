@@ -1176,6 +1176,9 @@
             <div class="header">
                 <h1>Twenty Dots - Online Multiplayer</h1>
                 <div class="turn-info" id="turnInfo">Waiting for game to start...</div>
+                <button id="shareButton" onclick="shareGameRoom()" style="position: absolute; right: 20px; top: 50%; transform: translateY(-50%); background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; display: none;">
+                    📤 Share Room
+                </button>
             </div>
             
             <!-- Game Content -->
@@ -1233,6 +1236,14 @@
 
         // Check for saved game on page load
         window.addEventListener('DOMContentLoaded', () => {
+            // Check for game ID in URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlGameId = urlParams.get('gameId');
+            if (urlGameId) {
+                document.getElementById('gameId').value = urlGameId;
+                console.log('Loaded game ID from URL:', urlGameId);
+            }
+            
             const savedGame = localStorage.getItem('currentGame');
             if (savedGame) {
                 try {
@@ -1373,6 +1384,8 @@
                         timestamp: Date.now()
                     }));
                 }
+                // Show share button
+                document.getElementById('shareButton').style.display = 'block';
                 // Hide both forms and show game screen
                 document.getElementById('joinScreen').style.display = 'none';
                 document.getElementById('singlePlayerScreen').style.display = 'none';
@@ -1710,6 +1723,37 @@
             errorDiv.textContent = message;
             errorDiv.classList.add('show');
             setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+
+        function shareGameRoom() {
+            if (!gameId || !playerName) {
+                alert('Game not started yet');
+                return;
+            }
+            
+            // Create shareable URL with game ID
+            const shareUrl = `${window.location.origin}${window.location.pathname}?gameId=${encodeURIComponent(gameId)}`;
+            const shareText = `Join my Twenty Dots game!\n\nGame ID: ${gameId}\n\nJoin here: ${shareUrl}\n\nJust enter the Game ID and your name to play!`;
+            
+            // Try to copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareText).then(() => {
+                    const btn = document.getElementById('shareButton');
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '✓ Copied!';
+                    btn.style.background = '#2196F3';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.style.background = '#4CAF50';
+                    }, 2000);
+                }).catch(() => {
+                    // Fallback: show alert with info
+                    alert(shareText);
+                });
+            } else {
+                // Fallback for older browsers
+                alert(shareText);
+            }
         }
 
         // Start by showing mode selection
