@@ -385,7 +385,10 @@ class TwentyDots:
             (1, -1)   # diagonal up-right  
         ]
         
-        # If placing a yellow wildcard, find what color it's matching
+        # Determine what color we're matching (important for yellow wildcards)
+        # Yellow dots act as wildcards and can match any color.
+        # If we place yellow, we need to find a non-yellow dot to determine the target color.
+        # If we place a regular color, that's our target and yellow will act as wildcard for it.
         target_color = color
         if color == 'yellow':
             # Look in all directions for a non-yellow dot to determine the match color
@@ -399,6 +402,9 @@ class TwentyDots:
                             break
                 if target_color != 'yellow':
                     break
+        # If we placed a regular colored dot, target_color is already correct.
+        # Yellow wildcards in the line will match because of the check below:
+        # (dot.color == target_color or dot.color == 'yellow')
         
         print(f"DEBUG: target_color={target_color}")
         
