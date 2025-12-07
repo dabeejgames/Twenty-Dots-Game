@@ -1375,12 +1375,26 @@
             const isMyTurn = state.current_turn === playerName;
             const canRoll = state.can_roll_dice || false;
             
-            // Roll Dice button: always visible, enabled only when can_roll_dice is true and it's your turn
-            document.getElementById('rollBtn').style.display = 'block';
-            document.getElementById('rollBtn').disabled = !isMyTurn || !canRoll;
+            // Show/hide entire hand section based on whose turn it is
+            const handSection = document.querySelector('.right-panel');
+            const controlsSection = document.querySelector('.controls');
+            if (isMyTurn) {
+                handSection.style.display = 'flex';
+                handSection.style.flexDirection = 'column';
+                controlsSection.style.display = 'flex';
+                controlsSection.style.flexDirection = 'column';
+            } else {
+                handSection.style.display = 'none';
+                controlsSection.style.display = 'none';
+            }
             
-            // Play Cards button: only enabled if it's your turn, you have cards selected, AND you've already rolled (canRoll is false)
-            document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0 || canRoll;
+            // Roll Dice button: only visible when it's your turn, enabled only when can_roll_dice is true
+            document.getElementById('rollBtn').style.display = isMyTurn ? 'block' : 'none';
+            document.getElementById('rollBtn').disabled = !canRoll;
+            
+            // Play Cards button: only enabled if you have cards selected AND you've already rolled (canRoll is false)
+            document.getElementById('playBtn').style.display = isMyTurn ? 'block' : 'none';
+            document.getElementById('playBtn').disabled = selectedCards.length === 0 || canRoll;
             
             // Disable card selection if player must roll first
             const cardDivs = document.querySelectorAll('.card');
