@@ -400,6 +400,11 @@ class TwentyDots:
             
             print(f"DEBUG: Yellow placed, found adjacent colors: {adjacent_colors}")
             
+            # If no adjacent colors, no matches possible
+            if not adjacent_colors:
+                print(f"DEBUG: No adjacent colors for yellow, no matches possible")
+                return [], 'yellow'
+            
             # Try each adjacent color as a potential match target
             all_color_matches = {}
             for test_color in adjacent_colors:
@@ -446,9 +451,20 @@ class TwentyDots:
                 all_matches = all_color_matches[best_color]
                 target_color = best_color
                 print(f"DEBUG: Best match is {best_color} with {len(all_matches)} positions")
+                
+                # Remove duplicates and return
+                seen = set()
+                unique_matches = []
+                for pos in all_matches:
+                    if pos not in seen:
+                        seen.add(pos)
+                        unique_matches.append(pos)
+                
+                print(f"DEBUG: Returning {len(unique_matches)} unique matched positions: {unique_matches} (target_color={target_color})")
+                return unique_matches, target_color
             else:
-                target_color = 'yellow'  # No matches found
                 print(f"DEBUG: No matches found for yellow")
+                return [], 'yellow'
         else:
             # Regular colored dot - simpler logic
             target_color = color
