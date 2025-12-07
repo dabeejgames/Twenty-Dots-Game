@@ -313,6 +313,23 @@ class GameSession:
     
     def check_winner(self):
         """Check if anyone has won based on game_mode"""
+        
+        # Check if deck is empty - player with most dots wins
+        if len(self.game.deck) == 0:
+            print(f"[GAME_OVER] Deck is empty, determining winner by total dots")
+            max_dots = -1
+            winner = None
+            for player_name in self.player_order:
+                player_data = self.game.players[player_name]
+                total = player_data['total_dots']
+                print(f"[GAME_OVER] {player_name}: {total} dots")
+                if total > max_dots:
+                    max_dots = total
+                    winner = player_name
+            if winner:
+                print(f"[GAME_OVER] Winner by deck depletion: {winner} with {max_dots} dots")
+                return {'winner': winner, 'mode': 'deck_empty'}
+        
         for player_name in self.player_order:
             player_data = self.game.players[player_name]
             
