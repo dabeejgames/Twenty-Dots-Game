@@ -976,7 +976,8 @@
                 position: absolute;
                 bottom: 0;
                 left: 0;
-                height: 150px;
+                height: auto;
+                max-height: 180px;
                 overflow-y: auto;
             }
             
@@ -991,9 +992,10 @@
                 overflow-x: auto;
                 overflow-y: hidden;
                 gap: 2px;
-                margin-bottom: 2px;
+                margin-bottom: 4px;
                 padding: 2px 0;
-                max-height: 60px;
+                max-height: 70px;
+                flex-shrink: 0;
             }
             
             .card {
@@ -1008,14 +1010,16 @@
             .controls {
                 flex-direction: row;
                 gap: 2px;
+                flex-shrink: 0;
+                padding-bottom: 4px;
             }
             
             .controls button {
                 flex: 1;
-                padding: 4px 2px;
+                padding: 6px 2px;
                 font-size: 0.6em;
                 white-space: nowrap;
-                min-height: auto;
+                min-height: 28px;
                 border-radius: 3px;
             }
             
