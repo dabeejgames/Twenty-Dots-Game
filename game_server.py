@@ -1136,6 +1136,64 @@ def handle_roll_dice(data):
     
     print(f"{player_name} rolled dice, placed yellow at {row}{col}")
 
+@socketio.on('pass_turn')
+def handle_pass_turn(data):
+    """Player passes their turn without playing cards"""
+    game_id = data.get('game_id')
+    
+    if game_id not in games:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    game_session = games[game_id]
+    player_name = game_session.get_player_name(request.sid)
+    
+    if not player_name:
+        emit('error', {'message': 'You are not in this game'})
+        return
+    
+    if game_session.game.get_current_player() != player_name:
+        emit('error', {'message': 'Not your turn'})
+        return
+    
+    # Check if player has already rolled dice (can't pass if need to roll first)
+    if game_session.game.can_roll_dice:
+        emit('error', {'message': 'You must roll the wild dice first'})
+        return
+    
+    print(f"[PASS_TURN] {player_name} is passing their turn")
+    
+    # Advance to next player
+    game_session.game.next_player()
+    new_player = game_session.game.get_current_player()
+    
+    # Initialize turn tracking for new player
+    if not hasattr(game_session.game, 'turn_cards_played'):
+        game_session.game.turn_cards_played = {}
+    game_session.game.turn_cards_played[new_player] = 0
+    game_session.game.can_roll_dice = False
+    
+    print(f"[PASS_TURN] Turn advanced to {new_player}")
+    
+    # Broadcast updated game state
+    emit('game_updated', game_session.get_game_state(), room=game_id)
+    
+    # Check for winner
+    winner_result = game_session.check_winner()
+    if winner_result:
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['mode']
+        }, room=game_id)
+        return
+    
+    # Execute AI turn if next player is AI
+    if game_session.players[game_session.sid_map[new_player]]['is_ai']:
+        import threading
+        thread = threading.Thread(target=game_session.execute_ai_move)
+        thread.daemon = True
+        thread.start()
+
 def execute_ai_turn(game_session, ai_name):
     """Execute an AI player's turn"""
     ai_player = game_session.ai_players[ai_name]
