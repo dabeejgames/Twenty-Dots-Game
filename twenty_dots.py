@@ -385,72 +385,118 @@ class TwentyDots:
             (1, -1)   # diagonal up-right  
         ]
         
-        # Determine what color we're matching (important for yellow wildcards)
-        # Yellow dots act as wildcards and can match any color.
-        # If we place yellow, we need to find a non-yellow dot to determine the target color.
-        # If we place a regular color, that's our target and yellow will act as wildcard for it.
-        target_color = color
+        # When placing yellow wildcard, we need to check for matches with ALL adjacent colors
+        # not just the first one we find, because yellow could form multiple matches
         if color == 'yellow':
-            # Look in all directions for a non-yellow dot to determine the match color
+            # Find all unique non-yellow colors adjacent to this position
+            adjacent_colors = set()
             for dx, dy in directions:
-                for direction in [-1, 1]:  # Check both directions along the line
+                for direction in [-1, 1]:
                     x, y = col_idx + (dx * direction), row_idx + (dy * direction)
                     if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
                         dot = self.grid[y][x]
                         if dot and dot.color != 'yellow':
-                            target_color = dot.color
+                            adjacent_colors.add(dot.color)
+            
+            print(f"DEBUG: Yellow placed, found adjacent colors: {adjacent_colors}")
+            
+            # Try each adjacent color as a potential match target
+            all_color_matches = {}
+            for test_color in adjacent_colors:
+                color_matches = []
+                # Check all directions for this specific color
+                for dx, dy in directions:
+                    line = []
+                    
+                    # Check backwards
+                    x, y = col_idx - dx, row_idx - dy
+                    while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                        dot = self.grid[y][x]
+                        if dot and (dot.color == test_color or dot.color == 'yellow'):
+                            line.append((x, y))
+                            x -= dx
+                            y -= dy
+                        else:
                             break
-                if target_color != 'yellow':
-                    break
-        # If we placed a regular colored dot, target_color is already correct.
-        # Yellow wildcards in the line will match because of the check below:
-        # (dot.color == target_color or dot.color == 'yellow')
-        
-        print(f"DEBUG: target_color={target_color}")
-        
-        # Check all directions and collect all matches
-        for dx, dy in directions:
-            line = []
+                    
+                    line.reverse()
+                    line.append((col_idx, row_idx))  # Add the yellow dot
+                    
+                    # Check forwards
+                    x, y = col_idx + dx, row_idx + dy
+                    while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                        dot = self.grid[y][x]
+                        if dot and (dot.color == test_color or dot.color == 'yellow'):
+                            line.append((x, y))
+                            x += dx
+                            y += dy
+                        else:
+                            break
+                    
+                    # If we found a line of 3 or more, save it
+                    if len(line) >= 3:
+                        color_matches.extend(line)
+                
+                if color_matches:
+                    all_color_matches[test_color] = color_matches
             
-            # Check backwards
-            x, y = col_idx - dx, row_idx - dy
-            print(f"DEBUG: Checking direction ({dx},{dy}) backwards from ({col_idx},{row_idx})")
-            while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
-                dot = self.grid[y][x]
-                print(f"DEBUG: Checking backwards position ({x},{y}): dot={'None' if dot is None else dot.color}")
-                # Yellow dots act as wildcards
-                if dot and (dot.color == target_color or dot.color == 'yellow'):
-                    print(f"DEBUG: Found {dot.color} at ({x},{y}) backwards")
-                    line.append((x, y))
-                    x -= dx
-                    y -= dy
-                else:
-                    print(f"DEBUG: Breaking backwards check at ({x},{y})")
-                    break
+            # Use the longest match found
+            if all_color_matches:
+                best_color = max(all_color_matches.keys(), key=lambda c: len(all_color_matches[c]))
+                all_matches = all_color_matches[best_color]
+                target_color = best_color
+                print(f"DEBUG: Best match is {best_color} with {len(all_matches)} positions")
+            else:
+                target_color = 'yellow'  # No matches found
+                print(f"DEBUG: No matches found for yellow")
+        else:
+            # Regular colored dot - simpler logic
+            target_color = color
+            print(f"DEBUG: Regular color placed: {target_color}")
             
-            line.reverse()
-            line.append((col_idx, row_idx))  # Add the newly placed dot
-            
-            # Check forwards
-            x, y = col_idx + dx, row_idx + dy
-            print(f"DEBUG: Checking direction ({dx},{dy}) forwards from ({col_idx},{row_idx})")
-            while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
-                dot = self.grid[y][x]
-                print(f"DEBUG: Checking forwards position ({x},{y}): dot={'None' if dot is None else dot.color}")
-                # Yellow dots act as wildcards
-                if dot and (dot.color == target_color or dot.color == 'yellow'):
-                    print(f"DEBUG: Found {dot.color} at ({x},{y}) forwards")
-                    line.append((x, y))
-                    x += dx
-                    y += dy
-                else:
-                    print(f"DEBUG: Breaking forwards check at ({x},{y})")
-                    break
-            
-            # If we found a line of 3 or more, add it to all matches
-            print(f"DEBUG: Direction ({dx},{dy}) found line of length {len(line)}: {line}")
-            if len(line) >= 3:
-                all_matches.extend(line)
+            # Check all directions and collect all matches for regular colored dots
+            for dx, dy in directions:
+                line = []
+                
+                # Check backwards
+                x, y = col_idx - dx, row_idx - dy
+                print(f"DEBUG: Checking direction ({dx},{dy}) backwards from ({col_idx},{row_idx})")
+                while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                    dot = self.grid[y][x]
+                    print(f"DEBUG: Checking backwards position ({x},{y}): dot={'None' if dot is None else dot.color}")
+                    # Yellow dots act as wildcards
+                    if dot and (dot.color == target_color or dot.color == 'yellow'):
+                        print(f"DEBUG: Found {dot.color} at ({x},{y}) backwards")
+                        line.append((x, y))
+                        x -= dx
+                        y -= dy
+                    else:
+                        print(f"DEBUG: Breaking backwards check at ({x},{y})")
+                        break
+                
+                line.reverse()
+                line.append((col_idx, row_idx))  # Add the newly placed dot
+                
+                # Check forwards
+                x, y = col_idx + dx, row_idx + dy
+                print(f"DEBUG: Checking direction ({dx},{dy}) forwards from ({col_idx},{row_idx})")
+                while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                    dot = self.grid[y][x]
+                    print(f"DEBUG: Checking forwards position ({x},{y}): dot={'None' if dot is None else dot.color}")
+                    # Yellow dots act as wildcards
+                    if dot and (dot.color == target_color or dot.color == 'yellow'):
+                        print(f"DEBUG: Found {dot.color} at ({x},{y}) forwards")
+                        line.append((x, y))
+                        x += dx
+                        y += dy
+                    else:
+                        print(f"DEBUG: Breaking forwards check at ({x},{y})")
+                        break
+                
+                # If we found a line of 3 or more, add it to all matches
+                print(f"DEBUG: Direction ({dx},{dy}) found line of length {len(line)}: {line}")
+                if len(line) >= 3:
+                    all_matches.extend(line)
         
         # Remove duplicates while preserving order (the placed dot might be in multiple matches)
         seen = set()
