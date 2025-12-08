@@ -1221,7 +1221,6 @@
                     <div class="controls">
                         <button class="btn-play" id="playBtn" onclick="playCards()" disabled>▶️ Play Cards</button>
                         <button class="btn-roll" id="rollBtn" onclick="rollDice()" disabled>🎲 Roll Wild Dice</button>
-                        <button class="btn-pass" id="passBtn" onclick="passTurn()" disabled style="background: #FF9800;">⏭️ Pass Turn</button>
                         <button class="btn-clear" onclick="clearSelection()">🗑️ Clear Selection</button>
                     </div>
                 </div>
@@ -1489,10 +1488,6 @@
             document.getElementById('playBtn').style.display = isMyTurn ? 'block' : 'none';
             document.getElementById('playBtn').disabled = selectedCards.length === 0 || canRoll;
             
-            // Pass Turn button: only enabled when it's your turn and you've already rolled
-            document.getElementById('passBtn').style.display = isMyTurn ? 'block' : 'none';
-            document.getElementById('passBtn').disabled = canRoll;
-            
             // Disable card selection if player must roll first
             const cardDivs = document.querySelectorAll('.card');
             cardDivs.forEach(card => {
@@ -1704,12 +1699,6 @@
 
         function rollDice() {
             socket.emit('roll_dice', { game_id: gameId });
-        }
-
-        function passTurn() {
-            if (confirm('Pass your turn? You will not play any cards this turn.')) {
-                socket.emit('pass_turn', { game_id: gameId });
-            }
         }
 
         function endTurn() {

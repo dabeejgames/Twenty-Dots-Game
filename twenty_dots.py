@@ -413,28 +413,32 @@ class TwentyDots:
                 for dx, dy in directions:
                     line = []
                     
-                    # Check backwards
+                    # Check backwards (max 5 dots to prevent infinite loops)
                     x, y = col_idx - dx, row_idx - dy
-                    while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                    safety_count = 0
+                    while 0 <= x < self.grid_size and 0 <= y < self.grid_size and safety_count < 5:
                         dot = self.grid[y][x]
                         if dot and (dot.color == test_color or dot.color == 'yellow'):
                             line.append((x, y))
                             x -= dx
                             y -= dy
+                            safety_count += 1
                         else:
                             break
                     
                     line.reverse()
                     line.append((col_idx, row_idx))  # Add the yellow dot
                     
-                    # Check forwards
+                    # Check forwards (max 5 dots to prevent infinite loops)
                     x, y = col_idx + dx, row_idx + dy
-                    while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                    safety_count = 0
+                    while 0 <= x < self.grid_size and 0 <= y < self.grid_size and safety_count < 5:
                         dot = self.grid[y][x]
                         if dot and (dot.color == test_color or dot.color == 'yellow'):
                             line.append((x, y))
                             x += dx
                             y += dy
+                            safety_count += 1
                         else:
                             break
                     
