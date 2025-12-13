@@ -324,40 +324,33 @@ class GameSession:
     def check_winner(self):
         """Check if anyone has won based on game_mode"""
         
-        # Check if deck is empty - player with most dots wins
-        if len(self.game.deck) == 0:
-            print(f"[GAME_OVER] Deck is empty, determining winner by total dots")
-            max_dots = -1
-            winner = None
-            for player_name in self.player_order:
-                player_data = self.game.players[player_name]
-                total = player_data['total_dots']
-                print(f"[GAME_OVER] {player_name}: {total} dots")
-                if total > max_dots:
-                    max_dots = total
-                    winner = player_name
-            if winner:
-                print(f"[GAME_OVER] Winner by deck depletion: {winner} with {max_dots} dots")
-                return {'winner': winner, 'mode': 'deck_empty'}
+        # Don't end game just because deck is empty - players can still play their hand cards
+        # Only check for winner based on actual win conditions
         
         for player_name in self.player_order:
             player_data = self.game.players[player_name]
             
             if self.game_mode == 'twenty_dots':
-                if player_data['total_dots'] >= 20:
+                total = player_data['total_dots']
+                print(f"[CHECK_WINNER] {player_name} has {total} total dots")
+                if total >= 20:
+                    print(f"[CHECK_WINNER] {player_name} WINS with {total} dots!")
                     return {'winner': player_name, 'mode': 'twenty_dots'}
             
             elif self.game_mode == 'five_colors':
                 # Check if player has 5 of each color (red, blue, green, purple)
                 if all(player_data['score'].get(color, 0) >= 5 for color in ['red', 'blue', 'green', 'purple']):
+                    print(f"[CHECK_WINNER] {player_name} WINS with 5 of each color!")
                     return {'winner': player_name, 'mode': 'five_colors'}
             
             elif self.game_mode == 'five_with_yellow':
                 # Check if player has 5 yellow dots AND 5 of each color
                 yellow_dots = player_data.get('yellow_dots', 0)
                 if yellow_dots >= 5 and all(player_data['score'].get(color, 0) >= 5 for color in ['red', 'blue', 'green', 'purple']):
+                    print(f"[CHECK_WINNER] {player_name} WINS with 5 yellow and 5 of each color!")
                     return {'winner': player_name, 'mode': 'five_with_yellow'}
         
+        print(f"[CHECK_WINNER] No winner yet (mode: {self.game_mode})")
         return None
 
 @socketio.on('connect')
