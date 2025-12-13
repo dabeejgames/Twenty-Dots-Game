@@ -1123,11 +1123,11 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>Win Condition</label>
+                <label>Win Condition (First Player Only)</label>
                 <select id="winCondition">
-                    <option value="twenty_dots">First to 20 Total Dots</option>
+                    <option value="twenty_dots" selected>First to 20 Total Dots (Recommended)</option>
                     <option value="five_colors">First to 5 of Each Color</option>
-                    <option value="five_with_yellow">First to 5 of Each Color + 5 Yellow</option>
+                    <option value="five_with_yellow">First to 5 of Each Color + 5 Yellow (Hard)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -1285,7 +1285,7 @@
         function joinGame() {
             gameId = document.getElementById('gameId').value.trim();
             playerName = document.getElementById('playerName').value.trim();
-            const gameMode = document.getElementById('winCondition').value;
+            const gameMode = document.getElementById('winCondition').value || 'twenty_dots';
             const playerCount = parseInt(document.getElementById('playerCount').value);
             
             if (!gameId || !playerName) {
