@@ -159,6 +159,14 @@ class GameSession:
             ai_player = self.ai_players[current_player]
             hand = self.game.players[current_player]['hand']
             
+            # Initialize turn_cards_played if not exists
+            if not hasattr(self.game, 'turn_cards_played'):
+                self.game.turn_cards_played = {}
+            if current_player not in self.game.turn_cards_played:
+                self.game.turn_cards_played[current_player] = 0
+            
+            cards_played_this_turn = self.game.turn_cards_played[current_player]
+            
             # AI must roll first if can_roll_dice is True
             if self.game.can_roll_dice:
                 print(f"[AI_MOVE] {current_player} must roll first (hand has {len(hand)} cards)")
@@ -175,66 +183,52 @@ class GameSession:
                 self.game.yellow_dot_position = (row_idx, col_idx)
                 print(f"[AI_MOVE] {current_player} rolled {row}{col}, placed yellow dot")
                 
-                # Check for matches created by yellow dot (same as human player)
-                match_result = self.game.check_line_match(row, col, 'yellow')
-                match, match_color = match_result
-                
-                if match:  # Check if match list has items
-                    print(f"[AI_MOVE] Match found! Collecting {len(match)} positions for color {match_color}")
-                    self.game.collect_dots(match, current_player, match_color)
-                    # Can roll again if matched
-                    self.game.can_roll_dice = True
-                else:
-                    print(f"[AI_MOVE] No match detected at {row}{col}")
-                
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                # After rolling, AI needs to play cards (or roll again if matched), so continue
+                # After rolling, AI needs to play cards
                 print(f"[AI_MOVE] {current_player} rolled, now choosing cards to play")
             
-            # Choose 2 cards to play
-            cards_to_play_indices = ai_player.choose_cards(hand)
-            if len(cards_to_play_indices) == 0:
-                # No cards to play - advance to next player
+            # Check if AI already played 2 cards this turn
+            if cards_played_this_turn >= 2:
+                print(f"[AI_MOVE] {current_player} already played {cards_played_this_turn} cards, advancing turn")
                 self.game.next_player()
-                if not hasattr(self.game, 'turn_cards_played'):
-                    self.game.turn_cards_played = {}
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                # Recursively handle next player
                 import time
                 time.sleep(0.5)
                 self.ai_move_in_progress = False
-                try:
-                    self.execute_ai_move()
-                except Exception as e:
-                    pass
+                self.execute_ai_move()
+                return
+            
+            # Choose cards to play (up to 2 - cards_played_this_turn)
+            cards_needed = 2 - cards_played_this_turn
+            cards_to_play_indices = ai_player.choose_cards(hand)[:cards_needed]
+            
+            if len(cards_to_play_indices) == 0:
+                print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
+                self.game.next_player()
+                new_player = self.game.get_current_player()
+                self.game.turn_cards_played[new_player] = 0
+                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                import time
+                time.sleep(0.5)
+                self.ai_move_in_progress = False
+                self.execute_ai_move()
                 return
             
             cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
             yellow_replaced = False
             yellow_collected = False
-            cards_played_count = 0
             
             # Play the cards (similar to handle_play_cards but for AI)
             for card in cards_to_play:
                 if card not in hand:
                     continue
                 
-                # Add to discard pile
-                if current_player not in self.discard_piles:
-                    self.discard_piles[current_player] = []
-                
-                card_info = {
-                    'location': card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}",
-                    'color': card.color
-                }
-                self.discard_piles[current_player].append(card_info)
-                
                 # Remove from hand
                 hand.remove(card)
-                cards_played_count += 1
+                self.game.turn_cards_played[current_player] += 1
                 
                 # Place dot on board
                 success, replaced_color = self.game.place_card_dot(card)
@@ -264,53 +258,66 @@ class GameSession:
                                 break
                         self.game.collect_dots(match, current_player, match_color)
             
-            # Draw replacement cards
-            while len(hand) < 5 and self.game.deck:
-                self.game.draw_card(current_player)
+            # After playing cards
+            total_played_this_turn = self.game.turn_cards_played[current_player]
+            print(f"[AI_MOVE] {current_player} played cards, total this turn: {total_played_this_turn}")
             
-            # If yellow was replaced or collected, allow AI to roll again for new yellow
-            if yellow_replaced or yellow_collected:
-                self.game.can_roll_dice = True
-                print(f"[AI_MOVE] {current_player} replaced/collected yellow, can roll again")
+            # Check if AI played 2 cards this turn
+            if total_played_this_turn >= 2:
+                # Draw replacement cards
+                while len(hand) < 5 and self.game.deck:
+                    self.game.draw_card(current_player)
+                
+                # If yellow was replaced or collected, AI must roll again
+                if yellow_replaced or yellow_collected:
+                    self.game.can_roll_dice = True
+                    print(f"[AI_MOVE] {current_player} replaced/collected yellow after 2 cards, must roll then end turn")
+                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                    import time
+                    time.sleep(0.5)
+                    self.ai_move_in_progress = False
+                    # Roll then end turn
+                    self.execute_ai_move()
+                    return
+                else:
+                    # Advance to next player
+                    print(f"[AI_MOVE] {current_player} played 2 cards, advancing turn")
+                    self.game.can_roll_dice = False
+                    self.game.next_player()
+                    new_player = self.game.get_current_player()
+                    self.game.turn_cards_played[new_player] = 0
+                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                    
+                    # Check for winner
+                    winner_result = self.check_winner()
+                    if winner_result:
+                        socketio.emit('game_over', {
+                            'winner': winner_result['winner'],
+                            'condition': winner_result['mode']
+                        }, room=self.game_id)
+                        return
+                    
+                    import time
+                    time.sleep(0.5)
+                    self.ai_move_in_progress = False
+                    self.execute_ai_move()
+                    return
+            else:
+                # Still need to play more cards
+                if yellow_replaced or yellow_collected:
+                    self.game.can_roll_dice = True
+                    print(f"[AI_MOVE] {current_player} replaced/collected yellow, must roll again")
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                # AI must roll again, so continue the move
                 import time
                 time.sleep(0.5)
                 self.ai_move_in_progress = False
-                try:
-                    self.execute_ai_move()
-                except Exception as e:
-                    pass
+                self.execute_ai_move()
                 return
-            
-            # Advance to next player after playing cards (only if yellow not affected)
-            print(f"[AI_MOVE] {current_player} played {cards_played_count} cards, advancing to next player")
-            self.game.next_player()
-            if not hasattr(self.game, 'turn_cards_played'):
-                self.game.turn_cards_played = {}
-            new_player = self.game.get_current_player()
-            self.game.turn_cards_played[new_player] = 0
-            print(f"[AI_MOVE] Advanced to {new_player}")
-            
-            # Broadcast updated game state
-            socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-            
-            # Check for winner
-            winner_result = self.check_winner()
-            if winner_result:
-                socketio.emit('game_over', {
-                    'winner': winner_result['winner'],
-                    'condition': winner_result['mode']
-                }, room=self.game_id)
-                return
-            
-            # Recursively check if next player is also AI
-            import time
-            time.sleep(0.5)
-            self.ai_move_in_progress = False
-            self.execute_ai_move()
+                
         except Exception as e:
-            pass
+            print(f"[AI_MOVE] Error: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             self.ai_move_in_progress = False
     
