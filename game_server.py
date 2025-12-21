@@ -193,8 +193,7 @@ class GameSession:
                 
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                import time
-                time.sleep(1.0)  # Delay after rolling so human can see
+                socketio.sleep(1.0)  # Use socketio.sleep for cooperative threading
                 # After rolling, AI needs to play cards
                 print(f"[AI_MOVE] {current_player} rolled, now choosing cards to play")
             
@@ -205,10 +204,10 @@ class GameSession:
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                import time
-                time.sleep(1.5)  # Longer delay so human can see turn change
+                socketio.sleep(1.5)  # Use socketio.sleep
                 self.ai_move_in_progress = False
-                self.execute_ai_move()
+                if new_player in self.ai_players:
+                    self.execute_ai_move()
                 return
             
             # Choose cards to play (1 card at a time for visible gameplay)
@@ -218,15 +217,15 @@ class GameSession:
             cards_to_play_indices = [regular_cards_indices[i] for i in range(min(cards_needed, len(regular_cards_indices)))]
             
             if len(cards_to_play_indices) == 0:
-                print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
+                print(f"[AI_MOVE] {current_player} has no regular cards to play, advancing turn")
                 self.game.next_player()
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                import time
-                time.sleep(0.5)
+                socketio.sleep(1.0)
                 self.ai_move_in_progress = False
-                self.execute_ai_move()
+                if new_player in self.ai_players:
+                    self.execute_ai_move()
                 return
             
             cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
@@ -241,6 +240,15 @@ class GameSession:
                 # Remove from hand
                 hand.remove(card)
                 self.game.turn_cards_played[current_player] += 1
+                
+                # Add to AI's discard pile
+                if current_player not in self.discard_piles:
+                    self.discard_piles[current_player] = []
+                card_info = {
+                    'color': card.color,
+                    'location': f"{card.location[0]}{card.location[1]}" if card.location else "PWR"
+                }
+                self.discard_piles[current_player].append(card_info)
                 
                 # Place dot on board
                 success, replaced_color = self.game.place_card_dot(card)
@@ -285,8 +293,7 @@ class GameSession:
                     self.game.can_roll_dice = True
                     print(f"[AI_MOVE] {current_player} replaced/collected yellow after 2 cards, must roll then end turn")
                     socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                    import time
-                    time.sleep(0.5)
+                    socketio.sleep(1.0)
                     self.ai_move_in_progress = False
                     # Roll then end turn
                     self.execute_ai_move()
@@ -307,12 +314,13 @@ class GameSession:
                             'winner': winner_result['winner'],
                             'condition': winner_result['mode']
                         }, room=self.game_id)
+                        self.ai_move_in_progress = False
                         return
                     
-                    import time
-                    time.sleep(1.5)  # Longer delay so human can see AI moves
+                    socketio.sleep(1.5)  # Cooperative sleep for AI delay
                     self.ai_move_in_progress = False
-                    self.execute_ai_move()
+                    if new_player in self.ai_players:
+                        self.execute_ai_move()
                     return
             else:
                 # Still need to play more cards
@@ -320,8 +328,7 @@ class GameSession:
                     self.game.can_roll_dice = True
                     print(f"[AI_MOVE] {current_player} replaced/collected yellow, must roll again")
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                import time
-                time.sleep(1.5)  # Longer delay so human can see AI moves
+                socketio.sleep(1.5)  # Cooperative sleep for AI delay
                 self.ai_move_in_progress = False
                 self.execute_ai_move()
                 return
@@ -330,7 +337,6 @@ class GameSession:
             print(f"[AI_MOVE] Error: {e}")
             import traceback
             traceback.print_exc()
-        finally:
             self.ai_move_in_progress = False
     
     def check_winner(self):
