@@ -193,6 +193,8 @@ class GameSession:
                 
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                import time
+                time.sleep(1.0)  # Delay after rolling so human can see
                 # After rolling, AI needs to play cards
                 print(f"[AI_MOVE] {current_player} rolled, now choosing cards to play")
             
@@ -204,14 +206,14 @@ class GameSession:
                 self.game.turn_cards_played[new_player] = 0
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 import time
-                time.sleep(0.5)
+                time.sleep(1.5)  # Longer delay so human can see turn change
                 self.ai_move_in_progress = False
                 self.execute_ai_move()
                 return
             
-            # Choose cards to play (up to 2 - cards_played_this_turn)
+            # Choose cards to play (1 card at a time for visible gameplay)
             # AI should skip power cards for now (simplified AI doesn't use them)
-            cards_needed = 2 - cards_played_this_turn
+            cards_needed = 1  # Play only 1 card at a time so human can follow along
             regular_cards_indices = [i for i, c in enumerate(hand) if not getattr(c, 'power', None)]
             cards_to_play_indices = [regular_cards_indices[i] for i in range(min(cards_needed, len(regular_cards_indices)))]
             
@@ -308,7 +310,7 @@ class GameSession:
                         return
                     
                     import time
-                    time.sleep(0.5)
+                    time.sleep(1.5)  # Longer delay so human can see AI moves
                     self.ai_move_in_progress = False
                     self.execute_ai_move()
                     return
@@ -319,7 +321,7 @@ class GameSession:
                     print(f"[AI_MOVE] {current_player} replaced/collected yellow, must roll again")
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 import time
-                time.sleep(0.5)
+                time.sleep(1.5)  # Longer delay so human can see AI moves
                 self.ai_move_in_progress = False
                 self.execute_ai_move()
                 return
@@ -890,18 +892,20 @@ def handle_play_cards(data):
             print(f"[PLAY_CARDS] Playing power card: {card.power}")
             
             if card.power == 'wild_place':
-                # Place a wild dot at a random empty position
-                import random
-                empty_positions = []
-                for r_idx in range(6):
-                    for c_idx in range(6):
-                        if not game_session.game.grid[r_idx][c_idx]:
-                            empty_positions.append((game_session.game.rows[r_idx], game_session.game.columns[c_idx]))
-                if empty_positions:
-                    row, col = random.choice(empty_positions)
-                    game_session.game.place_wild_at_location(row, col)
-                    print(f"[PLAY_CARDS] Wild dot placed at {row}{col}")
-                    yellow_replaced = True
+                # Request client to select a position for the wild dot
+                if not hasattr(game_session, 'pending_wild_place'):
+                    game_session.pending_wild_place = {}
+                game_session.pending_wild_place[player_name] = True
+                print(f"[PLAY_CARDS] Wild place power - waiting for player to select position")
+                # Emit event to tell client to select a position
+                emit('select_wild_position', {'message': 'Click any position on the board to place the wild dot'})
+                # Update game state to show card was played
+                emit('game_updated', game_session.get_game_state(), room=game_id)
+                for sid, player_info in game_session.players.items():
+                    if not player_info['is_ai'] and player_info['connected']:
+                        player_hand = game_session.get_player_hand(player_info['name'])
+                        socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+                return  # Early return - place_wild handler will finish the turn
                     
             elif card.power == 'remove':
                 # Remove a random colored dot from board
@@ -1527,6 +1531,114 @@ def handle_place_landmine(data):
         'player': player_name,
         'message': f'{player_name} placed a landmine!'
     }, room=game_id)
+    
+    # Now advance turn (power card ends turn)
+    current_player = game_session.game.get_current_player()
+    
+    # Draw cards to 5 before ending turn
+    hand = game_session.game.players[current_player]['hand']
+    while len(hand) < 5 and game_session.game.deck:
+        game_session.game.draw_card(current_player)
+    
+    # Move to next turn
+    game_session.game.next_player()
+    new_player = game_session.game.get_current_player()
+    
+    # Initialize turn tracking for new player
+    if not hasattr(game_session.game, 'turn_cards_played'):
+        game_session.game.turn_cards_played = {}
+    game_session.game.turn_cards_played[new_player] = 0
+    game_session.game.can_roll_dice = False
+    
+    # Broadcast updated game state
+    emit('game_updated', game_session.get_game_state(), room=game_id)
+    
+    # Send updated hands
+    for sid, player_info in game_session.players.items():
+        if not player_info['is_ai'] and player_info['connected']:
+            player_hand = game_session.get_player_hand(player_info['name'])
+            socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+    
+    # Check for winner
+    winner_result = game_session.check_winner()
+    if winner_result:
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['mode']
+        }, room=game_id)
+        return
+    
+    # Execute AI turn if next player is AI
+    if new_player in game_session.ai_players:
+        import threading
+        thread = threading.Thread(target=game_session.execute_ai_move)
+        thread.daemon = True
+        thread.start()
+
+
+@socketio.on('place_wild')
+def handle_place_wild(data):
+    """Handle wild place power card - player selected a position for the wild dot"""
+    game_id = data.get('game_id')
+    position = data.get('position')  # {'row': 0, 'col': 0}
+    
+    if game_id not in games:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    game_session = games[game_id]
+    player_name = game_session.get_player_name(request.sid)
+    
+    if not player_name:
+        emit('error', {'message': 'You are not in this game'})
+        return
+    
+    # Check if player has pending wild place
+    if not hasattr(game_session, 'pending_wild_place') or player_name not in game_session.pending_wild_place:
+        emit('error', {'message': 'No pending wild place action'})
+        return
+    
+    # Validate position
+    if not position:
+        emit('error', {'message': 'Must select a position'})
+        return
+    
+    row_idx = position.get('row', -1)
+    col_idx = position.get('col', -1)
+    
+    # Check bounds
+    if not (0 <= row_idx < 6 and 0 <= col_idx < 6):
+        emit('error', {'message': 'Invalid position'})
+        return
+    
+    # Get row/col letters
+    row = game_session.game.rows[row_idx]
+    col = game_session.game.columns[col_idx]
+    
+    print(f"[PLACE_WILD] {player_name} placing wild at {row}{col}")
+    
+    # Place the wild dot (this also removes old yellow if exists)
+    game_session.game.place_wild_at_location(row, col)
+    
+    # Clear pending wild place
+    del game_session.pending_wild_place[player_name]
+    
+    # Check for matches at the new yellow position
+    # Yellow can match with any color adjacent to it
+    yellow_collected = False
+    for color in ['red', 'blue', 'green', 'purple']:
+        match_result = game_session.game.check_line_match(row, col, color)
+        match, match_color = match_result
+        if match:
+            print(f"[PLACE_WILD] Match found! Collecting {len(match)} dots")
+            # Check if yellow dot is in the matched positions
+            for col_idx_m, row_idx_m in match:
+                dot = game_session.game.grid[row_idx_m][col_idx_m]
+                if dot and dot.color == 'yellow':
+                    yellow_collected = True
+                    break
+            game_session.game.collect_dots(match, player_name, match_color)
+            break  # Only one match per placement
     
     # Now advance turn (power card ends turn)
     current_player = game_session.game.get_current_player()

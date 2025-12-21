@@ -1318,6 +1318,9 @@
         
         // Landmine power card state
         let landmineMode = false;
+        
+        // Wild place power card state
+        let wildPlaceMode = false;
 
         // Check for saved game on page load
         window.addEventListener('DOMContentLoaded', () => {
@@ -1572,6 +1575,15 @@
                 // Show dramatic explosion notification
                 alert(`💥💥💥 BOOM! 💥💥💥\n\nLandmine at ${data.location} detonated!\n\nTriggered by: ${data.triggered_by}\nPlaced by: ${data.placed_by}\nDots removed: ${data.removed_count}\nPenalty color: ${data.color}`);
             });
+            
+            // Handle wild place power card - select position on board
+            socket.on('select_wild_position', (data) => {
+                console.log('Select wild position:', data.message);
+                wildPlaceMode = true;
+                alert('⭐ WILD PLACE POWER: ' + data.message);
+                // Highlight that we're in wild place mode
+                document.getElementById('gameBoard').style.cursor = 'crosshair';
+            });
         }
 
 
@@ -1762,17 +1774,18 @@
                     handDiv.textContent = `Hand: ${data.hand_size}/5`;
                     playerBox.appendChild(handDiv);
                     
-                    // Add discard pile
-                    if (data.discard_pile && data.discard_pile.length > 0) {
-                        const discardLabel = document.createElement('div');
-                        discardLabel.className = 'player-discard';
-                        discardLabel.textContent = `Discard: ${data.discard_pile.length}`;
-                        playerBox.appendChild(discardLabel);
-                        
-                        const discardContainer = document.createElement('div');
-                        discardContainer.className = 'discard-cards';
+                    // Add discard pile (always show, even if empty)
+                    const discardPile = data.discard_pile || [];
+                    const discardLabel = document.createElement('div');
+                    discardLabel.className = 'player-discard';
+                    discardLabel.textContent = `Discard: ${discardPile.length}`;
+                    playerBox.appendChild(discardLabel);
+                    
+                    const discardContainer = document.createElement('div');
+                    discardContainer.className = 'discard-cards';
+                    if (discardPile.length > 0) {
                         // Show last 2 cards as card boxes
-                        const lastCards = data.discard_pile.slice(-2);
+                        const lastCards = discardPile.slice(-2);
                         lastCards.forEach(card => {
                             const cardDiv = document.createElement('div');
                             cardDiv.className = `card ${card.color}`;
@@ -1785,8 +1798,8 @@
                             cardDiv.innerHTML = `<div>${card.location}</div><div style="font-size: 0.7em; opacity: 0.8;">${card.color.toUpperCase()}</div>`;
                             discardContainer.appendChild(cardDiv);
                         });
-                        playerBox.appendChild(discardContainer);
                     }
+                    playerBox.appendChild(discardContainer);
                     
                     // Add wins/losses stats
                     const stats = JSON.parse(localStorage.getItem('playerStats') || '{}');
@@ -1951,6 +1964,24 @@
         }
 
         function handleCellClick(row, col) {
+            // Handle wild place mode - select any position for the wild dot
+            if (wildPlaceMode) {
+                const rowLetter = ['A', 'B', 'C', 'D', 'E', 'F'][row];
+                const colNumber = col + 1;
+                
+                if (confirm(`⭐ Place wild dot at ${rowLetter}${colNumber}?`)) {
+                    console.log('Placing wild at:', row, col);
+                    socket.emit('place_wild', {
+                        game_id: gameId,
+                        position: {row: row, col: col}
+                    });
+                    
+                    wildPlaceMode = false;
+                    document.getElementById('gameBoard').style.cursor = 'default';
+                }
+                return;
+            }
+            
             // Only handle clicks when in swap mode
             if (!swapMode) return;
             
