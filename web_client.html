@@ -1433,6 +1433,8 @@
             
             socket.on('error', (data) => {
                 console.log('Error:', data.message);
+                // Show error to user
+                alert('❌ ' + data.message);
             });
             
             socket.on('game_over', (data) => {

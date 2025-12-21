@@ -210,8 +210,10 @@ class GameSession:
                 return
             
             # Choose cards to play (up to 2 - cards_played_this_turn)
+            # AI should skip power cards for now (simplified AI doesn't use them)
             cards_needed = 2 - cards_played_this_turn
-            cards_to_play_indices = ai_player.choose_cards(hand)[:cards_needed]
+            regular_cards_indices = [i for i, c in enumerate(hand) if not getattr(c, 'power', None)]
+            cards_to_play_indices = [regular_cards_indices[i] for i in range(min(cards_needed, len(regular_cards_indices)))]
             
             if len(cards_to_play_indices) == 0:
                 print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
@@ -816,6 +818,16 @@ def handle_play_cards(data):
         emit('error', {'message': 'Power cards must be played alone'})
         return
     
+    # Power cards cannot be played if cards have already been played this turn
+    if has_power_card:
+        if not hasattr(game_session.game, 'turn_cards_played'):
+            game_session.game.turn_cards_played = {}
+        current_player = game_session.game.get_current_player()
+        cards_already_played = game_session.game.turn_cards_played.get(current_player, 0)
+        if cards_already_played > 0:
+            emit('error', {'message': 'Power cards must be played first - cannot play after regular cards'})
+            return
+    
     # Check for duplicate locations (skip power cards)
     if len(cards_to_play) == 2 and not has_power_card:
         loc1 = cards_to_play[0].location if isinstance(cards_to_play[0].location, str) else f"{cards_to_play[0].location[0]}{cards_to_play[0].location[1]}"
@@ -925,6 +937,16 @@ def handle_play_cards(data):
                 # Set double score flag for next match
                 game_session.game.players[player_name]['double_next_match'] = True
                 print(f"[PLAY_CARDS] Double score enabled for {player_name}")
+            
+            elif card.power == 'card_swap':
+                # Card swap would require player interaction - skip for web version
+                # Just log it and count as used
+                print(f"[PLAY_CARDS] Card swap power used (no effect in simplified web version)")
+            
+            elif card.power == 'landmine':
+                # Landmine requires sacrificing a regular card - skip for web version
+                # In GUI version, this prompts for a card to sacrifice
+                print(f"[PLAY_CARDS] Landmine power used (requires sacrifice card - not supported in web version yet)")
             
             # Power cards count as playing 2 cards (end turn)
             game_session.game.turn_cards_played[current_player] = 2
