@@ -150,6 +150,17 @@
         
         .cell:hover { background: rgba(60,60,80,0.9); }
         
+        .cell.swap-selected {
+            background: rgba(255, 215, 0, 0.5);
+            border: 3px solid gold;
+            animation: swap-pulse 0.5s infinite alternate;
+        }
+        
+        @keyframes swap-pulse {
+            from { box-shadow: 0 0 5px gold; }
+            to { box-shadow: 0 0 15px gold; }
+        }
+        
         .dot {
             width: 40px;
             height: 40px;
@@ -1252,6 +1263,10 @@
         let myHand = [];
         let selectedCards = [];
         let currentGameState = null;
+        
+        // Swap power card state
+        let swapMode = false;
+        let swapPositions = [];
 
         // Check for saved game on page load
         window.addEventListener('DOMContentLoaded', () => {
@@ -1475,6 +1490,16 @@
                     }
                 }, 500);
             });
+            
+            // Handle swap power card - need to select two dots on board
+            socket.on('select_swap_dots', (data) => {
+                console.log('Select swap dots:', data.message);
+                swapMode = true;
+                swapPositions = [];
+                alert('🔄 SWAP POWER: ' + data.message);
+                // Highlight that we're in swap mode
+                document.getElementById('gameBoard').style.cursor = 'crosshair';
+            });
         }
 
 
@@ -1560,11 +1585,21 @@
                 for (let c = 0; c < 6; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    
+                    // Add click handler for swap mode
+                    cell.addEventListener('click', () => handleCellClick(r, c));
                     
                 if (board[r] && board[r][c]) {
                     const dot = document.createElement('div');
                     dot.className = `dot ${board[r][c].color}`;
                     cell.appendChild(dot);
+                    
+                    // Highlight selected swap positions
+                    if (swapMode && swapPositions.some(p => p.row === r && p.col === c)) {
+                        cell.classList.add('swap-selected');
+                    }
                 }                    boardDiv.appendChild(cell);
                 }
             }
@@ -1771,6 +1806,47 @@
 
         function rollDice() {
             socket.emit('roll_dice', { game_id: gameId });
+        }
+
+        function handleCellClick(row, col) {
+            // Only handle clicks when in swap mode
+            if (!swapMode) return;
+            
+            // Check if there's a dot at this position
+            if (!currentGameState || !currentGameState.board[row] || !currentGameState.board[row][col]) {
+                alert('Please click on a cell with a dot');
+                return;
+            }
+            
+            // Check if already selected
+            const existingIdx = swapPositions.findIndex(p => p.row === row && p.col === col);
+            if (existingIdx >= 0) {
+                // Deselect
+                swapPositions.splice(existingIdx, 1);
+                console.log('Deselected position:', row, col);
+            } else if (swapPositions.length < 2) {
+                // Add to selection
+                swapPositions.push({row: row, col: col});
+                console.log('Selected position:', row, col, 'Total:', swapPositions.length);
+            }
+            
+            // Re-render board to show selection
+            updateBoard(currentGameState.board, currentGameState.yellow_dot_position);
+            
+            // If we have 2 positions selected, send to server
+            if (swapPositions.length === 2) {
+                console.log('Sending swap_dots:', swapPositions);
+                socket.emit('swap_dots', {
+                    game_id: gameId,
+                    pos1: swapPositions[0],
+                    pos2: swapPositions[1]
+                });
+                
+                // Reset swap mode
+                swapMode = false;
+                swapPositions = [];
+                document.getElementById('gameBoard').style.cursor = 'default';
+            }
         }
 
         function endTurn() {

@@ -918,20 +918,23 @@ def handle_play_cards(data):
                     print(f"[PLAY_CARDS] Removed dot at position")
                     
             elif card.power == 'swap':
-                # Swap two random dots on board
-                import random
-                dots_positions = []
-                for r_idx in range(6):
-                    for c_idx in range(6):
-                        if game_session.game.grid[r_idx][c_idx]:
-                            dots_positions.append((r_idx, c_idx))
-                if len(dots_positions) >= 2:
-                    pos1, pos2 = random.sample(dots_positions, 2)
-                    dot1 = game_session.game.grid[pos1[0]][pos1[1]]
-                    dot2 = game_session.game.grid[pos2[0]][pos2[1]]
-                    game_session.game.grid[pos1[0]][pos1[1]] = dot2
-                    game_session.game.grid[pos2[0]][pos2[1]] = dot1
-                    print(f"[PLAY_CARDS] Swapped dots at positions")
+                # Request client to select two dots to swap
+                # Store pending swap state and emit event to client
+                if not hasattr(game_session, 'pending_swap'):
+                    game_session.pending_swap = {}
+                game_session.pending_swap[player_name] = True
+                print(f"[PLAY_CARDS] Swap power - waiting for player to select two dots")
+                # Emit event to tell client to select dots
+                emit('select_swap_dots', {'message': 'Click two dots on the board to swap them'})
+                # Remove power card from hand but return early - wait for swap_dots event
+                # Don't go through turn ending logic - that will happen in swap_dots handler
+                # Update game state to show card was played
+                emit('game_updated', game_session.get_game_state(), room=game_id)
+                for sid, player_info in game_session.players.items():
+                    if not player_info['is_ai'] and player_info['connected']:
+                        player_hand = game_session.get_player_hand(player_info['name'])
+                        socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+                return  # Early return - swap_dots handler will finish the turn
                     
             elif card.power == 'double_score':
                 # Set double score flag for next match
@@ -1002,9 +1005,13 @@ def handle_play_cards(data):
         print(f"[PLAY_CARDS] Yellow not affected - can_roll_dice set to False")
     
     # Auto-advance turn after playing 2 cards THIS TURN
-    total_played_this_turn = cards_played_this_turn + len(cards_to_play)
-    game_session.game.turn_cards_played[current_player] = total_played_this_turn
-    print(f"[PLAY_CARDS] Updated {current_player}'s counter to {total_played_this_turn}")
+    # If power card was used, it already set turn_cards_played to 2
+    if power_card_used:
+        total_played_this_turn = game_session.game.turn_cards_played[current_player]  # Should be 2
+    else:
+        total_played_this_turn = cards_played_this_turn + len(cards_to_play)
+        game_session.game.turn_cards_played[current_player] = total_played_this_turn
+    print(f"[PLAY_CARDS] Updated {current_player}'s counter to {total_played_this_turn}, power_card_used={power_card_used}")
     
     # Only draw cards when turn is ending (at 2 cards played)
     if total_played_this_turn >= 2:
@@ -1309,6 +1316,103 @@ def handle_pass_turn(data):
         thread = threading.Thread(target=game_session.execute_ai_move)
         thread.daemon = True
         thread.start()
+
+
+@socketio.on('swap_dots')
+def handle_swap_dots(data):
+    """Handle swap power card - player selected two dots to swap"""
+    game_id = data.get('game_id')
+    pos1 = data.get('pos1')  # {'row': 0, 'col': 0}
+    pos2 = data.get('pos2')  # {'row': 1, 'col': 1}
+    
+    if game_id not in games:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    game_session = games[game_id]
+    player_name = game_session.get_player_name(request.sid)
+    
+    if not player_name:
+        emit('error', {'message': 'You are not in this game'})
+        return
+    
+    # Check if player has pending swap
+    if not hasattr(game_session, 'pending_swap') or player_name not in game_session.pending_swap:
+        emit('error', {'message': 'No pending swap action'})
+        return
+    
+    # Validate positions
+    if not pos1 or not pos2:
+        emit('error', {'message': 'Must select two positions'})
+        return
+    
+    row1, col1 = pos1['row'], pos1['col']
+    row2, col2 = pos2['row'], pos2['col']
+    
+    # Check bounds
+    if not (0 <= row1 < 6 and 0 <= col1 < 6 and 0 <= row2 < 6 and 0 <= col2 < 6):
+        emit('error', {'message': 'Invalid positions'})
+        return
+    
+    # Check both positions have dots
+    dot1 = game_session.game.grid[row1][col1]
+    dot2 = game_session.game.grid[row2][col2]
+    
+    if not dot1 or not dot2:
+        emit('error', {'message': 'Both positions must have dots'})
+        return
+    
+    # Perform the swap
+    game_session.game.grid[row1][col1] = dot2
+    game_session.game.grid[row2][col2] = dot1
+    print(f"[SWAP_DOTS] {player_name} swapped {dot1.color} at ({row1},{col1}) with {dot2.color} at ({row2},{col2})")
+    
+    # Clear pending swap
+    del game_session.pending_swap[player_name]
+    
+    # Now advance turn (power card already set turn_cards_played to 2)
+    current_player = game_session.game.get_current_player()
+    
+    # Draw cards to 5 before ending turn
+    hand = game_session.game.players[current_player]['hand']
+    while len(hand) < 5 and game_session.game.deck:
+        game_session.game.draw_card(current_player)
+    
+    # Move to next turn
+    game_session.game.next_player()
+    new_player = game_session.game.get_current_player()
+    
+    # Initialize turn tracking for new player
+    if not hasattr(game_session.game, 'turn_cards_played'):
+        game_session.game.turn_cards_played = {}
+    game_session.game.turn_cards_played[new_player] = 0
+    game_session.game.can_roll_dice = False
+    
+    # Broadcast updated game state
+    emit('game_updated', game_session.get_game_state(), room=game_id)
+    
+    # Send updated hands
+    for sid, player_info in game_session.players.items():
+        if not player_info['is_ai'] and player_info['connected']:
+            player_hand = game_session.get_player_hand(player_info['name'])
+            socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+    
+    # Check for winner
+    winner_result = game_session.check_winner()
+    if winner_result:
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['mode']
+        }, room=game_id)
+        return
+    
+    # Execute AI turn if next player is AI
+    if new_player in game_session.ai_players:
+        import threading
+        thread = threading.Thread(target=game_session.execute_ai_move)
+        thread.daemon = True
+        thread.start()
+
 
 def execute_ai_turn(game_session, ai_name):
     """Execute an AI player's turn"""
