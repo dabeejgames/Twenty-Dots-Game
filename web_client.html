@@ -1321,6 +1321,14 @@
         
         // Wild place power card state
         let wildPlaceMode = false;
+        
+        // Card swap power card state
+        let cardSwapMode = false;
+        let cardSwapStep = 'none'; // 'select_own', 'select_opponent', 'select_opponent_cards'
+        let cardSwapOwnCards = [];
+        let cardSwapOpponent = null;
+        let cardSwapOpponentCards = [];
+        let cardSwapOpponentHandSize = 0;
 
         // Check for saved game on page load
         window.addEventListener('DOMContentLoaded', () => {
@@ -1583,6 +1591,44 @@
                 alert('⭐ WILD PLACE POWER: ' + data.message);
                 // Highlight that we're in wild place mode
                 document.getElementById('gameBoard').style.cursor = 'crosshair';
+            });
+            
+            // Handle card swap power card - multi-step process
+            socket.on('select_card_swap', (data) => {
+                console.log('Card swap initiated:', data);
+                cardSwapMode = true;
+                cardSwapStep = 'select_own';
+                cardSwapOwnCards = [];
+                cardSwapOpponent = null;
+                cardSwapOpponentCards = [];
+                alert('🔄 CARD SWAP POWER: Select 2 cards from your hand that you want to give away.');
+                updateHand(); // Re-render hand to show swap mode
+            });
+            
+            // Handle card swap opponent selection prompt
+            socket.on('select_card_swap_opponent', (data) => {
+                console.log('Select opponent for card swap:', data);
+                cardSwapStep = 'select_opponent';
+                showOpponentSelectModal(data.opponents);
+            });
+            
+            // Handle card swap opponent cards selection prompt  
+            socket.on('select_opponent_cards_for_swap', (data) => {
+                console.log('Select opponent cards for swap:', data);
+                cardSwapStep = 'select_opponent_cards';
+                cardSwapOpponentHandSize = data.hand_size;
+                showOpponentCardsModal(data.opponent, data.hand_size);
+            });
+            
+            // Handle card swap completion
+            socket.on('card_swap_complete', (data) => {
+                console.log('Card swap complete:', data);
+                cardSwapMode = false;
+                cardSwapStep = 'none';
+                cardSwapOwnCards = [];
+                cardSwapOpponent = null;
+                cardSwapOpponentCards = [];
+                alert(`🔄 Card swap complete!\n\nYou gave: ${data.gave.join(', ')}\nYou received: ${data.received.join(', ')}`);
             });
         }
 
@@ -1870,7 +1916,7 @@
         function toggleCardSelection(index, cardDiv) {
             // Prevent card selection if dice hasn't been rolled yet
             const canRoll = currentGameState && currentGameState.can_roll_dice;
-            if (canRoll && !landmineMode) {
+            if (canRoll && !landmineMode && !cardSwapMode) {
                 console.log('Cannot select cards - must roll dice first');
                 return;
             }
@@ -1907,6 +1953,51 @@
                         }
                     });
                     landmineMode = false;
+                }
+                return;
+            }
+            
+            // Handle card swap mode - selecting own cards to give away
+            if (cardSwapMode && cardSwapStep === 'select_own') {
+                const card = myHand[index];
+                
+                // Can't swap the power card itself
+                if (card.power === 'card_swap') {
+                    alert('❌ Cannot swap the card swap power card itself!');
+                    return;
+                }
+                
+                // Toggle selection
+                const cardIdx = cardSwapOwnCards.indexOf(index);
+                if (cardIdx > -1) {
+                    // Deselect
+                    cardSwapOwnCards.splice(cardIdx, 1);
+                    cardDiv.classList.remove('selected');
+                    cardDiv.style.border = card.power ? '3px solid #FFD700' : '';
+                    cardDiv.style.boxShadow = card.power ? '0 0 10px rgba(255,215,0,0.5)' : '';
+                } else if (cardSwapOwnCards.length < 2) {
+                    // Select
+                    cardSwapOwnCards.push(index);
+                    cardDiv.classList.add('selected');
+                    cardDiv.style.border = '3px solid #00ff00';
+                    cardDiv.style.boxShadow = '0 0 15px rgba(0,255,0,0.5)';
+                }
+                
+                // If 2 cards selected, proceed to opponent selection
+                if (cardSwapOwnCards.length === 2) {
+                    const selectedCardsData = cardSwapOwnCards.map(i => myHand[i]);
+                    console.log('Card swap - selected own cards:', selectedCardsData);
+                    
+                    // Send to server
+                    socket.emit('card_swap_action', {
+                        game_id: gameId,
+                        step: 'select_own_cards',
+                        cards: selectedCardsData.map(c => ({
+                            color: c.color,
+                            location: c.location,
+                            power: c.power || null
+                        }))
+                    });
                 }
                 return;
             }
@@ -2044,6 +2135,191 @@
             errorDiv.textContent = message;
             errorDiv.classList.add('show');
             setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+        
+        // Card Swap Modal Functions
+        function showOpponentSelectModal(opponents) {
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'cardSwapModal';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 10000;
+            `;
+            
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: linear-gradient(135deg, #2d3436, #1a1a2e);
+                padding: 30px;
+                border-radius: 15px;
+                border: 3px solid #FFD700;
+                text-align: center;
+                max-width: 400px;
+            `;
+            
+            modal.innerHTML = `
+                <h2 style="color: #FFD700; margin-bottom: 20px;">🔄 Select Opponent</h2>
+                <p style="color: white; margin-bottom: 20px;">Choose which player to swap cards with:</p>
+                <div id="opponentButtons" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            `;
+            
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            
+            const buttonsDiv = modal.querySelector('#opponentButtons');
+            opponents.forEach(opp => {
+                const btn = document.createElement('button');
+                btn.textContent = `${opp.name} (${opp.hand_size} cards)`;
+                btn.style.cssText = `
+                    padding: 15px 30px;
+                    font-size: 1.1em;
+                    background: linear-gradient(135deg, #4CAF50, #2196F3);
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    cursor: pointer;
+                    transition: transform 0.2s;
+                `;
+                btn.onmouseover = () => btn.style.transform = 'scale(1.05)';
+                btn.onmouseout = () => btn.style.transform = 'scale(1)';
+                btn.onclick = () => {
+                    cardSwapOpponent = opp.name;
+                    overlay.remove();
+                    // Send opponent selection to server
+                    socket.emit('card_swap_action', {
+                        game_id: gameId,
+                        step: 'select_opponent',
+                        opponent: opp.name
+                    });
+                };
+                buttonsDiv.appendChild(btn);
+            });
+        }
+        
+        function showOpponentCardsModal(opponentName, handSize) {
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'cardSwapModal';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 10000;
+            `;
+            
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: linear-gradient(135deg, #2d3436, #1a1a2e);
+                padding: 30px;
+                border-radius: 15px;
+                border: 3px solid #FFD700;
+                text-align: center;
+                max-width: 600px;
+            `;
+            
+            modal.innerHTML = `
+                <h2 style="color: #FFD700; margin-bottom: 20px;">🔄 Select 2 Cards from ${opponentName}</h2>
+                <p style="color: white; margin-bottom: 20px;">Click on 2 face-down cards to take:</p>
+                <div id="opponentCardsGrid" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px;"></div>
+                <p id="selectionCount" style="color: #FFD700;">Selected: 0/2</p>
+                <button id="confirmSwapBtn" disabled style="
+                    padding: 15px 30px;
+                    font-size: 1.1em;
+                    background: gray;
+                    border: none;
+                    border-radius: 8px;
+                    color: white;
+                    cursor: not-allowed;
+                    margin-top: 10px;
+                ">Confirm Swap</button>
+            `;
+            
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            
+            const cardsGrid = modal.querySelector('#opponentCardsGrid');
+            const selectionCount = modal.querySelector('#selectionCount');
+            const confirmBtn = modal.querySelector('#confirmSwapBtn');
+            let selectedIndices = [];
+            
+            // Create face-down cards
+            for (let i = 0; i < handSize; i++) {
+                const card = document.createElement('div');
+                card.style.cssText = `
+                    width: 60px;
+                    height: 90px;
+                    background: linear-gradient(135deg, #1a1a2e, #2d3436);
+                    border: 2px solid #666;
+                    border-radius: 8px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    font-size: 2em;
+                `;
+                card.textContent = '?';
+                card.dataset.index = i;
+                
+                card.onclick = () => {
+                    const idx = parseInt(card.dataset.index);
+                    if (selectedIndices.includes(idx)) {
+                        // Deselect
+                        selectedIndices = selectedIndices.filter(x => x !== idx);
+                        card.style.border = '2px solid #666';
+                        card.style.boxShadow = 'none';
+                    } else if (selectedIndices.length < 2) {
+                        // Select
+                        selectedIndices.push(idx);
+                        card.style.border = '3px solid #FFD700';
+                        card.style.boxShadow = '0 0 15px rgba(255,215,0,0.5)';
+                    }
+                    
+                    selectionCount.textContent = `Selected: ${selectedIndices.length}/2`;
+                    
+                    if (selectedIndices.length === 2) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.style.background = 'linear-gradient(135deg, #4CAF50, #2196F3)';
+                        confirmBtn.style.cursor = 'pointer';
+                    } else {
+                        confirmBtn.disabled = true;
+                        confirmBtn.style.background = 'gray';
+                        confirmBtn.style.cursor = 'not-allowed';
+                    }
+                };
+                
+                cardsGrid.appendChild(card);
+            }
+            
+            confirmBtn.onclick = () => {
+                if (selectedIndices.length === 2) {
+                    cardSwapOpponentCards = selectedIndices;
+                    overlay.remove();
+                    // Send opponent card selection to server
+                    socket.emit('card_swap_action', {
+                        game_id: gameId,
+                        step: 'select_opponent_cards',
+                        card_indices: selectedIndices
+                    });
+                    // Reset card swap state
+                    cardSwapMode = false;
+                    cardSwapStep = 'none';
+                }
+            };
         }
 
         function showNotification(message, type = 'info') {
