@@ -947,9 +947,21 @@ def handle_play_cards(data):
                 print(f"[PLAY_CARDS] Card swap power used (no effect in simplified web version)")
             
             elif card.power == 'landmine':
-                # Landmine requires sacrificing a regular card - skip for web version
-                # In GUI version, this prompts for a card to sacrifice
-                print(f"[PLAY_CARDS] Landmine power used (requires sacrifice card - not supported in web version yet)")
+                # Landmine requires sacrificing a regular card
+                # Store pending landmine state and emit event to client
+                if not hasattr(game_session, 'pending_landmine'):
+                    game_session.pending_landmine = {}
+                game_session.pending_landmine[player_name] = True
+                print(f"[PLAY_CARDS] Landmine power - waiting for player to select sacrifice card")
+                # Emit event to tell client to select a sacrifice card
+                emit('select_landmine_sacrifice', {'message': 'Select a regular card to sacrifice for the landmine location'})
+                # Update game state to show power card was played
+                emit('game_updated', game_session.get_game_state(), room=game_id)
+                for sid, player_info in game_session.players.items():
+                    if not player_info['is_ai'] and player_info['connected']:
+                        player_hand = game_session.get_player_hand(player_info['name'])
+                        socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+                return  # Early return - place_landmine handler will finish the turn
             
             # Power cards count as playing 2 cards (end turn)
             game_session.game.turn_cards_played[current_player] = 2
@@ -964,6 +976,20 @@ def handle_play_cards(data):
         if current_dot and current_dot.color == 'yellow':
             yellow_replaced = True
             print(f"[PLAY_CARDS] Yellow dot will be replaced at {row}{col}")
+        
+        # Check for landmine at this location BEFORE placing
+        location_str = f"{row}{col}"
+        landmine_result = game_session.game.check_and_detonate_landmine(location_str, player_name)
+        if landmine_result:
+            print(f"[PLAY_CARDS] LANDMINE DETONATED at {location_str}! Removed {len(landmine_result.get('removed_positions', []))} dots")
+            # Emit landmine detonation event to all players
+            emit('landmine_detonated', {
+                'location': location_str,
+                'color': landmine_result['color'],
+                'removed_count': len(landmine_result.get('removed_positions', [])),
+                'triggered_by': player_name,
+                'placed_by': landmine_result['player']
+            }, room=game_id)
             
         # Regular card - place dot
         success, replaced_color = game_session.game.place_card_dot(card)
@@ -1371,6 +1397,138 @@ def handle_swap_dots(data):
     del game_session.pending_swap[player_name]
     
     # Now advance turn (power card already set turn_cards_played to 2)
+    current_player = game_session.game.get_current_player()
+    
+    # Draw cards to 5 before ending turn
+    hand = game_session.game.players[current_player]['hand']
+    while len(hand) < 5 and game_session.game.deck:
+        game_session.game.draw_card(current_player)
+    
+    # Move to next turn
+    game_session.game.next_player()
+    new_player = game_session.game.get_current_player()
+    
+    # Initialize turn tracking for new player
+    if not hasattr(game_session.game, 'turn_cards_played'):
+        game_session.game.turn_cards_played = {}
+    game_session.game.turn_cards_played[new_player] = 0
+    game_session.game.can_roll_dice = False
+    
+    # Broadcast updated game state
+    emit('game_updated', game_session.get_game_state(), room=game_id)
+    
+    # Send updated hands
+    for sid, player_info in game_session.players.items():
+        if not player_info['is_ai'] and player_info['connected']:
+            player_hand = game_session.get_player_hand(player_info['name'])
+            socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+    
+    # Check for winner
+    winner_result = game_session.check_winner()
+    if winner_result:
+        emit('game_over', {
+            'winner': winner_result['winner'],
+            'condition': winner_result['mode']
+        }, room=game_id)
+        return
+    
+    # Execute AI turn if next player is AI
+    if new_player in game_session.ai_players:
+        import threading
+        thread = threading.Thread(target=game_session.execute_ai_move)
+        thread.daemon = True
+        thread.start()
+
+
+@socketio.on('place_landmine')
+def handle_place_landmine(data):
+    """Handle landmine placement - player selected a sacrifice card"""
+    game_id = data.get('game_id')
+    sacrifice_card = data.get('sacrifice_card')  # {color: 'red', location: ['A', '1']}
+    
+    if game_id not in games:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    game_session = games[game_id]
+    player_name = game_session.get_player_name(request.sid)
+    
+    if not player_name:
+        emit('error', {'message': 'You are not in this game'})
+        return
+    
+    # Check if player has pending landmine
+    if not hasattr(game_session, 'pending_landmine') or player_name not in game_session.pending_landmine:
+        emit('error', {'message': 'No pending landmine action'})
+        return
+    
+    # Validate sacrifice card
+    if not sacrifice_card or not sacrifice_card.get('location'):
+        emit('error', {'message': 'Must select a sacrifice card'})
+        return
+    
+    # Get the location from sacrifice card
+    loc = sacrifice_card['location']
+    if len(loc) < 2:
+        emit('error', {'message': 'Invalid card location'})
+        return
+    
+    row = loc[0]
+    col = loc[1]
+    location_str = f"{row}{col}"
+    color = sacrifice_card.get('color', 'red')
+    
+    print(f"[PLACE_LANDMINE] {player_name} placing landmine at {location_str} with color {color}")
+    
+    # Check if location is empty (required for landmine)
+    row_idx = game_session.game.rows.index(row) if row in game_session.game.rows else -1
+    col_idx = game_session.game.columns.index(col) if col in game_session.game.columns else -1
+    
+    if row_idx < 0 or col_idx < 0:
+        emit('error', {'message': 'Invalid location'})
+        return
+    
+    if game_session.game.grid[row_idx][col_idx] is not None:
+        emit('error', {'message': 'Landmine can only be placed on an empty space'})
+        return
+    
+    # Find and remove the sacrifice card from player's hand
+    hand = game_session.game.players[player_name]['hand']
+    sacrifice_found = False
+    for i, card in enumerate(hand):
+        # Skip power cards
+        if hasattr(card, 'power') and card.power:
+            continue
+        # Match by location
+        if card.location and len(card.location) >= 2:
+            if card.location[0] == row and card.location[1] == col:
+                hand.pop(i)
+                sacrifice_found = True
+                print(f"[PLACE_LANDMINE] Removed sacrifice card {card.color} at {card.location}")
+                break
+    
+    if not sacrifice_found:
+        emit('error', {'message': 'Sacrifice card not found in hand'})
+        return
+    
+    # Place the landmine
+    success = game_session.game.place_landmine(location_str, color, player_name)
+    if not success:
+        emit('error', {'message': 'Failed to place landmine'})
+        return
+    
+    print(f"[PLACE_LANDMINE] Landmine placed successfully at {location_str}")
+    
+    # Clear pending landmine
+    del game_session.pending_landmine[player_name]
+    
+    # Notify all players about the landmine (but don't reveal location to others)
+    emit('landmine_placed', {
+        'player': player_name,
+        'message': f'{player_name} placed a landmine!'
+    }, room=game_id)
+    
+    # Now advance turn (power card ends turn)
     current_player = game_session.game.get_current_player()
     
     # Draw cards to 5 before ending turn
