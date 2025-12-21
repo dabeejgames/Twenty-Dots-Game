@@ -569,10 +569,7 @@ def handle_join_game(data):
         
         # Execute AI move if starting player is AI (AI must roll first)
         if game_session.game.get_current_player() in game_session.ai_players:
-            import threading
-            thread = threading.Thread(target=game_session.execute_ai_move)
-            thread.daemon = True
-            thread.start()
+            socketio.start_background_task(game_session.execute_ai_move)
         
         print(f"Game {game_id} auto-started with players: {game_session.player_order}")
 
@@ -1106,10 +1103,7 @@ def handle_play_cards(data):
     next_player_name = game_session.game.get_current_player()
     
     if next_player_name in game_session.ai_players:
-        import threading
-        thread = threading.Thread(target=game_session.execute_ai_move)
-        thread.daemon = True
-        thread.start()
+        socketio.start_background_task(game_session.execute_ai_move)
     
     print(f"{player_name} played {len(cards_to_play)} card(s) in game {game_id}")
 
@@ -1178,11 +1172,8 @@ def handle_end_turn(data):
     print(f"[END_TURN] Is next player AI? {next_player in game_session.ai_players}")
     
     if next_player in game_session.ai_players:
-        print(f"[END_TURN] Spawning thread to execute AI move for {next_player}")
-        import threading
-        thread = threading.Thread(target=game_session.execute_ai_move)
-        thread.daemon = True
-        thread.start()
+        print(f"[END_TURN] Starting background task for AI move for {next_player}")
+        socketio.start_background_task(game_session.execute_ai_move)
     else:
         print(f"[END_TURN] Next player {next_player} is not AI, waiting for player action")
     
@@ -1348,10 +1339,7 @@ def handle_pass_turn(data):
     
     # Execute AI turn if next player is AI
     if game_session.players[game_session.sid_map[new_player]]['is_ai']:
-        import threading
-        thread = threading.Thread(target=game_session.execute_ai_move)
-        thread.daemon = True
-        thread.start()
+        socketio.start_background_task(game_session.execute_ai_move)
 
 
 @socketio.on('swap_dots')
@@ -1444,10 +1432,7 @@ def handle_swap_dots(data):
     
     # Execute AI turn if next player is AI
     if new_player in game_session.ai_players:
-        import threading
-        thread = threading.Thread(target=game_session.execute_ai_move)
-        thread.daemon = True
-        thread.start()
+        socketio.start_background_task(game_session.execute_ai_move)
 
 
 @socketio.on('place_landmine')
@@ -1576,10 +1561,7 @@ def handle_place_landmine(data):
     
     # Execute AI turn if next player is AI
     if new_player in game_session.ai_players:
-        import threading
-        thread = threading.Thread(target=game_session.execute_ai_move)
-        thread.daemon = True
-        thread.start()
+        socketio.start_background_task(game_session.execute_ai_move)
 
 
 @socketio.on('place_wild')
@@ -1684,10 +1666,7 @@ def handle_place_wild(data):
     
     # Execute AI turn if next player is AI
     if new_player in game_session.ai_players:
-        import threading
-        thread = threading.Thread(target=game_session.execute_ai_move)
-        thread.daemon = True
-        thread.start()
+        socketio.start_background_task(game_session.execute_ai_move)
 
 
 def execute_ai_turn(game_session, ai_name):
