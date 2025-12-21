@@ -1,0 +1,1848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twenty Dots - Multiplayer</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+            color: white;
+            font-family: 'Arial', sans-serif;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        .main-container { display: none; width: 100vw; height: 100vh; }
+        .main-container.active { display: flex; }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-bottom: 2px solid #ffd700;
+        }
+        
+        .header h1 { color: #ffd700; font-size: 2em; }
+        .turn-info { font-size: 1.5em; color: #ff6b6b; margin: 10px 0; }
+        
+        /* Game container */
+        .game-container {
+            display: flex;
+            gap: 15px;
+            padding: 15px;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Left panel - Logo */
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 200px;
+            flex-shrink: 0;
+        }
+        
+        .logo-box {
+            background: #1a1a2e;
+            border: 3px solid #ffd700;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+        
+        .logo-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        /* Center panel - Board and Players */
+        .center-panel {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 15px;
+            position: relative;
+        }
+        
+        /* Top players row */
+        .players-top {
+            display: flex;
+            gap: 20px;
+            justify-content: space-between;
+            height: 160px;
+            margin-top: 10px;
+        }
+        
+        .player-box {
+            background: #1a1a2e;
+            border: 2px solid #444;
+            border-radius: 8px;
+            padding: 12px;
+            width: 220px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            text-align: center;
+        }
+        
+        .player-box.active { border-color: #4CAF50; background: rgba(76, 175, 80, 0.1); }
+        .player-box.me { border-color: #ffd700; }
+        
+        .player-name { color: #ffd700; font-weight: bold; font-size: 0.95em; }
+        .player-score { color: #4CAF50; font-size: 1.2em; font-weight: bold; margin: 5px 0; }
+        .player-score-dots { display: flex; justify-content: center; gap: 3px; margin: 5px 0; }
+        .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
+        .player-hand { font-size: 0.85em; color: #aaa; }
+        .player-discard { font-size: 0.75em; color: #888; margin-top: 5px; }
+        .discard-cards { display: flex; justify-content: center; gap: 5px; margin-top: 3px; flex-wrap: nowrap; }
+        .discard-card { width: 25px; height: 14px; border-radius: 2px; font-size: 0.55em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+        
+        /* Board */
+        .board-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+            margin-top: 0;
+        }
+        
+        .board {
+            display: -ms-grid;
+            display: grid;
+            -ms-grid-columns: 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px;
+            -ms-grid-rows: 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px;
+            grid-template-columns: 80px 80px 80px 80px 80px 80px 80px;
+            grid-template-rows: 80px 80px 80px 80px 80px 80px 80px;
+            gap: 3px;
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            width: fit-content;
+            width: -moz-fit-content;
+        }
+        
+        .board-label { display: flex; align-items: center; justify-content: center; color: #ff6b6b; font-weight: bold; font-size: 1.1em; }
+        
+        .cell {
+            background: rgba(50,50,70,0.8);
+            border: 2px solid white;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .cell:hover { background: rgba(60,60,80,0.9); }
+        
+        .dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .dot.red { background: linear-gradient(135deg, #FF4757 0%, #e74c3c 100%); }
+        .dot.blue { background: linear-gradient(135deg, #36A2EB 0%, #2980b9 100%); }
+        .dot.purple { background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%); }
+        .dot.green { background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); }
+        .dot.yellow { background: radial-gradient(circle, #FFEB3B, #FFD700); box-shadow: 0 0 20px rgba(255,215,0,0.8); border: 2px dashed rgba(255,215,0,0.8); }
+        
+        /* Bottom players row */
+        .players-bottom {
+            display: flex;
+            gap: 20px;
+            justify-content: space-between;
+            height: 160px;
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            right: 0;
+            z-index: 10;
+        }
+        
+        /* Right panel - Hand and Controls */
+        .right-panel {
+            width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            padding: 10px;
+            background: rgba(26, 26, 46, 0.9);
+            border: 3px solid #6c5ce7;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+        
+        .hand-title { color: #ffd700; font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
+        
+        .cards-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        
+        .card {
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 3px solid transparent;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            min-height: 70px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-size: 1.1em;
+        }
+        
+        .card.red { background: linear-gradient(135deg, #FF4757 0%, #e74c3c 100%); }
+        .card.blue { background: linear-gradient(135deg, #36A2EB 0%, #2980b9 100%); }
+        .card.purple { background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%); }
+        .card.green { background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); }
+        
+        .card.selected { border-color: #FFD700; box-shadow: 0 0 20px rgba(255,215,0,0.6); }
+        
+        .card-location { font-size: 1.2em; }
+        .card-color { font-size: 0.8em; opacity: 0.8; }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        button {
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9em;
+        }
+        
+        .btn-play { background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); }
+        .btn-play:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(76,175,80,0.6); }
+        
+        .btn-end { background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%); }
+        .btn-end:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(255,107,107,0.6); }
+        
+        .btn-roll { background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); }
+        .btn-roll:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(243,156,18,0.6); }
+        
+        .btn-clear { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); }
+        .btn-clear:hover:not(:disabled) { box-shadow: 0 6px 15px rgba(231,76,60,0.6); }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Mode screen */
+        #modeScreen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        
+        .mode-selection {
+            text-align: center;
+        }
+        
+        .mode-buttons {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            margin: 40px 0;
+        }
+        
+        .mode-button {
+            background: #1a1a2e;
+            border: 3px solid #ffd700;
+            border-radius: 15px;
+            padding: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 200px;
+        }
+        
+        .mode-button:hover {
+            box-shadow: 0 0 30px rgba(255,215,0,0.5);
+            transform: scale(1.05);
+        }
+        
+        .mode-icon { font-size: 60px; margin-bottom: 15px; }
+        .mode-title { color: #ffd700; font-size: 1.5em; font-weight: bold; margin-bottom: 10px; }
+        .mode-description { color: #aaa; font-size: 0.9em; }
+        
+        /* Join screen */
+        #joinScreen {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        
+        .join-form {
+            background: #1a1a2e;
+            border: 3px solid #ffd700;
+            border-radius: 15px;
+            padding: 40px;
+            width: 400px;
+        }
+        
+        .form-group {
+            margin: 20px 0;
+        }
+        
+        .form-group label {
+            display: block;
+            color: #ffd700;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #6c5ce7;
+            border-radius: 6px;
+            background: rgba(108,92,231,0.1);
+            color: white;
+            font-size: 1em;
+        }
+        
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #6c5ce7;
+            border-radius: 6px;
+            background: rgba(108,92,231,0.1);
+            color: white;
+            font-size: 1em;
+        }
+        
+        .form-group select option {
+            background: #2a2a3e;
+            color: white;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #ffd700;
+            box-shadow: 0 0 10px rgba(255,215,0,0.3);
+        }
+        
+        .btn-join {
+            width: 100%;
+            background: linear-gradient(135deg, #ffd700 0%, #f39c12 100%);
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .btn-join:hover:not(:disabled) {
+            box-shadow: 0 0 20px rgba(255,215,0,0.6);
+        }
+        
+        .error-message {
+            color: #FF4757;
+            margin-top: 15px;
+            text-align: center;
+            display: none;
+        }
+        
+        .error-message.show { display: block; }
+        
+        /* Mobile Responsive Design */
+        @media (max-width: 1200px) {
+            .board {
+                grid-template-columns: 60px 60px 60px 60px 60px 60px 60px;
+                grid-template-rows: 60px 60px 60px 60px 60px 60px 60px;
+                gap: 2px;
+                padding: 10px;
+            }
+            
+            .dot {
+                width: 30px;
+                height: 30px;
+                font-size: 10px;
+            }
+            
+            .left-panel {
+                width: 120px;
+            }
+            
+            .right-panel {
+                width: 220px;
+            }
+        }
+        
+        @media (max-width: 992px) {
+            /* Tablet: Stack layout vertically */
+            .game-container {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+                position: relative;
+            }
+            
+            .left-panel {
+                width: 100%;
+                height: auto;
+                flex-direction: row;
+                justify-content: flex-start;
+                position: absolute;
+                top: -70px;
+                left: 0;
+                z-index: 25;
+            }
+            
+            .logo-box {
+                width: 60px;
+                height: 60px;
+                padding: 5px;
+            }
+            
+            .center-panel {
+                flex: 1;
+                width: 100%;
+                order: 1;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                overflow: visible;
+                padding-bottom: 105px;
+                margin-top: 0;
+            }
+            
+            .board-section {
+                flex: 1;
+                min-height: 0;
+                overflow: auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-top: 90px;
+            }
+            
+            .players-top, .players-bottom {
+                height: auto;
+                gap: 10px;
+            }
+            
+            .players-top {
+                position: absolute;
+                top: 40px;
+                left: 10px;
+                right: 10px;
+                z-index: 20;
+            }
+            
+            .player-box {
+                width: auto;
+                flex: 1;
+                padding: 8px;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+                z-index: 25;
+            }
+            
+            .player-score { font-size: 1em; }
+            .player-name { font-size: 0.85em; margin-bottom: 3px; }
+            
+            .board {
+                grid-template-columns: 50px 50px 50px 50px 50px 50px 50px;
+                grid-template-rows: 50px 50px 50px 50px 50px 50px 50px;
+                gap: 2px;
+                padding: 8px;
+            }
+            
+            .dot {
+                width: 25px;
+                height: 25px;
+                font-size: 8px;
+            }
+            
+            .right-panel {
+                width: 100%;
+                height: auto;
+                max-height: 180px;
+                flex-direction: row;
+                border: 2px solid #6c5ce7;
+            }
+            
+            /* Right logo on tablet */
+            .game-container::after {
+                content: '';
+                position: absolute;
+                top: -70px;
+                right: 0;
+                width: 60px;
+                height: 60px;
+                background: url('Twenty Dots Logo.png') center/contain no-repeat;
+                border: 2px solid #ffd700;
+                border-radius: 4px;
+                z-index: 25;
+            }
+            
+            .hand-title {
+                min-width: 100px;
+            }
+            
+            .cards-container {
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                gap: 5px;
+                margin-bottom: 0;
+            }
+            
+            .card {
+                min-width: 80px;
+                min-height: 50px;
+                padding: 6px;
+                font-size: 0.85em;
+                flex-shrink: 0;
+            }
+            
+            .controls {
+                flex-direction: column;
+                gap: 5px;
+                min-width: 120px;
+            }
+            
+            button {
+                padding: 8px;
+                font-size: 0.8em;
+            }
+            
+            .header {
+                min-height: 30px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                padding: 2px;
+            }
+            
+            .header h1 { 
+                font-size: 0.85em;
+                text-align: center;
+                margin: 0;
+            }
+            
+            .turn-info {
+                font-size: 0.65em;
+                text-align: center;
+                margin: 0;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            /* Mobile: Optimize for smaller screens */
+            .header {
+                min-height: 50px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            .header h1 { 
+                font-size: 0.6em;
+                text-align: center;
+                margin: 2px 0;
+            }
+            
+            .turn-info {
+                font-size: 0.55em;
+                text-align: center;
+                margin: 2px 0;
+            }
+            
+            /* Logo positioning on mobile header - LEFT */
+            .left-panel {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: auto !important;
+                width: 40px !important;
+                height: 40px !important;
+                order: -1;
+                flex-shrink: 0;
+                z-index: 1000;
+                background: rgba(26, 26, 46, 0.95);
+            }
+            
+            /* Logo positioning on mobile header - RIGHT (using turn-info wrapper hack) */
+            .header::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 40px;
+                height: 40px;
+                background: url('Twenty Dots Logo.png') center/contain no-repeat;
+                border: 2px solid #ffd700;
+            }
+            
+            .main-container {
+                flex-direction: column;
+                height: 100vh;
+                overflow: hidden;
+            }
+            
+            .game-container {
+                gap: 3px;
+                padding: 3px;
+                flex-direction: column;
+                height: 100%;
+                flex: 1;
+                overflow: hidden;
+            }
+            
+            .players-top, .players-bottom {
+                height: 50px;
+                gap: 3px;
+                flex-wrap: nowrap;
+                order: 1;
+                flex-shrink: 0;
+            }
+            
+            .players-top {
+                position: absolute;
+                top: 15px;
+                left: 50px;
+                right: 50px;
+                width: auto;
+                justify-content: space-between;
+                z-index: 5;
+            }
+            
+            .players-bottom {
+                position: absolute;
+                bottom: 260px;
+                left: 50px;
+                right: 50px;
+                width: auto;
+                justify-content: space-between;
+                z-index: 5;
+            }
+            
+            .left-panel {
+                position: absolute;
+                top: 0;
+                right: 0;
+                left: auto;
+                width: 45px;
+                height: 45px;
+                order: -1;
+                flex-shrink: 0;
+            }
+            
+            .logo-box {
+                width: 45px;
+                height: 45px;
+                padding: 2px;
+                border: 2px solid #ffd700;
+            }
+            
+            .player-box {
+                flex: 1;
+                min-width: 20%;
+                padding: 2px;
+                font-size: 0.55em;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+                max-width: 90px;
+            }
+            
+            .player-name { font-size: 0.55em; font-weight: bold; }
+            .player-score { font-size: 0.65em; margin: 1px 0; }
+            .player-score-dots { gap: 1px; margin: 1px 0; }
+            .score-dot { width: 8px; height: 8px; font-size: 0.4em; }
+            .player-hand { font-size: 0.5em; }
+            .player-discard { font-size: 0.45em; margin-top: 2px; }
+            .discard-card { width: 10px; height: 7px; font-size: 0.25em; flex-shrink: 0; }
+            .discard-cards { gap: 3px; display: flex; flex-wrap: nowrap; overflow: visible; }
+            
+            .board {
+                grid-template-columns: 38px 38px 38px 38px 38px 38px 38px;
+                grid-template-rows: 38px 38px 38px 38px 38px 38px 38px;
+                gap: 1px;
+                padding: 3px;
+                margin-top: -70px;
+            }
+            
+            .dot {
+                width: 19px;
+                height: 19px;
+                font-size: 6px;
+            }
+            
+            .right-panel {
+                order: 10;
+                width: 100%;
+                height: auto;
+                max-height: auto;
+                gap: 2px;
+                padding: 2px;
+                flex-direction: column;
+                border-left: none;
+                border-top: 2px solid #6c5ce7;
+                margin-top: 0;
+                flex-shrink: 0;
+                background: rgba(26, 26, 46, 0.95);
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                height: 105px;
+                z-index: 20;
+            }
+            
+            .hand-title { 
+                font-size: 0.75em; 
+                margin-bottom: 2px;
+                display: none;
+            }
+            
+            .cards-container {
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                gap: 2px;
+                margin-bottom: 2px;
+                padding: 2px 0;
+                max-height: 50px;
+            }
+            
+            .card {
+                min-width: calc((100vw - 20px) / 5.2);
+                max-width: calc((100vw - 20px) / 5.2);
+                min-height: 45px;
+                padding: 2px;
+                font-size: 0.6em;
+                flex-shrink: 0;
+            }
+            
+            .controls {
+                display: flex !important;
+                flex-direction: row !important;
+                gap: 2px;
+            }
+            
+            .controls button {
+                flex: 1;
+                padding: 4px 2px;
+                font-size: 0.6em;
+                white-space: nowrap;
+                min-height: auto;
+            }
+            
+            .join-form {
+                width: 90%;
+                max-width: 400px;
+                padding: 20px;
+                border-radius: 10px;
+            }
+            
+            .mode-buttons {
+                flex-direction: column;
+                gap: 20px;
+                margin: 20px 0;
+            }
+            
+            .mode-button {
+                width: 90%;
+                max-width: 250px;
+                padding: 20px;
+            }
+            
+            .mode-icon { font-size: 40px; }
+            .mode-title { font-size: 1.2em; }
+            .mode-description { font-size: 0.85em; }
+        }
+        
+        @media (max-width: 480px) {
+            /* Small phone screens */
+            .header {
+                padding: 5px;
+                position: relative;
+                min-height: 65px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            .header h1 { 
+                display: block !important;
+                font-size: 0.7em;
+                text-align: center;
+                color: #ffd700;
+                font-weight: bold;
+                margin: 2px 0;
+            }
+            
+            .turn-info {
+                font-size: 0.65em;
+                text-align: center;
+                margin: 2px 0;
+            }
+            
+            /* Logo positioning on 480px header - LEFT */
+            .left-panel {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: auto !important;
+                height: 35px;
+                width: 35px;
+                order: -1;
+                flex-direction: row;
+                justify-content: center;
+                flex-shrink: 0;
+                z-index: 1000;
+                background: rgba(26, 26, 46, 0.95);
+            }
+            
+            .logo-box {
+                width: 35px;
+                height: 35px;
+                padding: 2px;
+                border: 2px solid #ffd700;
+            }
+            
+            /* Logo positioning on 480px header - RIGHT */
+            .header::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 35px;
+                height: 35px;
+                background: url('Twenty Dots Logo.png') center/contain no-repeat;
+                border: 2px solid #ffd700;
+            }
+            
+            .turn-info { font-size: 0.8em; margin: 2px 0; }
+            
+            .main-container {
+                flex-direction: column;
+                height: 100vh;
+                overflow: hidden;
+            }
+            
+            .game-container {
+                gap: 2px;
+                padding: 2px;
+                flex-direction: column;
+                height: 100%;
+                overflow: hidden;
+            }
+            
+            .left-panel {
+                position: absolute;
+                top: 0;
+                right: 0;
+                left: auto;
+                height: 40px;
+                width: 40px;
+                order: -1;
+                flex-direction: row;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            
+            .logo-box {
+                width: 40px;
+                height: 40px;
+                padding: 2px;
+                border: 2px solid #ffd700;
+            }
+            
+            .center-panel {
+                order: 1;
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                overflow: hidden;
+                padding-bottom: 150px;
+            }
+            
+            .players-top, .players-bottom {
+                height: 45px;
+                gap: 2px;
+                order: 1;
+                flex-wrap: nowrap;
+                flex-shrink: 0;
+            }
+            
+            .players-top {
+                position: absolute;
+                top: 10px;
+                left: 40px;
+                right: 45px;
+                width: auto;
+                justify-content: space-between;
+                z-index: 5;
+            }
+            
+            .players-bottom {
+                position: absolute;
+                bottom: 230px;
+                left: 40px;
+                right: 45px;
+                width: auto;
+                justify-content: space-between;
+                z-index: 5;
+            }
+            
+            .player-box {
+                flex: 1;
+                min-width: 25%;
+                padding: 2px;
+                font-size: 0.6em;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+            }
+            
+            .player-name { font-size: 0.55em; }
+            .player-score { font-size: 0.65em; margin: 1px 0; }
+            .player-hand { font-size: 0.55em; }
+            .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
+            
+            .board {
+                grid-template-columns: 35px 35px 35px 35px 35px 35px 35px;
+                grid-template-rows: 35px 35px 35px 35px 35px 35px 35px;
+                gap: 1px;
+                padding: 2px;
+            }
+            
+            .dot {
+                width: 18px;
+                height: 18px;
+                font-size: 6px;
+            }
+            
+            .board-section {
+                flex: 1;
+                min-height: 0;
+                overflow: auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .right-panel {
+                order: 10;
+                width: 100%;
+                height: auto;
+                max-height: auto;
+                gap: 2px;
+                padding: 3px;
+                flex-direction: column;
+                border-left: none;
+                border-top: 2px solid #6c5ce7;
+                margin-top: 0;
+                flex-shrink: 0;
+                background: rgba(26, 26, 46, 0.95);
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: 90px;
+                z-index: 100;
+            }
+            
+            .hand-title { 
+                font-size: 0.65em; 
+                margin-bottom: 2px;
+                display: none;
+            }
+            
+            .cards-container {
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                gap: 2px;
+                margin-bottom: 3px;
+                padding: 2px 0;
+                max-height: 38px;
+                flex-shrink: 0;
+            }
+            
+            .card {
+                min-width: calc((100vw - 15px) / 5.2);
+                max-width: calc((100vw - 15px) / 5.2);
+                min-height: 32px;
+                padding: 2px;
+                font-size: 0.5em;
+                flex-shrink: 0;
+            }
+            
+            .controls {
+                display: flex !important;
+                flex-direction: row !important;
+                gap: 2px;
+                flex-shrink: 0;
+                padding-bottom: 2px;
+                margin-top: auto;
+            }
+            
+            .controls button {
+                flex: 1;
+                padding: 5px 2px;
+                font-size: 0.55em;
+                white-space: nowrap;
+                min-height: 26px;
+                border-radius: 3px;
+            }
+            
+            .join-form {
+                width: 95%;
+                max-width: 100%;
+                padding: 15px;
+                margin: 10px;
+            }
+            
+            .mode-buttons {
+                width: 100%;
+            }
+            
+            .mode-button {
+                width: 100%;
+                max-width: 100%;
+                padding: 15px;
+            }
+            
+            .mode-icon { font-size: 30px; margin-bottom: 10px; }
+            .mode-title { font-size: 1em; }
+            .mode-description { font-size: 0.8em; }
+        }
+        
+        /* Touch-friendly adjustments */
+        @media (hover: none) and (pointer: coarse) {
+            .card {
+                min-height: 60px;
+                padding: 10px;
+            }
+            
+            button {
+                padding: 12px;
+                min-height: 44px;
+            }
+            
+            .cell {
+                min-width: 50px;
+                min-height: 50px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mode Selection Screen -->
+    <div id="modeScreen">
+        <div class="mode-selection">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="Twenty Dots Logo.png" alt="Twenty Dots Logo" style="max-width: 150px; max-height: 150px; object-fit: contain;">
+            </div>
+            <h2 style="color: #ffd700; font-size: 2em; margin-bottom: 40px;">Choose Game Mode</h2>
+            <div class="mode-buttons">
+                <div class="mode-button" onclick="showJoinScreen()">
+                    <div class="mode-icon">🌐</div>
+                    <div class="mode-title">Multiplayer</div>
+                    <div class="mode-description">Play online with friends<br>2-4 players</div>
+                </div>
+                <div class="mode-button" onclick="showSinglePlayerScreen()">
+                    <div class="mode-icon">🤖</div>
+                    <div class="mode-title">Single Player</div>
+                    <div class="mode-description">Play against AI<br>2-4 players</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Join Game Screen -->
+    <div id="joinScreen">
+        <div class="join-form">
+            <h2 style="color: #ffd700; margin-bottom: 30px;">Join a Game</h2>
+            <div class="form-group">
+                <label>Game ID</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="gameId" placeholder="e.g., game123" oninput="toggleShareButton()" style="flex: 1;">
+                    <button id="shareButton" onclick="shareGameRoom()" disabled style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; opacity: 0.5; white-space: nowrap;">
+                        📤 Share
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Your Name</label>
+                <input type="text" id="playerName" placeholder="e.g., Brandon">
+            </div>
+            <div class="form-group">
+                <label>Number of Players</label>
+                <select id="playerCount">
+                    <option value="2">2 Players</option>
+                    <option value="3">3 Players</option>
+                    <option value="4">4 Players</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Win Condition (First Player Only)</label>
+                <select id="winCondition">
+                    <option value="twenty_dots" selected>First to 20 Total Dots (Recommended)</option>
+                    <option value="five_colors">First to 5 of Each Color</option>
+                    <option value="five_with_yellow">First to 5 of Each Color + 5 Yellow (Hard)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="powerCardsEnabled" checked style="width: 20px; height: 20px; accent-color: #ffd700;">
+                    <span>⚡ Enable Power Cards (Recommended)</span>
+                </label>
+            </div>
+            <div class="form-group">
+                <button class="btn-join" onclick="joinGame()">🎮 Join Game</button>
+            </div>
+            <div class="form-group" id="rejoinSection" style="display: none;">
+                <button class="btn-join" onclick="rejoinGame()" style="background: #4CAF50;">🔄 Rejoin Last Game</button>
+            </div>
+            <div class="error-message" id="joinError"></div>
+        </div>
+    </div>
+    
+    <!-- Single Player Screen -->
+    <div id="singlePlayerScreen" style="display: none; align-items: center; justify-content: center; min-height: 100vh;">
+        <div class="join-form">
+            <h2 style="color: #ffd700; margin-bottom: 30px;">Single Player Game</h2>
+            <div class="form-group">
+                <label>Your Name</label>
+                <input type="text" id="spPlayerName" placeholder="e.g., Brandon">
+            </div>
+            <div class="form-group">
+                <label>Number of Players (including you)</label>
+                <select id="spPlayerCount">
+                    <option value="2">2 Players (1 AI)</option>
+                    <option value="3">3 Players (2 AI)</option>
+                    <option value="4">4 Players (3 AI)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>AI Difficulty</label>
+                <select id="spDifficulty">
+                    <option value="easy">Easy</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Win Condition</label>
+                <select id="spWinCondition">
+                    <option value="twenty_dots">First to 20 Total Dots</option>
+                    <option value="five_colors">First to 5 of Each Color</option>
+                    <option value="five_with_yellow">First to 5 of Each Color + 5 Yellow</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="spPowerCardsEnabled" checked style="width: 20px; height: 20px; accent-color: #ffd700;">
+                    <span>⚡ Enable Power Cards (Recommended)</span>
+                </label>
+            </div>
+            <div class="form-group">
+                <button class="btn-join" onclick="startSinglePlayer()">🤖 Start Game</button>
+            </div>
+            <div class="error-message" id="spError"></div>
+        </div>
+    </div>
+    
+    <!-- Main Game Screen -->
+    <div id="gameScreen" class="main-container">
+        <div style="width: 100%; height: 100%; display: flex; flex-direction: column;">
+            <!-- Header -->
+            <div class="header">
+                <h1>Twenty Dots - Online Multiplayer</h1>
+                <div class="turn-info" id="turnInfo">Waiting for game to start...</div>
+            </div>
+            
+            <!-- Game Content -->
+            <div class="game-container">
+                <!-- Left: Logo -->
+                <div class="left-panel">
+                    <div class="logo-box">
+                        <img src="Twenty Dots Logo.png" alt="Twenty Dots Logo">
+                    </div>
+                </div>
+                
+                <!-- Center: Board and Players -->
+                <div class="center-panel">
+                    <!-- Top Players -->
+                    <div class="players-top">
+                        <div id="player0" class="player-box"></div>
+                        <div style="flex: 1;"></div>
+                        <div id="player1" class="player-box"></div>
+                    </div>
+                    
+                    <!-- Board -->
+                    <div class="board-section">
+                        <div class="board" id="gameBoard"></div>
+                    </div>
+                    
+                    <!-- Bottom Players -->
+                    <div class="players-bottom">
+                        <div id="player2" class="player-box"></div>
+                        <div style="flex: 1;"></div>
+                        <div id="player3" class="player-box"></div>
+                    </div>
+                </div>
+                
+                <!-- Right: Hand and Controls -->
+                <div class="right-panel">
+                    <div class="hand-title">Your Hand</div>
+                    <div class="cards-container" id="handCards"></div>
+                    <div class="controls">
+                        <button class="btn-play" id="playBtn" onclick="playCards()" disabled>▶️ Play Cards</button>
+                        <button class="btn-roll" id="rollBtn" onclick="rollDice()" disabled>🎲 Roll Wild Dice</button>
+                        <button class="btn-clear" onclick="clearSelection()">🗑️ Clear Selection</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let gameId = '';
+        let playerName = '';
+        let myHand = [];
+        let selectedCards = [];
+        let currentGameState = null;
+
+        // Check for saved game on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            // Check for game ID in URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlGameId = urlParams.get('gameId');
+            if (urlGameId) {
+                document.getElementById('gameId').value = urlGameId;
+                console.log('Loaded game ID from URL:', urlGameId);
+            }
+            
+            const savedGame = localStorage.getItem('currentGame');
+            if (savedGame) {
+                try {
+                    const gameInfo = JSON.parse(savedGame);
+                    // Check if game is less than 24 hours old
+                    const ageHours = (Date.now() - gameInfo.timestamp) / (1000 * 60 * 60);
+                    if (ageHours < 24) {
+                        document.getElementById('rejoinSection').style.display = 'block';
+                    } else {
+                        localStorage.removeItem('currentGame');
+                    }
+                } catch (e) {
+                    localStorage.removeItem('currentGame');
+                }
+            }
+        });
+
+        function showJoinScreen() {
+            document.getElementById('modeScreen').style.display = 'none';
+            document.getElementById('joinScreen').style.display = 'flex';
+        }
+
+        function showSinglePlayerScreen() {
+            document.getElementById('modeScreen').style.display = 'none';
+            document.getElementById('singlePlayerScreen').style.display = 'flex';
+        }
+
+        function showSinglePlayerMessage() {
+            alert('🤖 Single Player Mode\n\nThe web version currently supports multiplayer only.\n\nFor single-player with AI opponents, please download and run the desktop version.');
+        }
+
+        function joinGame() {
+            gameId = document.getElementById('gameId').value.trim();
+            playerName = document.getElementById('playerName').value.trim();
+            const gameMode = document.getElementById('winCondition').value || 'twenty_dots';
+            const playerCount = parseInt(document.getElementById('playerCount').value);
+            const powerCardsEnabled = document.getElementById('powerCardsEnabled').checked;
+            
+            if (!gameId || !playerName) {
+                showError('joinError', 'Please enter Game ID and your name');
+                return;
+            }
+            
+            const serverUrl = window.location.origin;
+            console.log('Connecting to:', serverUrl);
+            socket = io(serverUrl);
+            
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                socket.emit('join_game', {
+                    game_id: gameId,
+                    player_name: playerName,
+                    game_mode: gameMode,
+                    player_count: playerCount,
+                    power_cards: powerCardsEnabled
+                });
+            });
+            
+            setupSocketHandlers();
+        }
+
+        function rejoinGame() {
+            const savedGame = localStorage.getItem('currentGame');
+            if (!savedGame) {
+                showError('joinError', 'No saved game found');
+                return;
+            }
+            
+            const gameInfo = JSON.parse(savedGame);
+            gameId = gameInfo.gameId;
+            playerName = gameInfo.playerName;
+            
+            // Populate the form fields
+            document.getElementById('gameId').value = gameId;
+            document.getElementById('playerName').value = playerName;
+            
+            const serverUrl = window.location.origin;
+            console.log('Rejoining game:', gameId);
+            socket = io(serverUrl);
+            
+            socket.on('connect', () => {
+                console.log('Connected to server, rejoining...');
+                socket.emit('join_game', {
+                    game_id: gameId,
+                    player_name: playerName,
+                    game_mode: 'twenty_dots',  // Default, server will use existing game mode
+                    player_count: 4  // Default, server will use existing player count
+                });
+            });
+            
+            setupSocketHandlers();
+        }
+
+        function startSinglePlayer() {
+            playerName = document.getElementById('spPlayerName').value || 'Player';
+            const numPlayers = parseInt(document.getElementById('spPlayerCount').value);
+            const difficulty = document.getElementById('spDifficulty').value;
+            const gameMode = document.getElementById('spWinCondition').value;
+            const powerCardsEnabled = document.getElementById('spPowerCardsEnabled').checked;
+            
+            if (!playerName) {
+                showError('spError', 'Please enter your name');
+                return;
+            }
+            
+            const serverUrl = window.location.origin;
+            console.log('Connecting to:', serverUrl);
+            socket = io(serverUrl);
+            
+            // Setup handlers BEFORE connecting
+            setupSocketHandlers();
+            
+            socket.on('connect', () => {
+                console.log('Connected to server for single-player');
+                socket.emit('start_single_player', {
+                    player_name: playerName,
+                    num_players: numPlayers,
+                    difficulty: difficulty,
+                    game_mode: gameMode,
+                    power_cards: powerCardsEnabled
+                });
+            });
+        }
+
+        function setupSocketHandlers() {
+            socket.on('join_success', () => {
+                document.getElementById('joinScreen').style.display = 'none';
+                document.getElementById('singlePlayerScreen').style.display = 'none';
+                document.getElementById('gameScreen').classList.add('active');
+            });
+            
+            socket.on('game_started', (gameState) => {
+                console.log('Game started!', gameState);
+                // Capture game_id from the game state (for single-player and multiplayer)
+                if (gameState.game_id) {
+                    gameId = gameState.game_id;
+                    console.log('Set gameId to:', gameId);
+                    // Save game info to localStorage for rejoin
+                    localStorage.setItem('currentGame', JSON.stringify({
+                        gameId: gameId,
+                        playerName: playerName,
+                        timestamp: Date.now()
+                    }));
+                }
+                // Hide both forms and show game screen
+                document.getElementById('joinScreen').style.display = 'none';
+                document.getElementById('singlePlayerScreen').style.display = 'none';
+                document.getElementById('gameScreen').classList.add('active');
+                updateGameState(gameState);
+            });
+            
+            socket.on('game_updated', (gameState) => {
+                console.log('=== GAME_UPDATED ===');
+                console.log('Board:', gameState.board);
+                console.log('Current turn:', gameState.current_turn);
+                console.log('Can roll dice:', gameState.can_roll_dice);
+                console.log('Yellow dot position:', gameState.yellow_dot_position);
+                updateGameState(gameState);
+            });
+            
+            socket.on('your_hand', (data) => {
+                console.log('=== YOUR_HAND ===');
+                console.log('Received', data.hand.length, 'cards');
+                console.log('Hand:', data.hand);
+                myHand = data.hand;
+                updateHand();
+            });
+            
+            socket.on('error', (data) => {
+                console.log('Error:', data.message);
+            });
+            
+            socket.on('game_over', (data) => {
+                console.log('GAME OVER!', data);
+                const winner = data.winner;
+                const condition = data.condition;
+                
+                let conditionText = '';
+                if (condition === 'twenty_dots') {
+                    conditionText = 'First to reach 20 total dots!';
+                } else if (condition === 'five_colors') {
+                    conditionText = 'First to collect 5 of each color!';
+                } else if (condition === 'five_with_yellow') {
+                    conditionText = 'First to collect 5 of each color including yellow!';
+                } else if (condition === 'deck_empty') {
+                    conditionText = 'Deck ran out - most dots wins!';
+                }
+                
+                // Track wins/losses in localStorage
+                const stats = JSON.parse(localStorage.getItem('playerStats') || '{}');
+                if (!stats[playerName]) stats[playerName] = { wins: 0, losses: 0 };
+                if (winner === playerName) {
+                    stats[playerName].wins += 1;
+                } else {
+                    stats[playerName].losses += 1;
+                }
+                localStorage.setItem('playerStats', JSON.stringify(stats));
+                
+                // Clear saved game on game over
+                localStorage.removeItem('currentGame');
+                
+                setTimeout(() => {
+                    const playAgain = confirm(`🎉 ${winner} WINS! 🎉\n\n${conditionText}\n\nClick OK to play again, or Cancel to go back to lobby`);
+                    if (playAgain) {
+                        location.reload();
+                    } else {
+                        location.href = window.location.origin;
+                    }
+                }, 500);
+            });
+        }
+
+
+        function updateGameState(state) {
+            currentGameState = state;
+            updateBoard(state.board, state.yellow_dot_position);
+            updatePlayers(state.players, state.current_turn);
+            updateTurnInfo(state.current_turn);
+            
+            const isMyTurn = state.current_turn === playerName;
+            const canRoll = state.can_roll_dice || false;
+            
+            // Show/hide entire hand section based on whose turn it is
+            // Use visibility instead of display to preserve layout and positioning
+            const handSection = document.querySelector('.right-panel');
+            const controlsSection = document.querySelector('.controls');
+            if (isMyTurn) {
+                handSection.style.visibility = 'visible';
+                handSection.style.pointerEvents = 'auto';
+                controlsSection.style.visibility = 'visible';
+                controlsSection.style.pointerEvents = 'auto';
+            } else {
+                handSection.style.visibility = 'hidden';
+                handSection.style.pointerEvents = 'none';
+                controlsSection.style.visibility = 'hidden';
+                controlsSection.style.pointerEvents = 'none';
+            }
+            
+            // Roll Dice button: only visible when it's your turn, enabled only when can_roll_dice is true
+            document.getElementById('rollBtn').style.display = isMyTurn ? 'block' : 'none';
+            document.getElementById('rollBtn').disabled = !canRoll;
+            
+            // Play Cards button: only enabled if you have cards selected AND you've already rolled (canRoll is false)
+            document.getElementById('playBtn').style.display = isMyTurn ? 'block' : 'none';
+            document.getElementById('playBtn').disabled = selectedCards.length === 0 || canRoll;
+            
+            // Disable card selection if player must roll first
+            const cardDivs = document.querySelectorAll('.card');
+            cardDivs.forEach(card => {
+                if (!isMyTurn || canRoll) {
+                    card.style.pointerEvents = 'none';
+                    card.style.opacity = '0.5';
+                } else {
+                    card.style.pointerEvents = 'auto';
+                    card.style.opacity = '1';
+                }
+            });
+        }
+
+        function updateBoard(board, yellowDotPosition) {
+            console.log('UPDATE_BOARD: Rendering board with', board.length, 'rows');
+            let dotCount = 0;
+            for (let r = 0; r < board.length; r++) {
+                for (let c = 0; c < board[r].length; c++) {
+                    if (board[r][c]) dotCount++;
+                }
+            }
+            console.log('UPDATE_BOARD: Total dots on board:', dotCount);
+            const boardDiv = document.getElementById('gameBoard');
+            boardDiv.innerHTML = '';
+            
+            const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
+            const cols = ['1', '2', '3', '4', '5', '6'];
+            
+            // Empty corner
+            boardDiv.appendChild(document.createElement('div'));
+            
+            // Column headers
+            cols.forEach(col => {
+                const label = document.createElement('div');
+                label.className = 'board-label';
+                label.textContent = col;
+                boardDiv.appendChild(label);
+            });
+            
+            // Rows with cells
+            for (let r = 0; r < 6; r++) {
+                const label = document.createElement('div');
+                label.className = 'board-label';
+                label.textContent = rows[r];
+                boardDiv.appendChild(label);
+                
+                for (let c = 0; c < 6; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                if (board[r] && board[r][c]) {
+                    const dot = document.createElement('div');
+                    dot.className = `dot ${board[r][c].color}`;
+                    cell.appendChild(dot);
+                }                    boardDiv.appendChild(cell);
+                }
+            }
+        }
+
+        function updatePlayers(players, currentTurn) {
+            const playerArray = Object.entries(players);
+            const playerIds = ['player0', 'player1', 'player2', 'player3'];
+            
+            playerIds.forEach((playerId, idx) => {
+                const playerBox = document.getElementById(playerId);
+                if (!playerBox) return;
+                playerBox.innerHTML = '';
+                playerBox.classList.remove('active', 'me');
+                
+                if (idx < playerArray.length) {
+                    const [name, data] = playerArray[idx];
+                    if (name === currentTurn) playerBox.classList.add('active');
+                    if (name === playerName) playerBox.classList.add('me');
+                    
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'player-name';
+                    nameDiv.textContent = name + (name === playerName ? ' (You)' : '');
+                    playerBox.appendChild(nameDiv);
+                    
+                    const scoreDiv = document.createElement('div');
+                    scoreDiv.className = 'player-score';
+                    scoreDiv.textContent = `${data.total_dots} dots`;
+                    playerBox.appendChild(scoreDiv);
+                    
+                    const colorsDiv = document.createElement('div');
+                    colorsDiv.className = 'player-score-dots';
+                    ['red', 'blue', 'purple', 'green'].forEach(color => {
+                        const scoreDot = document.createElement('div');
+                        scoreDot.className = `score-dot dot ${color}`;
+                        scoreDot.textContent = data.score ? (data.score[color] || 0) : 0;
+                        colorsDiv.appendChild(scoreDot);
+                    });
+                    
+                    // Add yellow dot display if game mode is five_with_yellow
+                    if (currentGameState && currentGameState.game_mode === 'five_with_yellow') {
+                        const yellowDot = document.createElement('div');
+                        yellowDot.className = 'score-dot dot yellow';
+                        yellowDot.textContent = data.yellow_dots || 0;
+                        colorsDiv.appendChild(yellowDot);
+                    }
+                    
+                    playerBox.appendChild(colorsDiv);
+                    
+                    const handDiv = document.createElement('div');
+                    handDiv.className = 'player-hand';
+                    handDiv.textContent = `Hand: ${data.hand_size}/5`;
+                    playerBox.appendChild(handDiv);
+                    
+                    // Add discard pile
+                    if (data.discard_pile && data.discard_pile.length > 0) {
+                        const discardLabel = document.createElement('div');
+                        discardLabel.className = 'player-discard';
+                        discardLabel.textContent = `Discard: ${data.discard_pile.length}`;
+                        playerBox.appendChild(discardLabel);
+                        
+                        const discardContainer = document.createElement('div');
+                        discardContainer.className = 'discard-cards';
+                        // Show last 2 cards as card boxes
+                        const lastCards = data.discard_pile.slice(-2);
+                        lastCards.forEach(card => {
+                            const cardDiv = document.createElement('div');
+                            cardDiv.className = `card ${card.color}`;
+                            cardDiv.style.width = '55px';
+                            cardDiv.style.minHeight = '35px';
+                            cardDiv.style.fontSize = '0.7em';
+                            cardDiv.style.padding = '3px';
+                            cardDiv.style.flexShrink = '0';
+                            cardDiv.style.flexBasis = 'auto';
+                            cardDiv.innerHTML = `<div>${card.location}</div><div style="font-size: 0.7em; opacity: 0.8;">${card.color.toUpperCase()}</div>`;
+                            discardContainer.appendChild(cardDiv);
+                        });
+                        playerBox.appendChild(discardContainer);
+                    }
+                    
+                    // Add wins/losses stats
+                    const stats = JSON.parse(localStorage.getItem('playerStats') || '{}');
+                    const playerStats = stats[name] || { wins: 0, losses: 0 };
+                    const statsDiv = document.createElement('div');
+                    statsDiv.style.marginTop = '8px';
+                    statsDiv.style.fontSize = '0.85em';
+                    statsDiv.style.color = '#4CAF50';
+                    statsDiv.style.textAlign = 'center';
+                    statsDiv.innerHTML = `<div style="font-weight: bold;">Wins: ${playerStats.wins} | Loss: ${playerStats.losses}</div>`;
+                    playerBox.appendChild(statsDiv);
+                }
+            });
+        }
+
+        function updateTurnInfo(currentTurn) {
+            const turnDiv = document.getElementById('turnInfo');
+            if (currentTurn === playerName) {
+                turnDiv.textContent = '⭐ YOUR TURN!';
+                turnDiv.style.color = '#4CAF50';
+            } else {
+                turnDiv.textContent = `⏳ ${currentTurn}'s Turn`;
+                turnDiv.style.color = '#ff6b6b';
+            }
+        }
+
+        function updateHand() {
+            const handDiv = document.getElementById('handCards');
+            handDiv.innerHTML = '';
+            
+            myHand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `card ${card.color}`;
+                
+                // Check if it's a power card
+                if (card.power) {
+                    // Power card styling with golden border and special display
+                    cardDiv.style.border = '3px solid #FFD700';
+                    cardDiv.style.boxShadow = '0 0 10px rgba(255,215,0,0.5)';
+                    
+                    // Get power icon
+                    const powerIcons = {
+                        'swap': '↔️',
+                        'remove': '💣',
+                        'wild_place': '⭐',
+                        'double_score': '×2',
+                        'card_swap': '🔄',
+                        'landmine': '💥'
+                    };
+                    const powerIcon = powerIcons[card.power] || '⚡';
+                    
+                    // Power card display
+                    cardDiv.innerHTML = `
+                        <div class="card-location" style="color: #FFD700;">⚡ POWER</div>
+                        <div style="font-size: 1.5em; margin: 2px 0;">${powerIcon}</div>
+                        <div class="card-color" style="color: #FFD700; font-size: 0.7em;">${card.power_description || card.power.replace('_', ' ').toUpperCase()}</div>
+                    `;
+                } else {
+                    // Regular card display
+                    cardDiv.innerHTML = `<div class="card-location">${card.location[0]}${card.location[1]}</div><div class="card-color">${card.color.toUpperCase()}</div>`;
+                }
+                
+                cardDiv.onclick = () => toggleCardSelection(index, cardDiv);
+                handDiv.appendChild(cardDiv);
+            });
+        }
+
+        function toggleCardSelection(index, cardDiv) {
+            // Prevent card selection if dice hasn't been rolled yet
+            const canRoll = currentGameState && currentGameState.can_roll_dice;
+            if (canRoll) {
+                console.log('Cannot select cards - must roll dice first');
+                return;
+            }
+            
+            const card = myHand[index];
+            
+            if (selectedCards.includes(index)) {
+                selectedCards.splice(selectedCards.indexOf(index), 1);
+                cardDiv.classList.remove('selected');
+            } else if (selectedCards.length < 2) {
+                // Power cards can only be played alone
+                if (card.power && selectedCards.length > 0) {
+                    alert('⚡ Power cards must be played alone!');
+                    return;
+                }
+                // If a power card is already selected, can't add more cards
+                if (selectedCards.length > 0 && myHand[selectedCards[0]].power) {
+                    alert('⚡ Power cards must be played alone!');
+                    return;
+                }
+                
+                selectedCards.push(index);
+                cardDiv.classList.add('selected');
+            }
+            
+            const isMyTurn = currentGameState && currentGameState.current_turn === playerName;
+            document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0;
+        }
+
+        function playCards() {
+            if (selectedCards.length === 0) return;
+            
+            const cards = selectedCards.map(i => myHand[i]);
+            
+            // Validate power card rules
+            const hasPowerCard = cards.some(c => c.power);
+            if (hasPowerCard && cards.length > 1) {
+                alert('⚡ Power cards must be played alone!');
+                return;
+            }
+            
+            console.log('PLAY_CARDS: Sending cards:', cards);
+            console.log('PLAY_CARDS: Current game state:', currentGameState);
+            socket.emit('play_cards', {
+                game_id: gameId,
+                cards: cards
+            });
+            
+            selectedCards = [];
+            document.querySelectorAll('.card.selected').forEach(card => {
+                card.classList.remove('selected');
+            });
+        }
+
+        function rollDice() {
+            socket.emit('roll_dice', { game_id: gameId });
+        }
+
+        function endTurn() {
+            socket.emit('end_turn', { game_id: gameId });
+            selectedCards = [];
+            document.querySelectorAll('.card.selected').forEach(card => {
+                card.classList.remove('selected');
+            });
+        }
+
+        function clearSelection() {
+            selectedCards = [];
+            document.querySelectorAll('.card.selected').forEach(card => {
+                card.classList.remove('selected');
+            });
+            const isMyTurn = currentGameState && currentGameState.current_turn === playerName;
+            document.getElementById('playBtn').disabled = !isMyTurn || selectedCards.length === 0;
+        }
+
+        function showError(elementId, message) {
+            const errorDiv = document.getElementById(elementId);
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+            setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+
+        function toggleShareButton() {
+            const gameIdInput = document.getElementById('gameId').value.trim();
+            const shareBtn = document.getElementById('shareButton');
+            if (gameIdInput) {
+                shareBtn.disabled = false;
+                shareBtn.style.opacity = '1';
+                shareBtn.style.cursor = 'pointer';
+            } else {
+                shareBtn.disabled = true;
+                shareBtn.style.opacity = '0.5';
+                shareBtn.style.cursor = 'not-allowed';
+            }
+        }
+
+        function shareGameRoom() {
+            const gameIdValue = document.getElementById('gameId').value.trim();
+            if (!gameIdValue) {
+                alert('Please enter a Game ID first');
+                return;
+            }
+            
+            // Create shareable URL with game ID
+            const shareUrl = `${window.location.origin}${window.location.pathname}?gameId=${encodeURIComponent(gameIdValue)}`;
+            const shareText = `Join my Twenty Dots game!\n\nGame ID: ${gameIdValue}\n\nJoin here: ${shareUrl}\n\nJust enter the Game ID and your name to play!`;
+            
+            // Try to copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareText).then(() => {
+                    const btn = document.getElementById('shareButton');
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '✓ Copied!';
+                    btn.style.background = '#2196F3';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.style.background = '#4CAF50';
+                    }, 2000);
+                }).catch(() => {
+                    // Fallback: show alert with info
+                    alert(shareText);
+                });
+            } else {
+                // Fallback for older browsers
+                alert(shareText);
+            }
+        }
+
+        // Start by showing mode selection
+        document.getElementById('modeScreen').style.display = 'flex';
+    </script>
+</body>
+</html>
