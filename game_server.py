@@ -1437,6 +1437,32 @@ def handle_swap_dots(data):
     game_session.game.grid[row2][col2] = dot1
     print(f"[SWAP_DOTS] {player_name} swapped {dot1.color} at ({row1},{col1}) with {dot2.color} at ({row2},{col2})")
     
+    # Check for matches at BOTH swapped positions
+    matches_found = []
+    
+    # Check first position (now has dot2)
+    row_letter1 = game_session.game.rows[row1]
+    col_str1 = game_session.game.columns[col1]
+    match1, color1 = game_session.game.check_line_match(row_letter1, col_str1, dot2.color)
+    if match1:
+        print(f"[SWAP_DOTS] Match found at position 1: {len(match1)} dots of {color1}")
+        game_session.game.collect_dots(match1, player_name, color1)
+        matches_found.extend(match1)
+    
+    # Check second position (now has dot1)
+    row_letter2 = game_session.game.rows[row2]
+    col_str2 = game_session.game.columns[col2]
+    match2, color2 = game_session.game.check_line_match(row_letter2, col_str2, dot1.color)
+    if match2:
+        # Avoid double-counting dots that might be in both matches
+        new_matches = [pos for pos in match2 if pos not in matches_found]
+        if new_matches or match2:
+            print(f"[SWAP_DOTS] Match found at position 2: {len(match2)} dots of {color2}")
+            # Only collect dots that weren't already collected
+            remaining_dots = [(c, r) for c, r in match2 if game_session.game.grid[r][c] is not None]
+            if remaining_dots:
+                game_session.game.collect_dots(remaining_dots, player_name, color2)
+    
     # Clear pending swap
     del game_session.pending_swap[player_name]
     
