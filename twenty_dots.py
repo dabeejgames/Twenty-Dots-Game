@@ -374,8 +374,6 @@ class TwentyDots:
         col_idx = self.columns.index(col)
         all_matches = []
         
-        print(f"DEBUG check_line_match: Checking {row}{col} ({row_idx},{col_idx}) color={color}")
-        
         # Directions: horizontal, vertical, diagonal-down, diagonal-up  
         # Format is (dx, dy) where dx is column change, dy is row change
         directions = [
@@ -398,11 +396,8 @@ class TwentyDots:
                         if dot and dot.color != 'yellow':
                             adjacent_colors.add(dot.color)
             
-            print(f"DEBUG: Yellow placed, found adjacent colors: {adjacent_colors}")
-            
             # If no adjacent colors, no matches possible
             if not adjacent_colors:
-                print(f"DEBUG: No adjacent colors for yellow, no matches possible")
                 return [], 'yellow'
             
             # Try each adjacent color as a potential match target
@@ -454,7 +449,6 @@ class TwentyDots:
                 best_color = max(all_color_matches.keys(), key=lambda c: len(all_color_matches[c]))
                 all_matches = all_color_matches[best_color]
                 target_color = best_color
-                print(f"DEBUG: Best match is {best_color} with {len(all_matches)} positions")
                 
                 # Remove duplicates and return
                 seen = set()
@@ -464,15 +458,12 @@ class TwentyDots:
                         seen.add(pos)
                         unique_matches.append(pos)
                 
-                print(f"DEBUG: Returning {len(unique_matches)} unique matched positions: {unique_matches} (target_color={target_color})")
                 return unique_matches, target_color
             else:
-                print(f"DEBUG: No matches found for yellow")
                 return [], 'yellow'
         else:
             # Regular colored dot - simpler logic
             target_color = color
-            print(f"DEBUG: Regular color placed: {target_color}")
             
             # Check all directions and collect all matches for regular colored dots
             for dx, dy in directions:
@@ -480,18 +471,14 @@ class TwentyDots:
                 
                 # Check backwards
                 x, y = col_idx - dx, row_idx - dy
-                print(f"DEBUG: Checking direction ({dx},{dy}) backwards from ({col_idx},{row_idx})")
                 while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
                     dot = self.grid[y][x]
-                    print(f"DEBUG: Checking backwards position ({x},{y}): dot={'None' if dot is None else dot.color}")
                     # Yellow dots act as wildcards
                     if dot and (dot.color == target_color or dot.color == 'yellow'):
-                        print(f"DEBUG: Found {dot.color} at ({x},{y}) backwards")
                         line.append((x, y))
                         x -= dx
                         y -= dy
                     else:
-                        print(f"DEBUG: Breaking backwards check at ({x},{y})")
                         break
                 
                 line.reverse()
@@ -499,22 +486,17 @@ class TwentyDots:
                 
                 # Check forwards
                 x, y = col_idx + dx, row_idx + dy
-                print(f"DEBUG: Checking direction ({dx},{dy}) forwards from ({col_idx},{row_idx})")
                 while 0 <= x < self.grid_size and 0 <= y < self.grid_size:
                     dot = self.grid[y][x]
-                    print(f"DEBUG: Checking forwards position ({x},{y}): dot={'None' if dot is None else dot.color}")
                     # Yellow dots act as wildcards
                     if dot and (dot.color == target_color or dot.color == 'yellow'):
-                        print(f"DEBUG: Found {dot.color} at ({x},{y}) forwards")
                         line.append((x, y))
                         x += dx
                         y += dy
                     else:
-                        print(f"DEBUG: Breaking forwards check at ({x},{y})")
                         break
                 
                 # If we found a line of 3 or more, add it to all matches
-                print(f"DEBUG: Direction ({dx},{dy}) found line of length {len(line)}: {line}")
                 if len(line) >= 3:
                     all_matches.extend(line)
         
@@ -526,7 +508,6 @@ class TwentyDots:
                 seen.add(pos)
                 unique_matches.append(pos)
         
-        print(f"DEBUG: Returning {len(unique_matches)} unique matched positions: {unique_matches} (target_color={target_color})")
         return unique_matches, target_color
     
     def collect_dots(self, positions: list, player_name: str, color: str):
