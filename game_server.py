@@ -200,6 +200,27 @@ class GameSession:
                 self.game.yellow_dot_position = (row_idx, col_idx)
                 print(f"[AI_MOVE] {current_player} rolled {row}{col}, placed yellow dot")
                 
+                # Check for matches created by yellow dot (same as human player)
+                match_result = self.game.check_line_match(row, col, 'yellow')
+                match, match_color = match_result
+                
+                if match:
+                    print(f"[AI_MOVE] MATCH FOUND from yellow placement! Collecting {len(match)} dots of color {match_color}")
+                    self.game.collect_dots(match, current_player, match_color)
+                    # Can roll again if matched
+                    self.game.can_roll_dice = True
+                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                    # Send updated hands to all players
+                    for sid, player_info in self.players.items():
+                        if not player_info['is_ai'] and player_info['connected']:
+                            player_hand = self.get_player_hand(player_info['name'])
+                            socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+                    socketio.sleep(1.0)
+                    # Recursively continue AI move (will roll again)
+                    self.ai_move_in_progress = False
+                    self.execute_ai_move()
+                    return
+                
                 # Broadcast updated game state
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 socketio.sleep(1.0)  # Use socketio.sleep for cooperative threading
