@@ -1301,9 +1301,17 @@ def handle_roll_dice(data):
         if must_advance:
             print(f"[ROLL_DICE] Advancing {player_name}'s turn after rolling")
             game_session.game.must_advance_after_roll[player_name] = False
-            new_player = game_session.game.next_player()
+            game_session.game.next_player()
+            new_player = game_session.game.get_current_player()
+            if new_player not in game_session.game.turn_cards_played:
+                game_session.game.turn_cards_played[new_player] = 0
             game_session.game.turn_cards_played[new_player] = 0
-            game_session.game.can_roll_dice = False
+            game_session.game.can_roll_dice = True  # New player's turn starts with dice roll
+            
+            # Trigger AI move if next player is AI
+            if new_player in game_session.ai_players:
+                print(f"[ROLL_DICE] Next player is AI {new_player}, triggering AI move")
+                socketio.start_background_task(game_session.execute_ai_move)
         else:
             # Normal case - player can now play cards
             game_session.game.can_roll_dice = False
