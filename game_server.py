@@ -1407,6 +1407,61 @@ def handle_pass_turn(data):
         socketio.start_background_task(game_session.execute_ai_move)
 
 
+@socketio.on('cancel_power_card')
+def handle_cancel_power_card(data):
+    """Handle canceling a power card - refund the card to player's hand"""
+    game_id = data.get('game_id')
+    
+    if game_id not in games:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    game_session = games[game_id]
+    player_name = game_session.players.get(request.sid, {}).get('name')
+    
+    if not player_name:
+        emit('error', {'message': 'Player not found'})
+        return
+    
+    print(f"[CANCEL_POWER] {player_name} canceling power card")
+    
+    # Find the last power card in discard pile and return it to hand
+    if player_name in game_session.discard_piles and game_session.discard_piles[player_name]:
+        last_card = game_session.discard_piles[player_name][-1]
+        if last_card.get('power'):
+            # Remove from discard pile
+            game_session.discard_piles[player_name].pop()
+            
+            # Re-create the card and add back to hand
+            from twenty_dots import Card
+            location = last_card['location']
+            color = last_card['color']
+            power = last_card['power']
+            refund_card = Card(location, color, power)
+            
+            hand = game_session.get_player_hand(player_name)
+            hand.append(refund_card)
+            
+            # Clear pending states
+            if hasattr(game_session, 'pending_swap') and player_name in game_session.pending_swap:
+                del game_session.pending_swap[player_name]
+            if hasattr(game_session, 'pending_wild_place') and player_name in game_session.pending_wild_place:
+                del game_session.pending_wild_place[player_name]
+            if hasattr(game_session, 'pending_landmine') and player_name in game_session.pending_landmine:
+                del game_session.pending_landmine[player_name]
+            if hasattr(game_session, 'pending_card_swap') and player_name in game_session.pending_card_swap:
+                del game_session.pending_card_swap[player_name]
+            
+            print(f"[CANCEL_POWER] Refunded {power} card to {player_name}")
+            
+            # Send updated hand
+            player_hand = game_session.get_player_hand(player_name)
+            emit('your_hand', {'hand': player_hand})
+            
+            # Update game state for all
+            emit('game_updated', game_session.get_game_state(), room=game_id)
+
+
 @socketio.on('swap_dots')
 def handle_swap_dots(data):
     """Handle swap power card - player selected two dots to swap"""

@@ -1301,6 +1301,7 @@
                         <button class="btn-play" id="playBtn" onclick="playCards()" disabled>▶️ Play Cards</button>
                         <button class="btn-roll" id="rollBtn" onclick="rollDice()" disabled>🎲 Roll Wild Dice</button>
                         <button class="btn-clear" onclick="clearSelection()">🗑️ Clear Selection</button>
+                        <button class="btn-cancel" id="cancelPowerBtn" onclick="cancelPowerCard()" style="display: none; background: #ff6b6b;">❌ Cancel Power</button>
                     </div>
                 </div>
             </div>
@@ -1578,6 +1579,8 @@
                         cell.style.outline = '2px dashed #FFD700';
                     }
                 });
+                // Show cancel button
+                showCancelButton();
             });
             
             // Handle landmine power card - need to select a sacrifice card
@@ -1585,6 +1588,7 @@
                 console.log('Select landmine sacrifice:', data.message);
                 landmineMode = true;
                 showNotification('💥 LANDMINE: Click a card with an EMPTY board location to place landmine!', 'warning');
+                showCancelButton();
             });
             
             // Handle landmine placement confirmation
@@ -1592,6 +1596,7 @@
                 console.log('Landmine placed:', data);
                 // Show notification
                 showNotification(`💥 ${data.player} placed a landmine!`, 'warning');
+                hideCancelButton();
             });
             
             // Handle landmine detonation
@@ -1611,9 +1616,10 @@
             socket.on('select_wild_position', (data) => {
                 console.log('Select wild position:', data.message);
                 wildPlaceMode = true;
-                alert('⭐ WILD PLACE POWER: ' + data.message);
+                showNotification('⭐ WILD PLACE: Click any position on the board!', 'info');
                 // Highlight that we're in wild place mode
                 document.getElementById('gameBoard').style.cursor = 'crosshair';
+                showCancelButton();
             });
             
             // Handle card swap power card - multi-step process
@@ -1624,7 +1630,8 @@
                 cardSwapOwnCards = [];
                 cardSwapOpponent = null;
                 cardSwapOpponentCards = [];
-                alert('🔄 CARD SWAP POWER: Select 2 cards from your hand that you want to give away.');
+                showNotification('🔄 CARD SWAP: Select 2 cards from your hand to give away', 'info');
+                showCancelButton();
                 updateHand(); // Re-render hand to show swap mode
             });
             
@@ -1651,6 +1658,7 @@
                 cardSwapOwnCards = [];
                 cardSwapOpponent = null;
                 cardSwapOpponentCards = [];
+                hideCancelButton();
                 alert(`🔄 Card swap complete!\n\nYou gave: ${data.gave.join(', ')}\nYou received: ${data.received.join(', ')}`);
             });
         }
@@ -2120,6 +2128,7 @@
                     
                     wildPlaceMode = false;
                     document.getElementById('gameBoard').style.cursor = 'default';
+                    hideCancelButton();
                 }
                 return;
             }
@@ -2173,6 +2182,7 @@
                 document.querySelectorAll('.cell').forEach(cell => {
                     cell.style.outline = '';
                 });
+                hideCancelButton();
             }
         }
 
@@ -2198,6 +2208,50 @@
             errorDiv.textContent = message;
             errorDiv.classList.add('show');
             setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+        
+        // Cancel power card mode and refund the card
+        function cancelPowerCard() {
+            console.log('Canceling power card mode');
+            
+            // Send cancel event to server to refund the card
+            socket.emit('cancel_power_card', { game_id: gameId });
+            
+            // Reset all power card modes
+            swapMode = false;
+            swapPositions = [];
+            wildPlaceMode = false;
+            landmineMode = false;
+            cardSwapMode = false;
+            cardSwapStep = 'none';
+            cardSwapOwnCards = [];
+            cardSwapOpponent = null;
+            cardSwapOpponentCards = [];
+            
+            // Clear visual hints
+            document.getElementById('gameBoard').style.cursor = 'default';
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.style.outline = '';
+            });
+            
+            // Hide cancel button
+            document.getElementById('cancelPowerBtn').style.display = 'none';
+            
+            // Close any open modals
+            const modal = document.getElementById('cardSwapModal');
+            if (modal) modal.remove();
+            
+            showNotification('Power card canceled - card returned to hand', 'info');
+        }
+        
+        // Show cancel button when entering power card mode
+        function showCancelButton() {
+            document.getElementById('cancelPowerBtn').style.display = 'block';
+        }
+        
+        // Hide cancel button
+        function hideCancelButton() {
+            document.getElementById('cancelPowerBtn').style.display = 'none';
         }
         
         // Card Swap Modal Functions
@@ -2381,6 +2435,7 @@
                     // Reset card swap state
                     cardSwapMode = false;
                     cardSwapStep = 'none';
+                    hideCancelButton();
                 }
             };
         }
