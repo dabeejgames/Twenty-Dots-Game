@@ -168,39 +168,42 @@
             align-items: center;
             gap: 15px;
             flex: 1;
-            min-height: 0;
-            height: auto;
-            padding: 0 20px;
+            min-width: 200px;
+            padding: 10px;
+            background: rgba(50, 0, 0, 0.3);
+            border-radius: 10px;
+            margin: 0 10px;
         }
         
         .landmines-display:empty {
-            display: none;
+            background: transparent;
         }
         
         .landmine-card {
-            width: 70px;
-            height: 90px;
+            width: 80px;
+            height: 100px;
             background: linear-gradient(135deg, #3a0a0a, #1a0505);
             border: 3px solid #ff3333;
-            border-radius: 8px;
+            border-radius: 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             font-size: 1.2em;
             color: #ff6666;
-            box-shadow: 0 0 15px rgba(255,0,0,0.4);
+            box-shadow: 0 0 20px rgba(255,0,0,0.5);
             animation: landmine-pulse 1.5s infinite alternate;
         }
         
         .landmine-card .landmine-icon {
-            font-size: 2em;
+            font-size: 2.5em;
         }
         
         .landmine-card .landmine-label {
-            font-size: 0.7em;
+            font-size: 0.8em;
             color: #ff9999;
-            margin-top: 1px;
+            margin-top: 5px;
+            font-weight: bold;
         }
         
         @keyframes landmine-pulse {

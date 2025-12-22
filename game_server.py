@@ -250,6 +250,22 @@ class GameSession:
                 }
                 self.discard_piles[current_player].append(card_info)
                 
+                # Check for landmine at this location BEFORE placing
+                row = card.location[0]
+                col = card.location[1]
+                location_str = f"{row}{col}"
+                landmine_result = self.game.check_and_detonate_landmine(location_str, current_player)
+                if landmine_result:
+                    print(f"[AI_MOVE] LANDMINE DETONATED at {location_str}! Removed {len(landmine_result.get('removed_positions', []))} dots")
+                    # Emit landmine detonation event to all players
+                    socketio.emit('landmine_detonated', {
+                        'location': location_str,
+                        'color': landmine_result['color'],
+                        'removed_count': len(landmine_result.get('removed_positions', [])),
+                        'triggered_by': current_player,
+                        'placed_by': landmine_result['player']
+                    }, room=self.game_id)
+                
                 # Place dot on board
                 success, replaced_color = self.game.place_card_dot(card)
                 if success:
