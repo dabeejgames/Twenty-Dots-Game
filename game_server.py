@@ -934,11 +934,22 @@ def handle_play_cards(data):
                     for c_idx in range(6):
                         dot = game_session.game.grid[r_idx][c_idx]
                         if dot and dot.color != 'yellow':
-                            colored_dots.append((r_idx, c_idx))
+                            colored_dots.append((r_idx, c_idx, dot.color))
                 if colored_dots:
-                    r_idx, c_idx = random.choice(colored_dots)
+                    r_idx, c_idx, dot_color = random.choice(colored_dots)
+                    row_letter = ['A', 'B', 'C', 'D', 'E', 'F'][r_idx]
+                    col_number = c_idx + 1
                     game_session.game.grid[r_idx][c_idx] = None
-                    print(f"[PLAY_CARDS] Removed dot at position")
+                    print(f"[PLAY_CARDS] Removed {dot_color} dot at {row_letter}{col_number}")
+                    # Emit visual feedback to all players
+                    socketio.emit('dot_removed', {
+                        'player': player_name,
+                        'position': f"{row_letter}{col_number}",
+                        'color': dot_color
+                    }, room=game_id)
+                else:
+                    print(f"[PLAY_CARDS] No colored dots on board to remove")
+                    emit('error', {'message': 'No colored dots on board to remove!'})
                     
             elif card.power == 'swap':
                 # Request client to select two dots to swap

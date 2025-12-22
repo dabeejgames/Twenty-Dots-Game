@@ -1563,19 +1563,28 @@
             
             // Handle swap power card - need to select two dots on board
             socket.on('select_swap_dots', (data) => {
-                console.log('Select swap dots:', data.message);
+                console.log('=== SELECT_SWAP_DOTS EVENT RECEIVED ===');
+                console.log('Message:', data.message);
                 swapMode = true;
                 swapPositions = [];
-                alert('🔄 SWAP POWER: ' + data.message);
+                console.log('swapMode set to:', swapMode);
+                // Use non-blocking notification instead of alert
+                showNotification('🔄 SWAP POWER: Click two dots on the board to swap them!', 'info');
                 // Highlight that we're in swap mode
                 document.getElementById('gameBoard').style.cursor = 'crosshair';
+                // Add visual hint to all cells with dots
+                document.querySelectorAll('.cell').forEach(cell => {
+                    if (cell.querySelector('.dot')) {
+                        cell.style.outline = '2px dashed #FFD700';
+                    }
+                });
             });
             
             // Handle landmine power card - need to select a sacrifice card
             socket.on('select_landmine_sacrifice', (data) => {
                 console.log('Select landmine sacrifice:', data.message);
                 landmineMode = true;
-                alert('💥 LANDMINE POWER: ' + data.message + '\n\nClick a card in your hand with an EMPTY board location to place the landmine there.');
+                showNotification('💥 LANDMINE: Click a card with an EMPTY board location to place landmine!', 'warning');
             });
             
             // Handle landmine placement confirmation
@@ -1590,6 +1599,12 @@
                 console.log('LANDMINE DETONATED:', data);
                 // Show dramatic explosion notification
                 alert(`💥💥💥 BOOM! 💥💥💥\n\nLandmine at ${data.location} detonated!\n\nTriggered by: ${data.triggered_by}\nPlaced by: ${data.placed_by}\nDots removed: ${data.removed_count}\nPenalty color: ${data.color}`);
+            });
+            
+            // Handle dot removed (bomb power card)
+            socket.on('dot_removed', (data) => {
+                console.log('Dot removed:', data);
+                showNotification(`💣 ${data.player} used BOMB! Removed ${data.color} dot at ${data.position}!`, 'warning');
             });
             
             // Handle wild place power card - select position on board
@@ -2133,6 +2148,15 @@
             // Re-render board to show selection
             updateBoard(currentGameState.board, currentGameState.yellow_dot_position);
             
+            // Re-apply swap mode visual hints (updateBoard clears them)
+            if (swapMode) {
+                document.querySelectorAll('.cell').forEach(cell => {
+                    if (cell.querySelector('.dot')) {
+                        cell.style.outline = '2px dashed #FFD700';
+                    }
+                });
+            }
+            
             // If we have 2 positions selected, send to server
             if (swapPositions.length === 2) {
                 console.log('Sending swap_dots:', swapPositions);
@@ -2142,10 +2166,13 @@
                     pos2: swapPositions[1]
                 });
                 
-                // Reset swap mode
+                // Reset swap mode and clear visual hints
                 swapMode = false;
                 swapPositions = [];
                 document.getElementById('gameBoard').style.cursor = 'default';
+                document.querySelectorAll('.cell').forEach(cell => {
+                    cell.style.outline = '';
+                });
             }
         }
 
