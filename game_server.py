@@ -958,6 +958,10 @@ def handle_play_cards(data):
                 if not opponents:
                     print(f"[PLAY_CARDS] Card swap - no opponents to swap with")
                 else:
+                    # Mark that this player has played their cards for the turn
+                    game_session.game.turn_cards_played[current_player] = 2
+                    game_session.game.can_roll_dice = False
+                    
                     game_session.pending_card_swap[player_name] = {
                         'step': 'select_own_cards',
                         'own_cards': [],
