@@ -1330,6 +1330,13 @@ def handle_roll_dice(data):
         if must_advance:
             print(f"[ROLL_DICE] Advancing {player_name}'s turn after rolling")
             game_session.game.must_advance_after_roll[player_name] = False
+            
+            # Draw cards to 5 before ending turn
+            hand = game_session.game.players[player_name]['hand']
+            while len(hand) < 5 and game_session.game.deck:
+                game_session.game.draw_card(player_name)
+            print(f"[ROLL_DICE] Drew cards for {player_name}, now has {len(hand)} cards")
+            
             game_session.game.next_player()
             new_player = game_session.game.get_current_player()
             if new_player not in game_session.game.turn_cards_played:
