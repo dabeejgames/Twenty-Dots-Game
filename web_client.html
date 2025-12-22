@@ -1508,6 +1508,11 @@
                 console.log('Received', data.hand.length, 'cards');
                 console.log('Hand:', data.hand);
                 myHand = data.hand;
+                // Reset cardSwapOwnCards when hand updates (indices are now invalid)
+                if (cardSwapMode && cardSwapStep === 'select_own') {
+                    cardSwapOwnCards = [];
+                    console.log('Card swap mode: reset own card selections due to hand update');
+                }
                 updateHand();
             });
             
@@ -1882,6 +1887,7 @@
             // Show card swap mode indicator
             if (cardSwapMode && cardSwapStep === 'select_own') {
                 const indicator = document.createElement('div');
+                indicator.className = 'card-swap-indicator';
                 indicator.style.cssText = 'background: linear-gradient(135deg, #FFD700, #FFA500); color: black; padding: 8px; border-radius: 5px; margin-bottom: 10px; text-align: center; font-weight: bold; animation: pulse 1s infinite;';
                 indicator.innerHTML = `🔄 SELECT 2 CARDS TO SWAP (${cardSwapOwnCards.length}/2)`;
                 handDiv.appendChild(indicator);
@@ -1979,10 +1985,12 @@
             // Handle card swap mode - selecting own cards to give away
             if (cardSwapMode && cardSwapStep === 'select_own') {
                 const card = myHand[index];
+                console.log('Card swap selection - clicked card:', card, 'at index:', index);
+                console.log('Current cardSwapOwnCards:', cardSwapOwnCards);
                 
-                // Can't swap the power card itself
-                if (card.power === 'card_swap') {
-                    alert('❌ Cannot swap the card swap power card itself!');
+                // Can't swap a power card
+                if (card.power) {
+                    alert('❌ Cannot swap power cards!');
                     return;
                 }
                 
@@ -1992,20 +2000,29 @@
                     // Deselect
                     cardSwapOwnCards.splice(cardIdx, 1);
                     cardDiv.classList.remove('selected');
-                    cardDiv.style.border = card.power ? '3px solid #FFD700' : '';
-                    cardDiv.style.boxShadow = card.power ? '0 0 10px rgba(255,215,0,0.5)' : '';
+                    cardDiv.style.border = '';
+                    cardDiv.style.boxShadow = '';
+                    console.log('Deselected card, cardSwapOwnCards now:', cardSwapOwnCards);
                 } else if (cardSwapOwnCards.length < 2) {
                     // Select
                     cardSwapOwnCards.push(index);
                     cardDiv.classList.add('selected');
                     cardDiv.style.border = '3px solid #00ff00';
                     cardDiv.style.boxShadow = '0 0 15px rgba(0,255,0,0.5)';
+                    console.log('Selected card, cardSwapOwnCards now:', cardSwapOwnCards);
+                }
+                
+                // Update the indicator in the hand display
+                const handDiv = document.getElementById('handCards');
+                let indicator = handDiv.querySelector('.card-swap-indicator');
+                if (indicator) {
+                    indicator.innerHTML = `🔄 SELECT 2 CARDS TO SWAP (${cardSwapOwnCards.length}/2)`;
                 }
                 
                 // If 2 cards selected, proceed to opponent selection
                 if (cardSwapOwnCards.length === 2) {
                     const selectedCardsData = cardSwapOwnCards.map(i => myHand[i]);
-                    console.log('Card swap - selected own cards:', selectedCardsData);
+                    console.log('Card swap - sending to server, selected own cards:', selectedCardsData);
                     
                     // Send to server
                     socket.emit('card_swap_action', {
@@ -2018,6 +2035,8 @@
                         }))
                     });
                 }
+                return;
+            }
                 return;
             }
             
