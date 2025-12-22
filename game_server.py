@@ -184,7 +184,16 @@ class GameSession:
                 row_idx = self.game.rows.index(row)
                 col_idx = self.game.columns.index(col)
                 
-                # Place yellow dot
+                # Remove the old yellow dot first (if it exists and wasn't collected)
+                old_yellow_pos = getattr(self.game, 'yellow_dot_position', None)
+                if old_yellow_pos:
+                    old_row, old_col = old_yellow_pos
+                    old_dot_at_pos = self.game.grid[old_row][old_col]
+                    if old_dot_at_pos and old_dot_at_pos.color == 'yellow':
+                        self.game.grid[old_row][old_col] = None
+                        print(f"[AI_MOVE] Removed old yellow dot from grid[{old_row}][{old_col}]")
+                
+                # Place yellow dot at new position
                 from twenty_dots import Dot
                 old_dot = self.game.grid[row_idx][col_idx]
                 self.game.grid[row_idx][col_idx] = Dot('yellow')
@@ -1273,7 +1282,16 @@ def handle_roll_dice(data):
     
     print(f"[ROLL_DICE] Rolled {row}{col} (indices: {row_idx}, {col_idx})")
     
-    # Place yellow dot
+    # Remove the old yellow dot first (if it exists and wasn't collected)
+    old_yellow_pos = getattr(game_session.game, 'yellow_dot_position', None)
+    if old_yellow_pos:
+        old_row, old_col = old_yellow_pos
+        old_dot_at_pos = game_session.game.grid[old_row][old_col]
+        if old_dot_at_pos and old_dot_at_pos.color == 'yellow':
+            game_session.game.grid[old_row][old_col] = None
+            print(f"[ROLL_DICE] Removed old yellow dot from grid[{old_row}][{old_col}]")
+    
+    # Place yellow dot at new position
     from twenty_dots import Dot
     old_dot = game_session.game.grid[row_idx][col_idx]
     game_session.game.grid[row_idx][col_idx] = Dot('yellow')
