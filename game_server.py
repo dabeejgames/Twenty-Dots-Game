@@ -1804,21 +1804,30 @@ def handle_place_wild(data):
     del game_session.pending_wild_place[player_name]
     
     # Check for matches at the new yellow position
-    # Yellow can match with any color adjacent to it
+    # Yellow can match with any color adjacent to it - check ALL colors for matches
     yellow_collected = False
+    all_matches = []  # Collect all matches first to avoid grid modification during iteration
+    
     for color in ['red', 'blue', 'green', 'purple']:
         match_result = game_session.game.check_line_match(row, col, color)
         match, match_color = match_result
         if match:
-            print(f"[PLACE_WILD] Match found! Collecting {len(match)} dots")
-            # Check if yellow dot is in the matched positions
-            for col_idx_m, row_idx_m in match:
-                dot = game_session.game.grid[row_idx_m][col_idx_m]
-                if dot and dot.color == 'yellow':
-                    yellow_collected = True
-                    break
-            game_session.game.collect_dots(match, player_name, match_color)
-            break  # Only one match per placement
+            print(f"[PLACE_WILD] Match found for {color}! {len(match)} dots")
+            all_matches.append((match, match_color))
+    
+    # Now collect all matches
+    for match, match_color in all_matches:
+        print(f"[PLACE_WILD] Collecting {len(match)} {match_color} dots")
+        # Check if yellow dot is in the matched positions
+        for col_idx_m, row_idx_m in match:
+            dot = game_session.game.grid[row_idx_m][col_idx_m]
+            if dot and dot.color == 'yellow':
+                yellow_collected = True
+                break
+        game_session.game.collect_dots(match, player_name, match_color)
+    
+    if all_matches:
+        print(f"[PLACE_WILD] Total matches collected: {len(all_matches)}")
     
     # If yellow was collected in the match, player must roll dice for new wild
     if yellow_collected:
