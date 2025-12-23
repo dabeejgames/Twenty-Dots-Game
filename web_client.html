@@ -2342,7 +2342,16 @@
                 // If 2 cards selected, proceed to opponent selection
                 if (cardSwapOwnCards.length === 2) {
                     const selectedCardsData = cardSwapOwnCards.map(i => myHand[i]);
-                    console.log('Card swap - sending to server, selected own cards:', selectedCardsData);
+                    console.log('Card swap - sending to server, gameId:', gameId, 'selected own cards:', selectedCardsData);
+                    
+                    if (!gameId) {
+                        console.error('Card swap error: gameId is not set!');
+                        alert('Error: Game ID is not set. Please refresh and rejoin the game.');
+                        return;
+                    }
+                    
+                    // Change step immediately to prevent reset from hand updates
+                    cardSwapStep = 'waiting_for_opponent_list';
                     
                     // Send to server
                     socket.emit('card_swap_action', {
