@@ -1625,8 +1625,8 @@
         
         // Prevent double-tap zoom on buttons and cards (but not on mode buttons which need click events)
         document.addEventListener('touchend', function(e) {
-            // Only prevent default on game elements, NOT on mode selection or form elements
-            const target = e.target.closest('button, .card, .cell');
+            // Only prevent default on CARDS and CELLS, NOT on buttons (they need click events)
+            const target = e.target.closest('.card, .cell');
             const isGameScreen = document.getElementById('gameScreen').classList.contains('active');
             if (target && isGameScreen) {
                 e.preventDefault();
