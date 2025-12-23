@@ -2,18 +2,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f0f1e">
     <title>Twenty Dots - Multiplayer</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
+        html {
+            height: 100%;
+            height: -webkit-fill-available;
+        }
+        
         body {
             background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
             color: white;
-            font-family: 'Arial', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             min-height: 100vh;
+            min-height: -webkit-fill-available;
             overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            touch-action: manipulation;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
         
         .main-container { display: none; width: 100vw; height: 100vh; }
@@ -472,26 +486,31 @@
             /* Tablet: Stack layout vertically */
             .game-container {
                 flex-direction: column;
-                gap: 10px;
-                padding: 10px;
+                gap: 8px;
+                padding: 8px;
                 position: relative;
+                height: calc(100vh - 60px);
+                overflow: hidden;
             }
             
             .left-panel {
-                width: 100%;
-                height: auto;
+                width: 55px;
+                height: 55px;
                 flex-direction: row;
                 justify-content: flex-start;
-                position: absolute;
-                top: -70px;
-                left: 0;
-                z-index: 25;
+                position: fixed;
+                top: 5px;
+                left: 5px;
+                z-index: 100;
+                background: rgba(26, 26, 46, 0.95);
+                border-radius: 8px;
             }
             
             .logo-box {
-                width: 60px;
-                height: 60px;
+                width: 55px;
+                height: 55px;
                 padding: 5px;
+                border-radius: 8px;
             }
             
             .center-panel {
@@ -638,230 +657,278 @@
                 flex-direction: column;
                 justify-content: center;
                 align-items: center;
+                padding: 5px 50px;
             }
             
             .header h1 { 
-                font-size: 0.6em;
+                font-size: 0.75em;
                 text-align: center;
                 margin: 2px 0;
             }
             
             .turn-info {
-                font-size: 0.55em;
+                font-size: 0.7em;
                 text-align: center;
                 margin: 2px 0;
+                line-height: 1.2;
             }
             
             /* Logo positioning on mobile header - LEFT */
             .left-panel {
                 position: fixed !important;
-                top: 0 !important;
-                left: 0 !important;
+                top: 5px !important;
+                left: 5px !important;
                 right: auto !important;
-                width: 40px !important;
-                height: 40px !important;
+                width: 44px !important;
+                height: 44px !important;
                 order: -1;
                 flex-shrink: 0;
                 z-index: 1000;
                 background: rgba(26, 26, 46, 0.95);
+                border-radius: 8px;
             }
             
-            /* Logo positioning on mobile header - RIGHT (using turn-info wrapper hack) */
+            /* Logo positioning on mobile header - RIGHT */
             .header::after {
                 content: '';
-                position: absolute;
-                top: 0;
-                right: 0;
-                width: 40px;
-                height: 40px;
+                position: fixed;
+                top: 5px;
+                right: 5px;
+                width: 44px;
+                height: 44px;
                 background: url('Twenty Dots Logo.png') center/contain no-repeat;
                 border: 2px solid #ffd700;
+                border-radius: 8px;
+                z-index: 1000;
             }
             
             .main-container {
                 flex-direction: column;
                 height: 100vh;
+                height: calc(var(--vh, 1vh) * 100);
                 overflow: hidden;
             }
             
             .game-container {
-                gap: 3px;
-                padding: 3px;
+                gap: 5px;
+                padding: 5px;
                 flex-direction: column;
-                height: 100%;
+                height: calc(100% - 50px);
                 flex: 1;
                 overflow: hidden;
             }
             
             .players-top, .players-bottom {
-                height: 50px;
-                gap: 3px;
+                height: 55px;
+                gap: 5px;
                 flex-wrap: nowrap;
                 order: 1;
                 flex-shrink: 0;
             }
             
             .players-top {
-                position: absolute;
-                top: 15px;
-                left: 50px;
-                right: 50px;
-                width: auto;
+                position: relative;
+                top: auto;
+                left: auto;
+                right: auto;
+                width: 100%;
                 justify-content: space-between;
                 z-index: 5;
+                margin-top: 5px;
             }
             
             .players-bottom {
-                position: absolute;
-                bottom: 260px;
-                left: 50px;
-                right: 50px;
-                width: auto;
-                justify-content: space-between;
-                z-index: 5;
+                display: none;
             }
             
             .left-panel {
-                position: absolute;
-                top: 0;
-                right: 0;
-                left: auto;
-                width: 45px;
-                height: 45px;
+                position: fixed;
+                top: 5px;
+                left: 5px;
+                right: auto;
+                width: 44px;
+                height: 44px;
                 order: -1;
                 flex-shrink: 0;
             }
             
             .logo-box {
-                width: 45px;
-                height: 45px;
-                padding: 2px;
+                width: 44px;
+                height: 44px;
+                padding: 3px;
                 border: 2px solid #ffd700;
+                border-radius: 8px;
             }
             
             .player-box {
                 flex: 1;
-                min-width: 20%;
-                padding: 2px;
-                font-size: 0.55em;
+                min-width: 80px;
+                max-width: 25%;
+                padding: 6px;
+                font-size: 0.7em;
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-start;
-                max-width: 90px;
+                border-radius: 6px;
             }
             
-            .player-name { font-size: 0.55em; font-weight: bold; }
-            .player-score { font-size: 0.65em; margin: 1px 0; }
-            .player-score-dots { gap: 1px; margin: 1px 0; }
-            .score-dot { width: 8px; height: 8px; font-size: 0.4em; }
-            .player-hand { font-size: 0.5em; }
-            .player-discard { font-size: 0.45em; margin-top: 2px; }
-            .discard-card { width: 10px; height: 7px; font-size: 0.25em; flex-shrink: 0; }
+            .player-name { font-size: 0.8em; font-weight: bold; }
+            .player-score { font-size: 0.9em; margin: 2px 0; }
+            .player-score-dots { gap: 2px; margin: 2px 0; }
+            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
+            .player-hand { font-size: 0.7em; }
+            .player-discard { font-size: 0.6em; margin-top: 2px; }
+            .discard-card { width: 14px; height: 9px; font-size: 0.35em; flex-shrink: 0; }
             .discard-cards { gap: 3px; display: flex; flex-wrap: nowrap; overflow: visible; }
             
+            .board-section {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-top: 0;
+                overflow: visible;
+            }
+            
             .board {
-                grid-template-columns: 38px 38px 38px 38px 38px 38px 38px;
-                grid-template-rows: 38px 38px 38px 38px 38px 38px 38px;
-                gap: 1px;
-                padding: 3px;
-                margin-top: -70px;
+                grid-template-columns: repeat(7, minmax(40px, 48px));
+                grid-template-rows: repeat(7, minmax(40px, 48px));
+                gap: 2px;
+                padding: 6px;
+                margin-top: 0;
+            }
+            
+            .cell {
+                min-width: 40px;
+                min-height: 40px;
             }
             
             .dot {
-                width: 19px;
-                height: 19px;
-                font-size: 6px;
+                width: 22px;
+                height: 22px;
+                font-size: 8px;
             }
             
             .right-panel {
                 order: 10;
                 width: 100%;
                 height: auto;
-                max-height: auto;
-                gap: 2px;
-                padding: 2px;
+                max-height: none;
+                gap: 6px;
+                padding: 8px;
                 flex-direction: column;
                 border-left: none;
                 border-top: 2px solid #6c5ce7;
-                margin-top: 0;
+                margin-top: auto;
                 flex-shrink: 0;
-                background: rgba(26, 26, 46, 0.95);
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                height: 105px;
+                background: rgba(26, 26, 46, 0.98);
+                position: relative;
+                bottom: auto;
+                left: auto;
                 z-index: 20;
+                border-radius: 12px 12px 0 0;
             }
             
             .hand-title { 
-                font-size: 0.75em; 
-                margin-bottom: 2px;
-                display: none;
+                font-size: 0.85em; 
+                margin-bottom: 4px;
+                display: block;
             }
             
             .cards-container {
                 flex-direction: row;
                 overflow-x: auto;
                 overflow-y: hidden;
-                gap: 2px;
-                margin-bottom: 2px;
-                padding: 2px 0;
-                max-height: 50px;
+                gap: 6px;
+                margin-bottom: 6px;
+                padding: 4px;
+                max-height: 60px;
+                -webkit-overflow-scrolling: touch;
+                scroll-snap-type: x mandatory;
             }
             
             .card {
-                min-width: calc((100vw - 20px) / 5.2);
-                max-width: calc((100vw - 20px) / 5.2);
-                min-height: 45px;
-                padding: 2px;
-                font-size: 0.6em;
+                min-width: 70px;
+                max-width: 85px;
+                min-height: 52px;
+                padding: 6px;
+                font-size: 0.75em;
                 flex-shrink: 0;
+                scroll-snap-align: start;
+                border-radius: 8px;
             }
+            
+            .card-location { font-size: 1em; }
+            .card-color { font-size: 0.7em; }
             
             .controls {
                 display: flex !important;
                 flex-direction: row !important;
-                gap: 2px;
+                gap: 6px;
+                flex-wrap: wrap;
             }
             
             .controls button {
-                flex: 1;
-                padding: 4px 2px;
-                font-size: 0.6em;
+                flex: 1 1 45%;
+                padding: 10px 6px;
+                font-size: 0.75em;
                 white-space: nowrap;
-                min-height: auto;
+                min-height: 44px;
+                border-radius: 8px;
             }
             
+            .landmines-display {
+                min-width: 100px;
+                padding: 5px;
+                flex: 0 0 auto;
+            }
+            
+            .landmine-card {
+                width: 50px;
+                height: 65px;
+                font-size: 0.9em;
+            }
+            
+            .landmine-card .landmine-icon { font-size: 1.5em; }
+            .landmine-card .landmine-label { font-size: 0.6em; }
+            
             .join-form {
-                width: 90%;
+                width: 92%;
                 max-width: 400px;
-                padding: 20px;
-                border-radius: 10px;
+                padding: 24px;
+                border-radius: 12px;
+            }
+            
+            .form-group input,
+            .form-group select {
+                padding: 14px 12px;
+                font-size: 16px; /* Prevents iOS zoom */
             }
             
             .mode-buttons {
                 flex-direction: column;
                 gap: 20px;
-                margin: 20px 0;
+                margin: 20px auto;
+                align-items: center;
             }
             
             .mode-button {
                 width: 90%;
-                max-width: 250px;
-                padding: 20px;
+                max-width: 280px;
+                padding: 24px;
             }
             
-            .mode-icon { font-size: 40px; }
-            .mode-title { font-size: 1.2em; }
-            .mode-description { font-size: 0.85em; }
+            .mode-icon { font-size: 48px; }
+            .mode-title { font-size: 1.3em; }
+            .mode-description { font-size: 0.9em; line-height: 1.4; }
         }
         
         @media (max-width: 480px) {
             /* Small phone screens */
             .header {
-                padding: 5px;
+                padding: 5px 40px;
                 position: relative;
-                min-height: 65px;
+                min-height: 55px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
@@ -870,7 +937,7 @@
             
             .header h1 { 
                 display: block !important;
-                font-size: 0.7em;
+                font-size: 0.65em;
                 text-align: center;
                 color: #ffd700;
                 font-weight: bold;
@@ -878,80 +945,64 @@
             }
             
             .turn-info {
-                font-size: 0.65em;
+                font-size: 0.6em;
                 text-align: center;
                 margin: 2px 0;
+                line-height: 1.2;
             }
             
             /* Logo positioning on 480px header - LEFT */
             .left-panel {
                 position: fixed !important;
-                top: 0 !important;
-                left: 0 !important;
+                top: 3px !important;
+                left: 3px !important;
                 right: auto !important;
-                height: 35px;
-                width: 35px;
+                height: 38px !important;
+                width: 38px !important;
                 order: -1;
                 flex-direction: row;
                 justify-content: center;
                 flex-shrink: 0;
                 z-index: 1000;
                 background: rgba(26, 26, 46, 0.95);
+                border-radius: 6px;
             }
             
             .logo-box {
-                width: 35px;
-                height: 35px;
+                width: 38px !important;
+                height: 38px !important;
                 padding: 2px;
                 border: 2px solid #ffd700;
+                border-radius: 6px;
             }
             
             /* Logo positioning on 480px header - RIGHT */
             .header::after {
                 content: '';
-                position: absolute;
-                top: 0;
-                right: 0;
-                width: 35px;
-                height: 35px;
+                position: fixed;
+                top: 3px;
+                right: 3px;
+                width: 38px;
+                height: 38px;
                 background: url('Twenty Dots Logo.png') center/contain no-repeat;
                 border: 2px solid #ffd700;
+                border-radius: 6px;
+                z-index: 1000;
             }
-            
-            .turn-info { font-size: 0.8em; margin: 2px 0; }
             
             .main-container {
                 flex-direction: column;
                 height: 100vh;
+                height: calc(var(--vh, 1vh) * 100);
                 overflow: hidden;
             }
             
             .game-container {
-                gap: 2px;
-                padding: 2px;
+                gap: 3px;
+                padding: 3px;
                 flex-direction: column;
-                height: 100%;
+                height: calc(100% - 55px);
                 overflow: hidden;
-            }
-            
-            .left-panel {
-                position: absolute;
-                top: 0;
-                right: 0;
-                left: auto;
-                height: 40px;
-                width: 40px;
-                order: -1;
-                flex-direction: row;
-                justify-content: center;
-                flex-shrink: 0;
-            }
-            
-            .logo-box {
-                width: 40px;
-                height: 40px;
-                padding: 2px;
-                border: 2px solid #ffd700;
             }
             
             .center-panel {
@@ -961,166 +1012,211 @@
                 flex-direction: column;
                 min-height: 0;
                 overflow: hidden;
-                padding-bottom: 150px;
+                padding-bottom: 0;
             }
             
             .players-top, .players-bottom {
-                height: 45px;
-                gap: 2px;
+                height: 50px;
+                gap: 4px;
                 order: 1;
                 flex-wrap: nowrap;
                 flex-shrink: 0;
             }
             
             .players-top {
-                position: absolute;
-                top: 10px;
-                left: 40px;
-                right: 45px;
-                width: auto;
+                position: relative;
+                top: auto;
+                left: auto;
+                right: auto;
+                width: 100%;
                 justify-content: space-between;
                 z-index: 5;
+                margin-bottom: 5px;
             }
             
             .players-bottom {
-                position: absolute;
-                bottom: 230px;
-                left: 40px;
-                right: 45px;
-                width: auto;
-                justify-content: space-between;
-                z-index: 5;
+                display: none;
             }
             
             .player-box {
                 flex: 1;
-                min-width: 25%;
-                padding: 2px;
-                font-size: 0.6em;
+                min-width: 60px;
+                max-width: 25%;
+                padding: 4px;
+                font-size: 0.65em;
                 display: flex;
                 flex-direction: column;
                 justify-content: flex-start;
             }
             
-            .player-name { font-size: 0.55em; }
-            .player-score { font-size: 0.65em; margin: 1px 0; }
-            .player-hand { font-size: 0.55em; }
-            .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
-            
-            .board {
-                grid-template-columns: 35px 35px 35px 35px 35px 35px 35px;
-                grid-template-rows: 35px 35px 35px 35px 35px 35px 35px;
-                gap: 1px;
-                padding: 2px;
-            }
-            
-            .dot {
-                width: 18px;
-                height: 18px;
-                font-size: 6px;
-            }
+            .player-name { font-size: 0.7em; font-weight: bold; }
+            .player-score { font-size: 0.8em; margin: 2px 0; }
+            .player-hand { font-size: 0.65em; }
+            .score-dot { width: 9px; height: 9px; font-size: 0.45em; }
+            .player-score-dots { gap: 2px; }
             
             .board-section {
                 flex: 1;
                 min-height: 0;
-                overflow: auto;
+                overflow: visible;
                 display: flex;
                 align-items: center;
                 justify-content: center;
+            }
+            
+            .board {
+                grid-template-columns: repeat(7, minmax(36px, 42px));
+                grid-template-rows: repeat(7, minmax(36px, 42px));
+                gap: 1px;
+                padding: 4px;
+            }
+            
+            .cell {
+                min-width: 36px;
+                min-height: 36px;
+            }
+            
+            .dot {
+                width: 20px;
+                height: 20px;
+                font-size: 7px;
             }
             
             .right-panel {
                 order: 10;
                 width: 100%;
                 height: auto;
-                max-height: auto;
-                gap: 2px;
-                padding: 3px;
+                max-height: none;
+                gap: 5px;
+                padding: 8px;
                 flex-direction: column;
                 border-left: none;
                 border-top: 2px solid #6c5ce7;
-                margin-top: 0;
+                margin-top: auto;
                 flex-shrink: 0;
-                background: rgba(26, 26, 46, 0.95);
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                height: 90px;
+                background: rgba(26, 26, 46, 0.98);
+                position: relative;
+                bottom: auto;
+                left: auto;
+                right: auto;
                 z-index: 100;
+                border-radius: 10px 10px 0 0;
+                padding-bottom: calc(8px + env(safe-area-inset-bottom));
             }
             
             .hand-title { 
-                font-size: 0.65em; 
-                margin-bottom: 2px;
-                display: none;
+                font-size: 0.7em; 
+                margin-bottom: 3px;
+                display: block;
             }
             
             .cards-container {
                 flex-direction: row;
                 overflow-x: auto;
                 overflow-y: hidden;
-                gap: 2px;
-                margin-bottom: 3px;
-                padding: 2px 0;
-                max-height: 38px;
+                gap: 5px;
+                margin-bottom: 5px;
+                padding: 3px;
+                max-height: 55px;
                 flex-shrink: 0;
+                -webkit-overflow-scrolling: touch;
+                scroll-snap-type: x mandatory;
             }
             
             .card {
-                min-width: calc((100vw - 15px) / 5.2);
-                max-width: calc((100vw - 15px) / 5.2);
-                min-height: 32px;
-                padding: 2px;
-                font-size: 0.5em;
+                min-width: 62px;
+                max-width: 72px;
+                min-height: 48px;
+                padding: 5px;
+                font-size: 0.65em;
                 flex-shrink: 0;
+                scroll-snap-align: start;
+                border-radius: 6px;
             }
+            
+            .card-location { font-size: 0.95em; }
+            .card-color { font-size: 0.65em; }
             
             .controls {
                 display: flex !important;
                 flex-direction: row !important;
-                gap: 2px;
+                gap: 5px;
                 flex-shrink: 0;
-                padding-bottom: 2px;
-                margin-top: auto;
+                flex-wrap: wrap;
             }
             
             .controls button {
-                flex: 1;
-                padding: 5px 2px;
-                font-size: 0.55em;
+                flex: 1 1 45%;
+                padding: 10px 4px;
+                font-size: 0.65em;
                 white-space: nowrap;
-                min-height: 26px;
-                border-radius: 3px;
+                min-height: 40px;
+                border-radius: 6px;
             }
             
+            .landmines-display {
+                min-width: 80px;
+                padding: 4px;
+                margin: 0 5px;
+                flex: 0 0 auto;
+            }
+            
+            .landmine-card {
+                width: 40px;
+                height: 55px;
+                font-size: 0.8em;
+            }
+            
+            .landmine-card .landmine-icon { font-size: 1.3em; }
+            .landmine-card .landmine-label { font-size: 0.5em; }
+            
             .join-form {
-                width: 95%;
+                width: 94%;
                 max-width: 100%;
-                padding: 15px;
+                padding: 20px;
                 margin: 10px;
+                border-radius: 12px;
+            }
+            
+            .form-group {
+                margin: 16px 0;
+            }
+            
+            .form-group input,
+            .form-group select {
+                padding: 14px 12px;
+                font-size: 16px; /* Prevents iOS zoom */
+                border-radius: 8px;
+            }
+            
+            .btn-join {
+                padding: 14px;
+                font-size: 1em;
+                min-height: 50px;
             }
             
             .mode-buttons {
                 width: 100%;
+                padding: 0 10px;
             }
             
             .mode-button {
                 width: 100%;
                 max-width: 100%;
-                padding: 15px;
+                padding: 20px;
+                margin: 0 auto;
             }
             
-            .mode-icon { font-size: 30px; margin-bottom: 10px; }
-            .mode-title { font-size: 1em; }
-            .mode-description { font-size: 0.8em; }
+            .mode-icon { font-size: 36px; margin-bottom: 12px; }
+            .mode-title { font-size: 1.1em; }
+            .mode-description { font-size: 0.85em; line-height: 1.4; }
         }
         
         /* Touch-friendly adjustments */
         @media (hover: none) and (pointer: coarse) {
             .card {
-                min-height: 60px;
-                padding: 10px;
+                min-height: 52px;
+                padding: 8px;
             }
             
             button {
@@ -1129,8 +1225,168 @@
             }
             
             .cell {
-                min-width: 50px;
-                min-height: 50px;
+                min-width: 44px;
+                min-height: 44px;
+            }
+            
+            .form-group input,
+            .form-group select {
+                min-height: 48px;
+            }
+        }
+        
+        /* Landscape orientation on phones */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .header {
+                min-height: 40px;
+                padding: 3px 45px;
+            }
+            
+            .header h1 { font-size: 0.7em; }
+            .turn-info { font-size: 0.6em; }
+            
+            .game-container {
+                flex-direction: row;
+                height: calc(100vh - 40px);
+                padding: 5px;
+            }
+            
+            .center-panel {
+                flex: 1;
+                padding-bottom: 0;
+            }
+            
+            .players-top {
+                flex-direction: column;
+                width: auto;
+                height: auto;
+                gap: 3px;
+                margin-bottom: 0;
+            }
+            
+            .player-box {
+                min-width: 100px;
+                max-width: 120px;
+                padding: 3px;
+                font-size: 0.55em;
+            }
+            
+            .board-section {
+                flex: 1;
+            }
+            
+            .board {
+                grid-template-columns: repeat(7, 35px);
+                grid-template-rows: repeat(7, 35px);
+                gap: 1px;
+                padding: 3px;
+            }
+            
+            .cell {
+                min-width: 35px;
+                min-height: 35px;
+            }
+            
+            .dot {
+                width: 18px;
+                height: 18px;
+                font-size: 6px;
+            }
+            
+            .right-panel {
+                width: 180px;
+                height: 100%;
+                flex-direction: column;
+                border-top: none;
+                border-left: 2px solid #6c5ce7;
+                border-radius: 0;
+                position: relative;
+                padding: 5px;
+            }
+            
+            .hand-title { display: block; font-size: 0.7em; }
+            
+            .cards-container {
+                flex-direction: column;
+                overflow-y: auto;
+                overflow-x: hidden;
+                max-height: none;
+                flex: 1;
+                gap: 3px;
+            }
+            
+            .card {
+                min-width: 100%;
+                max-width: 100%;
+                min-height: 36px;
+                padding: 4px;
+                font-size: 0.6em;
+            }
+            
+            .controls {
+                flex-direction: column;
+                gap: 3px;
+            }
+            
+            .controls button {
+                flex: 0 0 auto;
+                min-height: 32px;
+                padding: 6px 4px;
+                font-size: 0.6em;
+            }
+            
+            .landmines-display {
+                flex-direction: column;
+                min-width: auto;
+                padding: 3px;
+            }
+            
+            .landmine-card {
+                width: 35px;
+                height: 45px;
+            }
+        }
+        
+        /* Very small phones (iPhone SE, etc) */
+        @media (max-width: 375px) {
+            .header h1 { font-size: 0.55em; }
+            .turn-info { font-size: 0.55em; }
+            
+            .player-box {
+                min-width: 55px;
+                padding: 3px;
+                font-size: 0.6em;
+            }
+            
+            .player-name { font-size: 0.65em; }
+            .player-score { font-size: 0.7em; }
+            .score-dot { width: 8px; height: 8px; }
+            
+            .board {
+                grid-template-columns: repeat(7, 32px);
+                grid-template-rows: repeat(7, 32px);
+            }
+            
+            .cell {
+                min-width: 32px;
+                min-height: 32px;
+            }
+            
+            .dot {
+                width: 17px;
+                height: 17px;
+                font-size: 6px;
+            }
+            
+            .card {
+                min-width: 55px;
+                max-width: 65px;
+                min-height: 44px;
+            }
+            
+            .controls button {
+                font-size: 0.6em;
+                min-height: 38px;
             }
         }
     </style>
@@ -1138,11 +1394,11 @@
 <body>
     <!-- Mode Selection Screen -->
     <div id="modeScreen">
-        <div class="mode-selection">
+        <div class="mode-selection" style="padding: 20px;">
             <div style="text-align: center; margin-bottom: 20px;">
-                <img src="Twenty Dots Logo.png" alt="Twenty Dots Logo" style="max-width: 150px; max-height: 150px; object-fit: contain;">
+                <img src="Twenty Dots Logo.png" alt="Twenty Dots Logo" style="max-width: min(150px, 30vw); max-height: min(150px, 30vw); object-fit: contain;">
             </div>
-            <h2 style="color: #ffd700; font-size: 2em; margin-bottom: 40px;">Choose Game Mode</h2>
+            <h2 style="color: #ffd700; font-size: clamp(1.3em, 5vw, 2em); margin-bottom: clamp(20px, 5vh, 40px); text-align: center;">Choose Game Mode</h2>
             <div class="mode-buttons">
                 <div class="mode-button" onclick="showJoinScreen()">
                     <div class="mode-icon">🌐</div>
@@ -1164,16 +1420,16 @@
             <h2 style="color: #ffd700; margin-bottom: 30px;">Join a Game</h2>
             <div class="form-group">
                 <label>Game ID</label>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="text" id="gameId" placeholder="e.g., game123" oninput="toggleShareButton()" style="flex: 1;">
-                    <button id="shareButton" onclick="shareGameRoom()" disabled style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; opacity: 0.5; white-space: nowrap;">
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="gameId" placeholder="e.g., game123" oninput="toggleShareButton()" style="flex: 1; min-width: 150px;" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                    <button id="shareButton" onclick="shareGameRoom()" disabled style="background: #4CAF50; color: white; border: none; padding: 12px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; opacity: 0.5; white-space: nowrap; min-height: 44px;">
                         📤 Share
                     </button>
                 </div>
             </div>
             <div class="form-group">
                 <label>Your Name</label>
-                <input type="text" id="playerName" placeholder="e.g., Brandon">
+                <input type="text" id="playerName" placeholder="e.g., Brandon" autocomplete="name">
             </div>
             <div class="form-group">
                 <label>Number of Players</label>
@@ -1333,6 +1589,47 @@
         let cardSwapOpponent = null;
         let cardSwapOpponentCards = [];
         let cardSwapOpponentHandSize = 0;
+
+        // Mobile viewport height fix (handles address bar hide/show)
+        function setMobileViewportHeight() {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+        }
+        
+        // Set initial viewport height
+        setMobileViewportHeight();
+        
+        // Update on resize and orientation change
+        window.addEventListener('resize', setMobileViewportHeight);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(setMobileViewportHeight, 100);
+        });
+        
+        // Prevent double-tap zoom on buttons and cards
+        document.addEventListener('touchend', function(e) {
+            if (e.target.closest('button, .card, .cell, .mode-button')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        // Prevent pull-to-refresh on mobile during game
+        let touchStartY = 0;
+        document.addEventListener('touchstart', function(e) {
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        
+        document.addEventListener('touchmove', function(e) {
+            const touchY = e.touches[0].clientY;
+            const scrollableElement = e.target.closest('.cards-container, .right-panel');
+            
+            // Only prevent default if we're at the top of the page and swiping down
+            if (!scrollableElement && touchY > touchStartY && window.scrollY === 0) {
+                // Allow default behavior on forms
+                if (!e.target.closest('input, select, textarea, .join-form')) {
+                    e.preventDefault();
+                }
+            }
+        }, { passive: false });
 
         // Check for saved game on page load
         window.addEventListener('DOMContentLoaded', () => {
