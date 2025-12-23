@@ -1400,12 +1400,12 @@
             </div>
             <h2 style="color: #ffd700; font-size: clamp(1.3em, 5vw, 2em); margin-bottom: clamp(20px, 5vh, 40px); text-align: center;">Choose Game Mode</h2>
             <div class="mode-buttons">
-                <div class="mode-button" onclick="showJoinScreen()">
+                <div class="mode-button" onclick="showJoinScreen()" ontouchend="showJoinScreen()">
                     <div class="mode-icon">🌐</div>
                     <div class="mode-title">Multiplayer</div>
                     <div class="mode-description">Play online with friends<br>2-4 players</div>
                 </div>
-                <div class="mode-button" onclick="showSinglePlayerScreen()">
+                <div class="mode-button" onclick="showSinglePlayerScreen()" ontouchend="showSinglePlayerScreen()">
                     <div class="mode-icon">🤖</div>
                     <div class="mode-title">Single Player</div>
                     <div class="mode-description">Play against AI<br>2-4 players</div>
@@ -1605,9 +1605,12 @@
             setTimeout(setMobileViewportHeight, 100);
         });
         
-        // Prevent double-tap zoom on buttons and cards
+        // Prevent double-tap zoom on buttons and cards (but not on mode buttons which need click events)
         document.addEventListener('touchend', function(e) {
-            if (e.target.closest('button, .card, .cell, .mode-button')) {
+            // Only prevent default on game elements, NOT on mode selection or form elements
+            const target = e.target.closest('button, .card, .cell');
+            const isGameScreen = document.getElementById('gameScreen').classList.contains('active');
+            if (target && isGameScreen) {
                 e.preventDefault();
             }
         }, { passive: false });
