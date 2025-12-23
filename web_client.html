@@ -2445,9 +2445,32 @@
             // Only handle clicks when in swap mode
             if (!swapMode) return;
             
-            // Check if there's a dot at this position
-            if (!currentGameState || !currentGameState.board[row] || !currentGameState.board[row][col]) {
+            // Debug logging for swap selection
+            console.log('[SWAP_CLICK] Clicked cell:', row, col);
+            console.log('[SWAP_CLICK] currentGameState exists:', !!currentGameState);
+            if (currentGameState) {
+                console.log('[SWAP_CLICK] board[row]:', currentGameState.board[row]);
+                console.log('[SWAP_CLICK] board[row][col]:', currentGameState.board[row] ? currentGameState.board[row][col] : 'row undefined');
+            }
+            
+            // Check if there's a dot at this position (check visual cell as fallback)
+            const cellHasDot = currentGameState && currentGameState.board[row] && currentGameState.board[row][col];
+            const visualCell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+            const visualHasDot = visualCell && visualCell.querySelector('.dot');
+            
+            console.log('[SWAP_CLICK] Data has dot:', cellHasDot, 'Visual has dot:', !!visualHasDot);
+            
+            // Allow selection if EITHER the data or visual shows a dot
+            // This handles potential sync issues between state and display
+            if (!cellHasDot && !visualHasDot) {
                 alert('Please click on a cell with a dot');
+                return;
+            }
+            
+            // Check if the dot is yellow (wild) - these cannot be swapped
+            const dotColor = cellHasDot ? currentGameState.board[row][col].color : null;
+            if (dotColor === 'yellow') {
+                alert('❌ Cannot swap the wild (yellow) dot!');
                 return;
             }
             
