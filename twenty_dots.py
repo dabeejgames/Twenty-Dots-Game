@@ -2,7 +2,7 @@ class Card:
     """Represents a single card in the Twenty Dots deck."""
     
     COLORS = ['red', 'blue', 'purple', 'green']
-    POWER_TYPES = ['swap', 'remove', 'wild_place', 'double_score', 'card_swap', 'landmine']
+    POWER_TYPES = ['swap', 'remove', 'wild_place', 'block', 'card_swap', 'landmine']
     
     def __init__(self, location: str, color: str, power: str = None):
         """
@@ -11,7 +11,7 @@ class Card:
         Args:
             location: Grid position (e.g., "A1", "B4") or tuple like ('A', '1')
             color: Card color (red, blue, purple, green)
-            power: Optional special power (swap, remove, wild_place, double_score, steal)
+            power: Optional special power (swap, remove, wild_place, block, card_swap, landmine)
         """
         if isinstance(location, tuple):
             self.location = location
@@ -30,7 +30,7 @@ class Card:
             'swap': '↔️ Dot Swap',
             'remove': '💣 Remove',
             'wild_place': '⭐ Wild Place',
-            'double_score': '×2 Double',
+            'block': '🚫 Block',
             'card_swap': '🔄 Card Swap',
             'landmine': '💥 Land Mine'
         }
@@ -43,7 +43,7 @@ class Card:
                 'swap': '↔️',
                 'remove': '💣',
                 'wild_place': '⭐',
-                'double_score': '×2',
+                'block': '🚫',
                 'card_swap': '🔄',
                 'landmine': '💥'
             }.get(self.power, '✨')
@@ -247,7 +247,7 @@ class TwentyDots:
         
         # Add power cards separately (not tied to specific locations)
         if self.power_cards_enabled:
-            power_types = ['swap', 'remove', 'wild_place', 'double_score', 'card_swap']
+            power_types = ['swap', 'remove', 'wild_place', 'block', 'card_swap']
             # Add 3 power cards per color (12 total)
             for color in self.colors:
                 for _ in range(3):

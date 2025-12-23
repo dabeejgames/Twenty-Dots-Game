@@ -20,10 +20,10 @@ Special power cards have been added to Twenty Dots to add strategic depth and ex
 - **Strategy**: Create instant match opportunities or block opponent strategies
 - **Activation**: Select where to place the wild dot
 
-### 4. ×2 Double Score (double_score)
-- **Effect**: Your next match will score double points (2x)
-- **Strategy**: Save for a big match to maximize scoring
-- **Activation**: Automatic - your next match gets 2x multiplier
+### 4. 🚫 Block (block)
+- **Effect**: Block an empty cell for 3 turns - no one can place a dot there
+- **Strategy**: Prevent opponents from completing matches or protect key positions
+- **Activation**: Select an empty cell on the board to block
 
 ### 5. 🔀 Steal (steal)
 - **Effect**: Steal a random card from another player's hand

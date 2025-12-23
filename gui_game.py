@@ -1994,12 +1994,66 @@ class TwentyDotsGUI(QMainWindow):
                     
                     return True
         
-        elif power == 'double_score':
-            # Set flag for next match to score double
-            self.game.players[player]['double_next_match'] = True
-            if not is_ai:
-                PowerCardDialog(self, "Double Score", "Next match will score 2x points!", "×2").exec()
-            return True
+        elif power == 'block':
+            # Block an empty cell for 3 turns
+            if not hasattr(self.game, 'blocks'):
+                self.game.blocks = []
+            
+            if is_ai:
+                # AI picks a random empty cell to block
+                empty_cells = []
+                for r in range(6):
+                    for c in range(6):
+                        if self.game.grid[r][c] is None:
+                            # Check if not already blocked
+                            already_blocked = any(b['row'] == r and b['col'] == c for b in self.game.blocks)
+                            if not already_blocked:
+                                empty_cells.append((r, c))
+                if empty_cells:
+                    import random
+                    row, col = random.choice(empty_cells)
+                    self.game.blocks.append({
+                        'row': row,
+                        'col': col,
+                        'turns_remaining': 3,
+                        'player': player
+                    })
+                    return True
+                return False
+            else:
+                # Human player selects a cell to block
+                from PyQt6.QtWidgets import QInputDialog
+                row_labels = ['A', 'B', 'C', 'D', 'E', 'F']
+                
+                # Get empty cells
+                empty_cells = []
+                for r in range(6):
+                    for c in range(6):
+                        if self.game.grid[r][c] is None:
+                            already_blocked = any(b['row'] == r and b['col'] == c for b in self.game.blocks)
+                            if not already_blocked:
+                                empty_cells.append(f"{row_labels[r]}{c+1}")
+                
+                if not empty_cells:
+                    QMessageBox.warning(self, "Block", "No empty cells to block!")
+                    return False
+                
+                cell, ok = QInputDialog.getItem(self, "Block Cell", 
+                    "Select an empty cell to block for 3 turns:", 
+                    empty_cells, 0, False)
+                
+                if ok and cell:
+                    row_idx = row_labels.index(cell[0])
+                    col_idx = int(cell[1]) - 1
+                    self.game.blocks.append({
+                        'row': row_idx,
+                        'col': col_idx,
+                        'turns_remaining': 3,
+                        'player': player
+                    })
+                    PowerCardDialog(self, "Block", f"Blocked cell {cell} for 3 turns!", "🚫").exec()
+                    return True
+                return False
         
         elif power == 'card_swap':
             # Swap 2 cards from your hand with 2 cards from another player's hand

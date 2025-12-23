@@ -93,6 +93,20 @@ class GameSession:
                 'player': lm['player']
             })
         
+        # Get blocks
+        blocks_data = []
+        if hasattr(self.game, 'blocks'):
+            for block in self.game.blocks:
+                row_letter = self.game.rows[block['row']]
+                col_str = self.game.columns[block['col']]
+                blocks_data.append({
+                    'location': f"{row_letter}{col_str}",
+                    'row': block['row'],
+                    'col': block['col'],
+                    'turns_remaining': block['turns_remaining'],
+                    'player': block['player']
+                })
+        
         # Get yellow dot position
         yellow_position = None
         if self.game.yellow_dot_position:
@@ -114,6 +128,7 @@ class GameSession:
             'deck_size': len(self.game.deck),
             'yellow_dot_position': yellow_position,
             'landmines': landmines_data,
+            'blocks': blocks_data,
             'can_roll_dice': getattr(self.game, 'can_roll_dice', False),
             'game_mode': self.game_mode
         }
@@ -1023,10 +1038,27 @@ def handle_play_cards(data):
                         socketio.emit('your_hand', {'hand': player_hand}, room=sid)
                 return  # Early return - swap_dots handler will finish the turn
                     
-            elif card.power == 'double_score':
-                # Set double score flag for next match
-                game_session.game.players[player_name]['double_next_match'] = True
-                print(f"[PLAY_CARDS] Double score enabled for {player_name}")
+            elif card.power == 'block':
+                # Block power - player selects an empty cell to block for 3 turns
+                if not hasattr(game_session, 'pending_block'):
+                    game_session.pending_block = {}
+                game_session.pending_block[player_name] = True
+                
+                # Mark that this player has played their cards for the turn
+                game_session.game.turn_cards_played[current_player] = 2
+                game_session.game.can_roll_dice = False
+                
+                print(f"[PLAY_CARDS] Block power - waiting for player to select empty cell")
+                emit('select_block_position', {'message': 'Click an empty cell to block it for 3 turns'})
+                
+                # Broadcast game state to show cards played
+                socketio.emit('game_updated', game_session.get_game_state(), room=game_id)
+                # Send updated hands to all players
+                for sid, player_info in game_session.players.items():
+                    if not player_info['is_ai'] and player_info['connected']:
+                        player_hand = game_session.get_player_hand(player_info['name'])
+                        socketio.emit('your_hand', {'hand': player_hand}, room=sid)
+                return  # Early return - place_block handler will finish the turn
             
             elif card.power == 'card_swap':
                 # Card swap - player selects 2 of their cards, then opponent, then 2 of opponent's cards
@@ -1089,6 +1121,17 @@ def handle_play_cards(data):
         col = card.location[1]
         row_idx = game_session.game.rows.index(row)
         col_idx = game_session.game.columns.index(col)
+        
+        # Check if this cell is blocked
+        if hasattr(game_session.game, 'blocks'):
+            for block in game_session.game.blocks:
+                if block['row'] == row_idx and block['col'] == col_idx:
+                    emit('error', {'message': f'Cell {row}{col} is blocked for {block["turns_remaining"]} more turn(s)!'})
+                    # Put the card back in hand
+                    hand.append(card)
+                    game_session.game.turn_cards_played[current_player] -= 1
+                    return
+        
         current_dot = game_session.game.grid[row_idx][col_idx]
         if current_dot and current_dot.color == 'yellow':
             yellow_replaced = True
@@ -1258,6 +1301,17 @@ def handle_end_turn(data):
     print(f"[END_TURN] Current player index before: {game_session.game.current_player_idx}")
     # Move to next turn
     game_session.game.next_player()
+    
+    # Decrement block turns and remove expired blocks
+    if hasattr(game_session.game, 'blocks'):
+        for block in game_session.game.blocks[:]:  # Iterate over a copy
+            block['turns_remaining'] -= 1
+            if block['turns_remaining'] <= 0:
+                row_letter = game_session.game.rows[block['row']]
+                col_str = game_session.game.columns[block['col']]
+                print(f"[END_TURN] Block at {row_letter}{col_str} expired")
+                game_session.game.blocks.remove(block)
+    
     # Don't automatically enable roll dice - it should only be enabled at game start or when yellow is affected
     print(f"[END_TURN] Current player index after: {game_session.game.current_player_idx}")
     print(f"[END_TURN] New current player: {game_session.game.get_current_player()}")
@@ -1773,6 +1827,97 @@ def handle_place_landmine(data):
             'condition': winner_result['mode']
         }, room=game_id)
         return
+    
+    # Execute AI turn if next player is AI
+    if new_player in game_session.ai_players:
+        socketio.start_background_task(game_session.execute_ai_move)
+
+
+@socketio.on('place_block')
+def handle_place_block(data):
+    """Handle block power card - player selected an empty cell to block"""
+    game_id = data.get('game_id')
+    position = data.get('position')  # {'row': 0, 'col': 0}
+    
+    if game_id not in games:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    game_session = games[game_id]
+    player_name = game_session.get_player_name(request.sid)
+    
+    if not player_name:
+        emit('error', {'message': 'Player not found'})
+        return
+    
+    # Check if player has pending block
+    if not hasattr(game_session, 'pending_block') or player_name not in game_session.pending_block:
+        emit('error', {'message': 'No pending block action'})
+        return
+    
+    row = position['row']
+    col = position['col']
+    
+    # Check if the cell is empty (no dot)
+    if game_session.game.grid[row][col] is not None:
+        emit('error', {'message': 'Can only block empty cells'})
+        return
+    
+    # Check if cell is already blocked
+    if not hasattr(game_session.game, 'blocks'):
+        game_session.game.blocks = []
+    
+    for block in game_session.game.blocks:
+        if block['row'] == row and block['col'] == col:
+            emit('error', {'message': 'This cell is already blocked'})
+            return
+    
+    # Place the block (lasts 3 turns)
+    game_session.game.blocks.append({
+        'row': row,
+        'col': col,
+        'turns_remaining': 3,
+        'player': player_name
+    })
+    
+    row_letter = game_session.game.rows[row]
+    col_str = game_session.game.columns[col]
+    print(f"[PLACE_BLOCK] {player_name} blocked cell {row_letter}{col_str} for 3 turns")
+    
+    # Clear pending block
+    del game_session.pending_block[player_name]
+    
+    # Emit block placed event
+    emit('block_placed', {
+        'position': f"{row_letter}{col_str}",
+        'turns_remaining': 3,
+        'player': player_name
+    }, room=game_id)
+    
+    # Draw cards to 5 before ending turn
+    current_player = game_session.game.get_current_player()
+    hand = game_session.game.players[current_player]['hand']
+    while len(hand) < 5 and game_session.game.deck:
+        game_session.game.draw_card(current_player)
+    
+    # Move to next turn
+    game_session.game.next_player()
+    new_player = game_session.game.get_current_player()
+    
+    # Initialize turn tracking for new player
+    if not hasattr(game_session.game, 'turn_cards_played'):
+        game_session.game.turn_cards_played = {}
+    game_session.game.turn_cards_played[new_player] = 0
+    game_session.game.can_roll_dice = False
+    
+    # Broadcast updated game state
+    socketio.emit('game_updated', game_session.get_game_state(), room=game_id)
+    
+    # Send updated hands to all players
+    for sid, player_info in game_session.players.items():
+        if not player_info['is_ai'] and player_info['connected']:
+            player_hand = game_session.get_player_hand(player_info['name'])
+            socketio.emit('your_hand', {'hand': player_hand}, room=sid)
     
     # Execute AI turn if next player is AI
     if new_player in game_session.ai_players:

@@ -175,6 +175,21 @@
             to { box-shadow: 0 0 15px gold; }
         }
         
+        /* Blocked cell styling */
+        .cell.blocked {
+            background: rgba(255, 68, 68, 0.2);
+            border: 2px dashed #ff4444;
+        }
+        
+        .block-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 0.8em;
+            opacity: 0.8;
+            z-index: 5;
+        }
+        
         /* Landmine display area */
         .landmines-display {
             display: flex;
@@ -1582,6 +1597,9 @@
         // Wild place power card state
         let wildPlaceMode = false;
         
+        // Block power card state
+        let blockMode = false;
+        
         // Card swap power card state
         let cardSwapMode = false;
         let cardSwapStep = 'none'; // 'select_own', 'select_opponent', 'select_opponent_cards'
@@ -1922,6 +1940,28 @@
                 showCancelButton();
             });
             
+            // Handle block power card - select empty position on board
+            socket.on('select_block_position', (data) => {
+                console.log('Select block position:', data.message);
+                blockMode = true;
+                showNotification('🚫 BLOCK: Click an empty cell to block it for 3 turns!', 'info');
+                // Highlight that we're in block mode
+                document.getElementById('gameBoard').style.cursor = 'crosshair';
+                // Add visual hint to empty cells
+                document.querySelectorAll('.cell').forEach(cell => {
+                    if (!cell.querySelector('.dot')) {
+                        cell.style.outline = '2px dashed #FF4444';
+                    }
+                });
+                showCancelButton();
+            });
+            
+            // Handle block placed confirmation
+            socket.on('block_placed', (data) => {
+                console.log('Block placed:', data);
+                showNotification(`🚫 ${data.player} blocked cell ${data.position} for ${data.turns_remaining} turns!`, 'warning');
+            });
+            
             // Handle card swap power card - multi-step process
             socket.on('select_card_swap', (data) => {
                 console.log('Card swap initiated:', data);
@@ -2053,16 +2093,32 @@
                     // Add click handler for swap mode
                     cell.addEventListener('click', () => handleCellClick(r, c));
                     
-                if (board[r] && board[r][c]) {
-                    const dot = document.createElement('div');
-                    dot.className = `dot ${board[r][c].color}`;
-                    cell.appendChild(dot);
+                    // Check if this cell is blocked
+                    const isBlocked = currentGameState && currentGameState.blocks && 
+                        currentGameState.blocks.some(b => b.row === r && b.col === c);
                     
-                    // Highlight selected swap positions
-                    if (swapMode && swapPositions.some(p => p.row === r && p.col === c)) {
-                        cell.classList.add('swap-selected');
+                    if (isBlocked) {
+                        cell.classList.add('blocked');
+                        const blockIndicator = document.createElement('div');
+                        blockIndicator.className = 'block-indicator';
+                        blockIndicator.textContent = '🚫';
+                        const block = currentGameState.blocks.find(b => b.row === r && b.col === c);
+                        blockIndicator.title = `Blocked for ${block.turns_remaining} more turn(s)`;
+                        cell.appendChild(blockIndicator);
                     }
-                }                    boardDiv.appendChild(cell);
+                    
+                    if (board[r] && board[r][c]) {
+                        const dot = document.createElement('div');
+                        dot.className = `dot ${board[r][c].color}`;
+                        cell.appendChild(dot);
+                        
+                        // Highlight selected swap positions
+                        if (swapMode && swapPositions.some(p => p.row === r && p.col === c)) {
+                            cell.classList.add('swap-selected');
+                        }
+                    }
+                    
+                    boardDiv.appendChild(cell);
                 }
             }
         }
@@ -2239,7 +2295,7 @@
                         'swap': '↔️',
                         'remove': '💣',
                         'wild_place': '⭐',
-                        'double_score': '×2',
+                        'block': '🚫',
                         'card_swap': '🔄',
                         'landmine': '💥'
                     };
@@ -2442,6 +2498,43 @@
                 return;
             }
             
+            // Handle block mode - select empty position
+            if (blockMode) {
+                const rowLetter = ['A', 'B', 'C', 'D', 'E', 'F'][row];
+                const colNumber = col + 1;
+                
+                // Check if cell is empty
+                if (currentGameState && currentGameState.board[row] && currentGameState.board[row][col]) {
+                    alert('❌ Can only block empty cells!');
+                    return;
+                }
+                
+                // Check if cell is already blocked
+                if (currentGameState && currentGameState.blocks) {
+                    const isBlocked = currentGameState.blocks.some(b => b.row === row && b.col === col);
+                    if (isBlocked) {
+                        alert('❌ This cell is already blocked!');
+                        return;
+                    }
+                }
+                
+                if (confirm(`🚫 Block cell ${rowLetter}${colNumber} for 3 turns?`)) {
+                    console.log('Blocking cell at:', row, col);
+                    socket.emit('place_block', {
+                        game_id: gameId,
+                        position: {row: row, col: col}
+                    });
+                    
+                    blockMode = false;
+                    document.getElementById('gameBoard').style.cursor = 'default';
+                    document.querySelectorAll('.cell').forEach(cell => {
+                        cell.style.outline = '';
+                    });
+                    hideCancelButton();
+                }
+                return;
+            }
+            
             // Only handle clicks when in swap mode
             if (!swapMode) return;
             
@@ -2554,6 +2647,7 @@
             swapPositions = [];
             wildPlaceMode = false;
             landmineMode = false;
+            blockMode = false;
             cardSwapMode = false;
             cardSwapStep = 'none';
             cardSwapOwnCards = [];
