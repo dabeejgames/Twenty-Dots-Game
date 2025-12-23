@@ -207,6 +207,18 @@ class GameSession:
                 if match:
                     print(f"[AI_MOVE] MATCH FOUND from yellow placement! Collecting {len(match)} dots of color {match_color}")
                     self.game.collect_dots(match, current_player, match_color)
+                    
+                    # Check for winner IMMEDIATELY after collecting dots
+                    winner_result = self.check_winner()
+                    if winner_result:
+                        socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                        socketio.emit('game_over', {
+                            'winner': winner_result['winner'],
+                            'condition': winner_result['mode']
+                        }, room=self.game_id)
+                        self.ai_move_in_progress = False
+                        return
+                    
                     # Can roll again if matched
                     self.game.can_roll_dice = True
                     socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
@@ -323,6 +335,17 @@ class GameSession:
                                 yellow_collected = True
                                 break
                         self.game.collect_dots(match, current_player, match_color)
+                        
+                        # Check for winner IMMEDIATELY after collecting dots
+                        winner_result = self.check_winner()
+                        if winner_result:
+                            socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                            socketio.emit('game_over', {
+                                'winner': winner_result['winner'],
+                                'condition': winner_result['mode']
+                            }, room=self.game_id)
+                            self.ai_move_in_progress = False
+                            return
             
             # After playing cards
             total_played_this_turn = self.game.turn_cards_played[current_player]
