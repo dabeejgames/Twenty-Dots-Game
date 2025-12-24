@@ -50,7 +50,8 @@
             gap: 15px;
             padding: 15px;
             flex: 1;
-            overflow: hidden;
+            overflow: auto;
+            min-height: 0;
         }
         
         /* Left panel - Logo */
@@ -86,8 +87,10 @@
             display: flex;
             flex-direction: column;
             flex: 1;
-            gap: 15px;
+            gap: 10px;
             position: relative;
+            min-height: 0;
+            overflow: auto;
         }
         
         /* All 4 players in a row */
@@ -140,13 +143,13 @@
         .board {
             display: -ms-grid;
             display: grid;
-            -ms-grid-columns: 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px;
-            -ms-grid-rows: 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px 3px 80px;
-            grid-template-columns: 80px 80px 80px 80px 80px 80px 80px;
-            grid-template-rows: 80px 80px 80px 80px 80px 80px 80px;
+            -ms-grid-columns: 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px;
+            -ms-grid-rows: 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px;
+            grid-template-columns: 65px 65px 65px 65px 65px 65px 65px;
+            grid-template-rows: 65px 65px 65px 65px 65px 65px 65px;
             gap: 3px;
             background: rgba(0,0,0,0.3);
-            padding: 15px;
+            padding: 12px;
             border-radius: 10px;
             width: fit-content;
             width: -moz-fit-content;
@@ -245,13 +248,13 @@
         }
         
         .dot {
-            width: 40px;
-            height: 40px;
+            width: 35px;
+            height: 35px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: bold;
         }
         
