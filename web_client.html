@@ -547,8 +547,8 @@
             .player-score { font-size: 0.9em; margin: 1px 0; }
             .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
             .player-hand { display: none; }
-            .player-discard { display: none; }
-            .discard-cards { display: none; }
+            .player-discard { font-size: 0.6em; margin-top: 2px; }
+            .discard-cards { gap: 2px; }
             
             /* Board section - centered and takes remaining space */
             .board-section {
@@ -618,10 +618,10 @@
             }
             
             .controls button {
-                flex: 1 1 45%;
-                min-height: 44px;
-                padding: 10px 8px;
-                font-size: 0.8em;
+                flex: 1 1 30%;
+                min-height: 40px;
+                padding: 8px 6px;
+                font-size: 0.75em;
             }
             
             .landmines-display {
@@ -658,8 +658,9 @@
             .player-score { font-size: 0.75em; margin: 1px 0; }
             .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
             .player-hand { display: none; }
-            .player-discard { display: none; }
-            .discard-cards { display: none; }
+            .player-discard { font-size: 0.5em; }
+            .discard-cards { gap: 1px; }
+            .discard-card { width: 18px; height: 10px; font-size: 0.4em; }
             
             .board {
                 width: min(100%, 280px);
@@ -691,9 +692,10 @@
             }
             
             .controls button {
-                min-height: 36px;
-                padding: 6px 4px;
-                font-size: 0.65em;
+                flex: 1 1 30%;
+                min-height: 34px;
+                padding: 5px 3px;
+                font-size: 0.6em;
             }
             
             /* Mode selection adjustments */
