@@ -269,8 +269,25 @@ class GameSession:
             
             # Choose cards to play (1 card at a time for visible gameplay)
             # AI should skip power cards for now (simplified AI doesn't use them)
+            # Also skip cards targeting blocked cells
             cards_needed = 1  # Play only 1 card at a time so human can follow along
-            regular_cards_indices = [i for i, c in enumerate(hand) if not getattr(c, 'power', None)]
+            regular_cards_indices = []
+            for i, c in enumerate(hand):
+                if getattr(c, 'power', None):
+                    continue  # Skip power cards
+                # Check if target cell is blocked
+                if hasattr(c, 'location') and c.location:
+                    row_idx = self.game.rows.index(c.location[0])
+                    col_idx = self.game.columns.index(c.location[1])
+                    is_blocked = False
+                    if hasattr(self.game, 'blocks'):
+                        for block in self.game.blocks:
+                            if block['row'] == row_idx and block['col'] == col_idx:
+                                is_blocked = True
+                                break
+                    if is_blocked:
+                        continue  # Skip cards targeting blocked cells
+                regular_cards_indices.append(i)
             cards_to_play_indices = [regular_cards_indices[i] for i in range(min(cards_needed, len(regular_cards_indices)))]
             
             if len(cards_to_play_indices) == 0:
@@ -294,6 +311,21 @@ class GameSession:
                 if card not in hand:
                     continue
                 
+                # Double-check that the cell is not blocked
+                row = card.location[0]
+                col = card.location[1]
+                row_idx = self.game.rows.index(row)
+                col_idx = self.game.columns.index(col)
+                is_blocked = False
+                if hasattr(self.game, 'blocks'):
+                    for block in self.game.blocks:
+                        if block['row'] == row_idx and block['col'] == col_idx:
+                            is_blocked = True
+                            print(f"[AI_MOVE] {current_player} tried to play on blocked cell {row}{col}, skipping")
+                            break
+                if is_blocked:
+                    continue  # Skip this card, it targets a blocked cell
+                
                 # Remove from hand
                 hand.remove(card)
                 self.game.turn_cards_played[current_player] += 1
@@ -308,8 +340,6 @@ class GameSession:
                 self.discard_piles[current_player].append(card_info)
                 
                 # Check for landmine at this location BEFORE placing
-                row = card.location[0]
-                col = card.location[1]
                 location_str = f"{row}{col}"
                 landmine_result = self.game.check_and_detonate_landmine(location_str, current_player)
                 if landmine_result:
