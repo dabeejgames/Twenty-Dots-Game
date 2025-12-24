@@ -90,21 +90,25 @@
             position: relative;
         }
         
-        /* Top players row */
+        /* All 4 players in a row */
         .players-top {
             display: flex;
-            gap: 20px;
-            justify-content: space-between;
-            height: 160px;
+            gap: 15px;
+            justify-content: center;
+            height: auto;
             margin-top: 10px;
+            flex-wrap: wrap;
         }
+        
+        /* Bottom players row - no longer used */
+        .players-bottom { display: none; }
         
         .player-box {
             background: #1a1a2e;
             border: 2px solid #444;
             border-radius: 8px;
             padding: 12px;
-            width: 220px;
+            width: 180px;
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
@@ -256,19 +260,6 @@
         .dot.purple { background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%); }
         .dot.green { background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%); }
         .dot.yellow { background: radial-gradient(circle, #FFEB3B, #FFD700); box-shadow: 0 0 20px rgba(255,215,0,0.8); border: 2px dashed rgba(255,215,0,0.8); }
-        
-        /* Bottom players row */
-        .players-bottom {
-            display: flex;
-            gap: 20px;
-            justify-content: space-between;
-            height: 160px;
-            position: absolute;
-            bottom: 40px;
-            left: 0;
-            right: 0;
-            z-index: 10;
-        }
         
         /* Right panel - Hand and Controls */
         .right-panel {
@@ -528,7 +519,7 @@
             /* Players row - all 4 in a single horizontal row */
             .players-top {
                 display: flex;
-                gap: 6px;
+                gap: 4px;
                 height: auto;
                 margin: 0;
                 position: relative;
@@ -536,6 +527,7 @@
                 left: auto;
                 right: auto;
                 flex-shrink: 0;
+                flex-wrap: nowrap;
             }
             
             .players-bottom { display: none; }
@@ -544,14 +536,14 @@
                 flex: 1;
                 min-width: 0;
                 width: auto;
-                padding: 6px;
-                font-size: 0.75em;
+                padding: 4px;
+                font-size: 0.65em;
             }
             
-            .player-name { font-size: 0.85em; }
-            .player-score { font-size: 0.95em; margin: 2px 0; }
-            .score-dot { width: 12px; height: 12px; font-size: 0.55em; }
-            .player-hand { font-size: 0.7em; }
+            .player-name { font-size: 0.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .player-score { font-size: 0.9em; margin: 1px 0; }
+            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
+            .player-hand { font-size: 0.65em; }
             .player-discard { display: none; }
             
             /* Board section - centered and takes remaining space */
@@ -642,55 +634,58 @@
             .turn-info { font-size: 0.75em; }
             
             .game-container {
-                gap: 6px;
-                padding: 6px;
+                gap: 4px;
+                padding: 4px;
             }
             
-            .players-top { gap: 4px; }
+            .players-top { 
+                gap: 3px;
+                flex-wrap: nowrap;
+            }
             
             .player-box {
-                padding: 5px;
-                font-size: 0.65em;
-                border-radius: 6px;
+                padding: 3px;
+                font-size: 0.55em;
+                border-radius: 5px;
             }
             
-            .player-name { font-size: 0.75em; }
-            .player-score { font-size: 0.85em; }
-            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
-            .player-hand { font-size: 0.6em; }
+            .player-name { font-size: 0.7em; }
+            .player-score { font-size: 0.75em; margin: 1px 0; }
+            .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
+            .player-hand { display: none; }
             
             .board {
-                width: min(100%, 300px);
-                padding: 6px;
+                width: min(100%, 280px);
+                padding: 5px;
             }
             
-            .dot { width: 18px; height: 18px; font-size: 7px; }
-            .board-label { font-size: 0.75em; }
+            .dot { width: 16px; height: 16px; font-size: 6px; }
+            .board-label { font-size: 0.7em; }
             
             .right-panel {
-                gap: 6px;
-                padding: 8px;
-                max-height: 160px;
+                gap: 4px;
+                padding: 6px;
+                max-height: 150px;
             }
             
-            .hand-title { font-size: 0.8em; }
+            .hand-title { font-size: 0.75em; }
             
             .cards-container {
-                gap: 6px;
-                max-height: 55px;
+                gap: 5px;
+                max-height: 50px;
             }
             
             .card {
-                min-width: 65px;
-                min-height: 48px;
-                padding: 6px;
-                font-size: 0.75em;
+                min-width: 58px;
+                min-height: 42px;
+                padding: 4px;
+                font-size: 0.7em;
             }
             
             .controls button {
-                min-height: 40px;
-                padding: 8px 6px;
-                font-size: 0.7em;
+                min-height: 36px;
+                padding: 6px 4px;
+                font-size: 0.65em;
             }
             
             /* Mode selection adjustments */
@@ -976,24 +971,24 @@
                 
                 <!-- Center: Board and Players -->
                 <div class="center-panel">
-                    <!-- Top Players -->
+                    <!-- All Players in one row on mobile -->
                     <div class="players-top">
                         <div id="player0" class="player-box"></div>
-                        <!-- Active Landmines Display - Between top players -->
-                        <div id="landminesDisplay" class="landmines-display"></div>
                         <div id="player1" class="player-box"></div>
+                        <div id="player2" class="player-box"></div>
+                        <div id="player3" class="player-box"></div>
                     </div>
+                    
+                    <!-- Active Landmines Display -->
+                    <div id="landminesDisplay" class="landmines-display"></div>
                     
                     <!-- Board -->
                     <div class="board-section">
                         <div class="board" id="gameBoard"></div>
                     </div>
                     
-                    <!-- Bottom Players -->
+                    <!-- Bottom Players - only visible on desktop -->
                     <div class="players-bottom">
-                        <div id="player2" class="player-box"></div>
-                        <div style="flex: 1;"></div>
-                        <div id="player3" class="player-box"></div>
                     </div>
                 </div>
                 
@@ -1058,11 +1053,13 @@
         
         // Prevent double-tap zoom on buttons and cards (but not on mode buttons which need click events)
         document.addEventListener('touchend', function(e) {
-            // Only prevent default on CARDS and CELLS, NOT on buttons (they need click events)
+            // Only handle CARDS and CELLS in the game screen
             const target = e.target.closest('.card, .cell');
             const isGameScreen = document.getElementById('gameScreen').classList.contains('active');
             if (target && isGameScreen) {
                 e.preventDefault();
+                // Manually trigger click event since we prevented default
+                target.click();
             }
         }, { passive: false });
         
