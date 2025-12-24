@@ -1725,10 +1725,10 @@
                 
                 // Check if it's a power card
                 if (card.power) {
-                    // Power card styling with golden border and special display
+                    // Power card styling with purple/magenta border (distinct from gold selection)
                     if (!cardSwapOwnCards.includes(index)) {
-                        cardDiv.style.border = '3px solid #FFD700';
-                        cardDiv.style.boxShadow = '0 0 10px rgba(255,215,0,0.5)';
+                        cardDiv.style.border = '3px solid #FF00FF';
+                        cardDiv.style.boxShadow = '0 0 10px rgba(255,0,255,0.5)';
                     }
                     
                     // Get power icon
@@ -1744,9 +1744,9 @@
                     
                     // Power card display
                     cardDiv.innerHTML = `
-                        <div class="card-location" style="color: #FFD700;">⚡ POWER</div>
+                        <div class="card-location" style="color: #FF00FF;">⚡ POWER</div>
                         <div style="font-size: 1.5em; margin: 2px 0;">${powerIcon}</div>
-                        <div class="card-color" style="color: #FFD700; font-size: 0.7em;">${card.power_description || card.power.replace('_', ' ').toUpperCase()}</div>
+                        <div class="card-color" style="color: #FF00FF; font-size: 0.7em;">${card.power_description || card.power.replace('_', ' ').toUpperCase()}</div>
                     `;
                 } else {
                     // Regular card display
