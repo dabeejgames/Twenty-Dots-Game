@@ -543,8 +543,9 @@
             .player-name { font-size: 0.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .player-score { font-size: 0.9em; margin: 1px 0; }
             .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
-            .player-hand { font-size: 0.65em; }
+            .player-hand { display: none; }
             .player-discard { display: none; }
+            .discard-cards { display: none; }
             
             /* Board section - centered and takes remaining space */
             .board-section {
@@ -575,16 +576,16 @@
                 width: 100%;
                 height: auto;
                 flex-direction: column;
-                gap: 8px;
-                padding: 10px;
+                gap: 6px;
+                padding: 8px 10px;
                 border-radius: 12px 12px 0 0;
                 border: 2px solid #6c5ce7;
                 border-bottom: none;
                 flex-shrink: 0;
-                max-height: 180px;
+                max-height: 200px;
             }
             
-            .hand-title { font-size: 0.9em; margin-bottom: 4px; }
+            .hand-title { font-size: 0.85em; margin-bottom: 2px; }
             
             .cards-container {
                 flex-direction: row;
@@ -592,17 +593,18 @@
                 overflow-y: hidden;
                 gap: 8px;
                 margin-bottom: 4px;
-                padding: 4px;
-                max-height: 65px;
+                padding: 4px 2px;
+                min-height: 70px;
+                max-height: 75px;
                 flex-shrink: 0;
                 -webkit-overflow-scrolling: touch;
             }
             
             .card {
-                min-width: 75px;
-                min-height: 55px;
-                padding: 8px;
-                font-size: 0.85em;
+                min-width: 70px;
+                min-height: 62px;
+                padding: 6px;
+                font-size: 0.8em;
                 flex-shrink: 0;
             }
             
@@ -653,6 +655,8 @@
             .player-score { font-size: 0.75em; margin: 1px 0; }
             .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
             .player-hand { display: none; }
+            .player-discard { display: none; }
+            .discard-cards { display: none; }
             
             .board {
                 width: min(100%, 280px);
@@ -664,21 +668,22 @@
             
             .right-panel {
                 gap: 4px;
-                padding: 6px;
-                max-height: 150px;
+                padding: 6px 8px;
+                max-height: 170px;
             }
             
             .hand-title { font-size: 0.75em; }
             
             .cards-container {
-                gap: 5px;
-                max-height: 50px;
+                gap: 6px;
+                min-height: 58px;
+                max-height: 62px;
             }
             
             .card {
-                min-width: 58px;
-                min-height: 42px;
-                padding: 4px;
+                min-width: 55px;
+                min-height: 52px;
+                padding: 5px;
                 font-size: 0.7em;
             }
             
