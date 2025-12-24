@@ -547,9 +547,9 @@
             .player-score { font-size: 0.9em; margin: 1px 0; }
             .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
             .player-hand { display: none; }
-            .player-discard { font-size: 0.55em; margin-top: 1px; }
+            .player-discard { font-size: 0.5em; margin-top: 1px; }
             .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; }
-            .discard-card { width: 16px; height: 9px; font-size: 0.4em; border-radius: 1px; }
+            .discard-card { width: 12px; height: 7px; font-size: 0.3em; border-radius: 1px; }
             
             /* Board section - centered and takes remaining space */
             .board-section {
@@ -626,8 +626,22 @@
             }
             
             .landmines-display {
-                display: none;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+                padding: 5px;
+                margin: 0;
+                min-width: auto;
             }
+            
+            .landmine-card {
+                width: 40px;
+                height: 50px;
+                font-size: 0.7em;
+            }
+            
+            .landmine-card .landmine-icon { font-size: 1.5em; }
+            .landmine-card .landmine-label { font-size: 0.6em; }
         }
         
         /* Phone screens */
@@ -659,9 +673,9 @@
             .player-score { font-size: 0.75em; margin: 1px 0; }
             .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
             .player-hand { display: none; }
-            .player-discard { font-size: 0.5em; margin-top: 1px; }
+            .player-discard { font-size: 0.45em; margin-top: 1px; }
             .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; }
-            .discard-card { width: 14px; height: 8px; font-size: 0.35em; border-radius: 1px; }
+            .discard-card { width: 10px; height: 6px; font-size: 0.25em; border-radius: 1px; }
             
             .board {
                 width: min(100%, 280px);
@@ -1744,9 +1758,9 @@
                     
                     // Power card display
                     cardDiv.innerHTML = `
-                        <div class="card-location" style="color: #FF00FF;">⚡ POWER</div>
+                        <div class="card-location" style="color: white;">⚡ POWER</div>
                         <div style="font-size: 1.5em; margin: 2px 0;">${powerIcon}</div>
-                        <div class="card-color" style="color: #FF00FF; font-size: 0.7em;">${card.power_description || card.power.replace('_', ' ').toUpperCase()}</div>
+                        <div class="card-color" style="color: white; font-size: 0.7em;">${card.power_description || card.power.replace('_', ' ').toUpperCase()}</div>
                     `;
                 } else {
                     // Regular card display
