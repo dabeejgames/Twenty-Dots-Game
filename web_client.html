@@ -158,10 +158,10 @@
         .board {
             display: -ms-grid;
             display: grid;
-            -ms-grid-columns: 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px;
-            -ms-grid-rows: 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px;
-            grid-template-columns: 70px 70px 70px 70px 70px 70px 70px;
-            grid-template-rows: 70px 70px 70px 70px 70px 70px 70px;
+            -ms-grid-columns: 35px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 35px;
+            -ms-grid-rows: 35px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 35px;
+            grid-template-columns: 35px 70px 70px 70px 70px 70px 70px 35px;
+            grid-template-rows: 35px 70px 70px 70px 70px 70px 70px 35px;
             gap: 4px;
             background: rgba(0,0,0,0.3);
             padding: 12px;
@@ -170,7 +170,16 @@
             width: -moz-fit-content;
         }
         
-        .board-label { display: flex; align-items: center; justify-content: center; color: #ff6b6b; font-weight: bold; font-size: 1.1em; }
+        .board-label { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: #ffd700; 
+            font-weight: bold; 
+            font-size: 1.3em; 
+            font-family: 'Segoe UI', 'Arial Black', sans-serif;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
         
         .cell {
             background: rgba(50,50,70,0.8);
@@ -1572,24 +1581,25 @@
             const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
             const cols = ['1', '2', '3', '4', '5', '6'];
             
-            // Empty corner
+            // Top row: empty corner + column headers + empty corner
             boardDiv.appendChild(document.createElement('div'));
-            
-            // Column headers
             cols.forEach(col => {
                 const label = document.createElement('div');
                 label.className = 'board-label';
                 label.textContent = col;
                 boardDiv.appendChild(label);
             });
+            boardDiv.appendChild(document.createElement('div'));
             
-            // Rows with cells
+            // Middle rows: row label + cells + row label
             for (let r = 0; r < 6; r++) {
-                const label = document.createElement('div');
-                label.className = 'board-label';
-                label.textContent = rows[r];
-                boardDiv.appendChild(label);
+                // Left row label
+                const labelLeft = document.createElement('div');
+                labelLeft.className = 'board-label';
+                labelLeft.textContent = rows[r];
+                boardDiv.appendChild(labelLeft);
                 
+                // Cells
                 for (let c = 0; c < 6; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
@@ -1626,7 +1636,23 @@
                     
                     boardDiv.appendChild(cell);
                 }
+                
+                // Right row label
+                const labelRight = document.createElement('div');
+                labelRight.className = 'board-label';
+                labelRight.textContent = rows[r];
+                boardDiv.appendChild(labelRight);
             }
+            
+            // Bottom row: empty corner + column headers + empty corner
+            boardDiv.appendChild(document.createElement('div'));
+            cols.forEach(col => {
+                const label = document.createElement('div');
+                label.className = 'board-label';
+                label.textContent = col;
+                boardDiv.appendChild(label);
+            });
+            boardDiv.appendChild(document.createElement('div'));
         }
         
         function updateLandminesDisplay(landmines) {
