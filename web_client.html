@@ -54,35 +54,45 @@
             min-height: 0;
         }
         
-        /* Left panel - Logo */
+        /* Left panel - Logo and Players */
         .left-panel {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            width: 200px;
+            justify-content: flex-start;
+            width: 260px;
             flex-shrink: 0;
+            gap: 15px;
         }
         
         .logo-box {
             background: #1a1a2e;
             border: 3px solid #ffd700;
             border-radius: 10px;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100%;
+            width: 100%;
+            max-height: 180px;
         }
         
         .logo-box img {
             max-width: 100%;
-            max-height: 100%;
+            max-height: 150px;
             object-fit: contain;
         }
         
-        /* Center panel - Board and Players */
+        /* Players 2x2 grid in left panel */
+        .players-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            width: 100%;
+        }
+        
+        /* Center panel - Landmines and Board */
         .center-panel {
             display: flex;
             flex-direction: column;
@@ -91,11 +101,14 @@
             position: relative;
             min-height: 0;
             overflow: auto;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 10px;
         }
         
-        /* All 4 players in a row */
+        /* Players row - hidden on desktop, shown on mobile */
         .players-top {
-            display: flex;
+            display: none;
             gap: 15px;
             justify-content: center;
             height: auto;
@@ -110,13 +123,13 @@
             background: #1a1a2e;
             border: 2px solid #444;
             border-radius: 8px;
-            padding: 12px;
-            width: 180px;
+            padding: 8px;
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
             text-align: center;
+            font-size: 0.85em;
         }
         
         .player-box.active { border-color: #4CAF50; background: rgba(76, 175, 80, 0.1); }
@@ -144,11 +157,11 @@
         .board {
             display: -ms-grid;
             display: grid;
-            -ms-grid-columns: 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px;
-            -ms-grid-rows: 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px 3px 65px;
-            grid-template-columns: 65px 65px 65px 65px 65px 65px 65px;
-            grid-template-rows: 65px 65px 65px 65px 65px 65px 65px;
-            gap: 3px;
+            -ms-grid-columns: 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px;
+            -ms-grid-rows: 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px 4px 70px;
+            grid-template-columns: 70px 70px 70px 70px 70px 70px 70px;
+            grid-template-rows: 70px 70px 70px 70px 70px 70px 70px;
+            gap: 4px;
             background: rgba(0,0,0,0.3);
             padding: 12px;
             border-radius: 10px;
@@ -198,25 +211,37 @@
             z-index: 5;
         }
         
+        /* Landmine section with label */
+        .landmines-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 520px;
+        }
+        
+        .landmines-label {
+            color: #ff6666;
+            font-weight: bold;
+            font-size: 1em;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
         /* Landmine display area - FIXED height to prevent layout shift */
         .landmines-display {
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 10px;
-            min-width: 100px;
-            height: 75px;  /* Fixed height - same as landmine-card height + padding */
+            width: 100%;
+            height: 80px;  /* Fixed height */
             padding: 5px 10px;
             background: rgba(50, 0, 0, 0.3);
             border-radius: 8px;
-            margin: 0 10px;
-            overflow: hidden;
-        }
-        
-        .landmines-display:empty {
-            display: flex;
-            background: rgba(50, 0, 0, 0.2);
             border: 2px dashed #ff3333;
+            overflow: hidden;
         }
         
         .landmine-card {
@@ -252,13 +277,13 @@
         }
         
         .dot {
-            width: 35px;
-            height: 35px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
         }
         
@@ -514,6 +539,9 @@
             /* Hide left panel logo on mobile - show in header instead */
             .left-panel { display: none; }
             
+            /* Hide players grid on mobile (it's in left panel) */
+            .players-grid { display: none; }
+            
             .center-panel {
                 flex: 1;
                 display: flex;
@@ -627,6 +655,16 @@
                 min-height: 40px;
                 padding: 8px 6px;
                 font-size: 0.75em;
+            }
+            
+            .landmines-section {
+                width: 100%;
+                max-width: none;
+            }
+            
+            .landmines-label {
+                font-size: 0.8em;
+                margin-bottom: 3px;
             }
             
             .landmines-display {
@@ -993,16 +1031,23 @@
             
             <!-- Game Content -->
             <div class="game-container">
-                <!-- Left: Logo -->
+                <!-- Left: Logo and Players -->
                 <div class="left-panel">
                     <div class="logo-box">
                         <img src="Twenty Dots Logo.png" alt="Twenty Dots Logo">
                     </div>
+                    <!-- Players 2x2 grid (desktop only) -->
+                    <div class="players-grid">
+                        <div id="playerLeft0" class="player-box"></div>
+                        <div id="playerLeft1" class="player-box"></div>
+                        <div id="playerLeft2" class="player-box"></div>
+                        <div id="playerLeft3" class="player-box"></div>
+                    </div>
                 </div>
                 
-                <!-- Center: Board and Players -->
+                <!-- Center: Landmines and Board -->
                 <div class="center-panel">
-                    <!-- All Players in one row on mobile -->
+                    <!-- Mobile-only Players row -->
                     <div class="players-top">
                         <div id="player0" class="player-box"></div>
                         <div id="player1" class="player-box"></div>
@@ -1010,13 +1055,17 @@
                         <div id="player3" class="player-box"></div>
                     </div>
                     
-                    <!-- Active Landmines Display -->
-                    <div id="landminesDisplay" class="landmines-display"></div>
+                    <!-- Active Landmines Display with Label -->
+                    <div class="landmines-section">
+                        <div class="landmines-label">💣 Landmines</div>
+                        <div id="landminesDisplay" class="landmines-display"></div>
+                    </div>
                     
                     <!-- Board -->
                     <div class="board-section">
                         <div class="board" id="gameBoard"></div>
                     </div>
+                </div>
                     
                     <!-- Bottom Players - only visible on desktop -->
                     <div class="players-bottom">
@@ -1621,91 +1670,97 @@
 
         function updatePlayers(players, currentTurn) {
             const playerArray = Object.entries(players);
-            const playerIds = ['player0', 'player1', 'player2', 'player3'];
+            // Update both mobile (player0-3) and desktop (playerLeft0-3) boxes
+            const playerIdSets = [
+                ['player0', 'player1', 'player2', 'player3'],
+                ['playerLeft0', 'playerLeft1', 'playerLeft2', 'playerLeft3']
+            ];
             
-            playerIds.forEach((playerId, idx) => {
-                const playerBox = document.getElementById(playerId);
-                if (!playerBox) return;
-                playerBox.innerHTML = '';
-                playerBox.classList.remove('active', 'me');
-                
-                if (idx < playerArray.length) {
-                    const [name, data] = playerArray[idx];
-                    if (name === currentTurn) playerBox.classList.add('active');
-                    if (name === playerName) playerBox.classList.add('me');
+            playerIdSets.forEach(playerIds => {
+                playerIds.forEach((playerId, idx) => {
+                    const playerBox = document.getElementById(playerId);
+                    if (!playerBox) return;
+                    playerBox.innerHTML = '';
+                    playerBox.classList.remove('active', 'me');
                     
-                    const nameDiv = document.createElement('div');
-                    nameDiv.className = 'player-name';
-                    nameDiv.textContent = name + (name === playerName ? ' (You)' : '');
-                    playerBox.appendChild(nameDiv);
-                    
-                    const scoreDiv = document.createElement('div');
-                    scoreDiv.className = 'player-score';
-                    scoreDiv.textContent = `${data.total_dots} dots`;
-                    playerBox.appendChild(scoreDiv);
-                    
-                    const colorsDiv = document.createElement('div');
-                    colorsDiv.className = 'player-score-dots';
-                    ['red', 'blue', 'purple', 'green'].forEach(color => {
-                        const scoreDot = document.createElement('div');
-                        scoreDot.className = `score-dot dot ${color}`;
-                        scoreDot.textContent = data.score ? (data.score[color] || 0) : 0;
-                        colorsDiv.appendChild(scoreDot);
-                    });
-                    
-                    // Add yellow dot display if game mode is five_with_yellow
-                    if (currentGameState && currentGameState.game_mode === 'five_with_yellow') {
-                        const yellowDot = document.createElement('div');
-                        yellowDot.className = 'score-dot dot yellow';
-                        yellowDot.textContent = data.yellow_dots || 0;
-                        colorsDiv.appendChild(yellowDot);
-                    }
-                    
-                    playerBox.appendChild(colorsDiv);
-                    
-                    const handDiv = document.createElement('div');
-                    handDiv.className = 'player-hand';
-                    handDiv.textContent = `Hand: ${data.hand_size}/5`;
-                    playerBox.appendChild(handDiv);
-                    
-                    // Add discard pile (always show, even if empty)
-                    const discardPile = data.discard_pile || [];
-                    const discardLabel = document.createElement('div');
-                    discardLabel.className = 'player-discard';
-                    discardLabel.textContent = `Discard: ${discardPile.length}`;
-                    playerBox.appendChild(discardLabel);
-                    
-                    const discardContainer = document.createElement('div');
-                    discardContainer.className = 'discard-cards';
-                    if (discardPile.length > 0) {
-                        // Show last 2 cards as card boxes
-                        const lastCards = discardPile.slice(-2);
-                        lastCards.forEach(card => {
-                            const cardDiv = document.createElement('div');
-                            cardDiv.className = `card ${card.color}`;
-                            cardDiv.style.width = '55px';
-                            cardDiv.style.minHeight = '35px';
-                            cardDiv.style.fontSize = '0.7em';
-                            cardDiv.style.padding = '3px';
-                            cardDiv.style.flexShrink = '0';
-                            cardDiv.style.flexBasis = 'auto';
-                            cardDiv.innerHTML = `<div>${card.location}</div><div style="font-size: 0.7em; opacity: 0.8;">${card.color.toUpperCase()}</div>`;
-                            discardContainer.appendChild(cardDiv);
+                    if (idx < playerArray.length) {
+                        const [name, data] = playerArray[idx];
+                        if (name === currentTurn) playerBox.classList.add('active');
+                        if (name === playerName) playerBox.classList.add('me');
+                        
+                        const nameDiv = document.createElement('div');
+                        nameDiv.className = 'player-name';
+                        nameDiv.textContent = name + (name === playerName ? ' (You)' : '');
+                        playerBox.appendChild(nameDiv);
+                        
+                        const scoreDiv = document.createElement('div');
+                        scoreDiv.className = 'player-score';
+                        scoreDiv.textContent = `${data.total_dots} dots`;
+                        playerBox.appendChild(scoreDiv);
+                        
+                        const colorsDiv = document.createElement('div');
+                        colorsDiv.className = 'player-score-dots';
+                        ['red', 'blue', 'purple', 'green'].forEach(color => {
+                            const scoreDot = document.createElement('div');
+                            scoreDot.className = `score-dot dot ${color}`;
+                            scoreDot.textContent = data.score ? (data.score[color] || 0) : 0;
+                            colorsDiv.appendChild(scoreDot);
                         });
+                        
+                        // Add yellow dot display if game mode is five_with_yellow
+                        if (currentGameState && currentGameState.game_mode === 'five_with_yellow') {
+                            const yellowDot = document.createElement('div');
+                            yellowDot.className = 'score-dot dot yellow';
+                            yellowDot.textContent = data.yellow_dots || 0;
+                            colorsDiv.appendChild(yellowDot);
+                        }
+                        
+                        playerBox.appendChild(colorsDiv);
+                        
+                        const handDiv = document.createElement('div');
+                        handDiv.className = 'player-hand';
+                        handDiv.textContent = `Hand: ${data.hand_size}/5`;
+                        playerBox.appendChild(handDiv);
+                        
+                        // Add discard pile (always show, even if empty)
+                        const discardPile = data.discard_pile || [];
+                        const discardLabel = document.createElement('div');
+                        discardLabel.className = 'player-discard';
+                        discardLabel.textContent = `Discard: ${discardPile.length}`;
+                        playerBox.appendChild(discardLabel);
+                        
+                        const discardContainer = document.createElement('div');
+                        discardContainer.className = 'discard-cards';
+                        if (discardPile.length > 0) {
+                            // Show last 2 cards as card boxes
+                            const lastCards = discardPile.slice(-2);
+                            lastCards.forEach(card => {
+                                const cardDiv = document.createElement('div');
+                                cardDiv.className = `card ${card.color}`;
+                                cardDiv.style.width = '55px';
+                                cardDiv.style.minHeight = '35px';
+                                cardDiv.style.fontSize = '0.7em';
+                                cardDiv.style.padding = '3px';
+                                cardDiv.style.flexShrink = '0';
+                                cardDiv.style.flexBasis = 'auto';
+                                cardDiv.innerHTML = `<div>${card.location}</div><div style="font-size: 0.7em; opacity: 0.8;">${card.color.toUpperCase()}</div>`;
+                                discardContainer.appendChild(cardDiv);
+                            });
+                        }
+                        playerBox.appendChild(discardContainer);
+                        
+                        // Add wins/losses stats
+                        const stats = JSON.parse(localStorage.getItem('playerStats') || '{}');
+                        const playerStats = stats[name] || { wins: 0, losses: 0 };
+                        const statsDiv = document.createElement('div');
+                        statsDiv.style.marginTop = '8px';
+                        statsDiv.style.fontSize = '0.85em';
+                        statsDiv.style.color = '#4CAF50';
+                        statsDiv.style.textAlign = 'center';
+                        statsDiv.innerHTML = `<div style="font-weight: bold;">Wins: ${playerStats.wins} | Loss: ${playerStats.losses}</div>`;
+                        playerBox.appendChild(statsDiv);
                     }
-                    playerBox.appendChild(discardContainer);
-                    
-                    // Add wins/losses stats
-                    const stats = JSON.parse(localStorage.getItem('playerStats') || '{}');
-                    const playerStats = stats[name] || { wins: 0, losses: 0 };
-                    const statsDiv = document.createElement('div');
-                    statsDiv.style.marginTop = '8px';
-                    statsDiv.style.fontSize = '0.85em';
-                    statsDiv.style.color = '#4CAF50';
-                    statsDiv.style.textAlign = 'center';
-                    statsDiv.innerHTML = `<div style="font-weight: bold;">Wins: ${playerStats.wins} | Loss: ${playerStats.losses}</div>`;
-                    playerBox.appendChild(statsDiv);
-                }
+                });
             });
         }
 
