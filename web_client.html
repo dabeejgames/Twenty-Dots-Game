@@ -128,7 +128,8 @@
         .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
         .player-hand { font-size: 0.85em; color: #aaa; }
         .player-discard { font-size: 0.75em; color: #888; margin-top: 5px; }
-        .discard-cards { display: flex; justify-content: center; gap: 5px; margin-top: 3px; flex-wrap: nowrap; border: 1px dashed #888; min-height: 16px; padding: 2px; }
+        /* Fixed height discard area to prevent layout shift */
+        .discard-cards { display: flex; justify-content: center; gap: 5px; margin-top: 3px; flex-wrap: nowrap; border: 1px dashed #888; height: 20px; padding: 2px; overflow: hidden; }
         .discard-card { width: 25px; height: 14px; border-radius: 2px; font-size: 0.55em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
         
         /* Board */
@@ -197,24 +198,25 @@
             z-index: 5;
         }
         
-        /* Landmine display area */
+        /* Landmine display area - FIXED height to prevent layout shift */
         .landmines-display {
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 10px;
             min-width: 100px;
+            height: 75px;  /* Fixed height - same as landmine-card height + padding */
             padding: 5px 10px;
             background: rgba(50, 0, 0, 0.3);
             border-radius: 8px;
             margin: 0 10px;
+            overflow: hidden;
         }
         
         .landmines-display:empty {
             display: flex;
             background: rgba(50, 0, 0, 0.2);
             border: 2px dashed #ff3333;
-            min-height: 30px;
         }
         
         .landmine-card {
@@ -550,7 +552,7 @@
             .score-dot { width: 9px; height: 9px; font-size: 0.45em; }
             .player-hand { display: none; }
             .player-discard { font-size: 0.45em; margin-top: 1px; }
-            .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; }
+            .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; height: 12px; }
             .discard-card { width: 10px !important; height: 6px !important; font-size: 0.25em !important; border-radius: 1px !important; }
             
             /* Board section - centered and takes remaining space */
@@ -634,6 +636,8 @@
                 padding: 5px;
                 margin: 0;
                 min-width: auto;
+                height: 60px;  /* Fixed height on mobile too */
+                overflow: hidden;
             }
             
             .landmine-card {
@@ -676,7 +680,7 @@
             .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
             .player-hand { display: none; }
             .player-discard { font-size: 0.45em; margin-top: 1px; }
-            .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; }
+            .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; height: 12px; }
             .discard-card { width: 10px !important; height: 6px !important; font-size: 0.25em !important; border-radius: 1px !important; }
             
             .board {

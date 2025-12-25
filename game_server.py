@@ -985,6 +985,7 @@ def handle_play_cards(data):
     yellow_replaced = False
     yellow_collected = False
     power_card_used = False
+    placed_positions = []  # Track positions for deferred match checking
     
     for card in cards_to_play:
         # Add card to discard pile first
@@ -1181,11 +1182,14 @@ def handle_play_cards(data):
                 'placed_by': landmine_result['player']
             }, room=game_id)
             
-        # Regular card - place dot
+        # Regular card - place dot (but DON'T check matches yet - wait until all cards are placed)
         success, replaced_color = game_session.game.place_card_dot(card)
         print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}, replaced={replaced_color}")
         
         if success:
+            # Track the position for later match checking
+            placed_positions.append({'row': row, 'col': col, 'color': card.color})
+            
             # Award point if we replaced a colored dot (red, blue, purple, green)
             if replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
                 game_session.game.players[player_name]['score'][replaced_color] += 1
@@ -1197,20 +1201,33 @@ def handle_play_cards(data):
                 game_session.game.players[player_name]['yellow_dots'] += 1
                 game_session.game.players[player_name]['total_dots'] += 1
                 print(f"[PLAY_CARDS] {player_name} collected a yellow dot! Total yellow: {game_session.game.players[player_name]['yellow_dots']}")
-            
-            # Check for matches
-            match_result = game_session.game.check_line_match(row, col, card.color)
-            match, match_color = match_result
-            if match:  # Check if match list has items
-                matches_made = True
-                # Check if yellow dot is in the matched positions
-                for col_idx, row_idx in match:
-                    dot = game_session.game.grid[row_idx][col_idx]
-                    if dot and dot.color == 'yellow':
-                        yellow_collected = True
-                        print(f"[PLAY_CARDS] Yellow dot collected in match")
-                        break
-                game_session.game.collect_dots(match, player_name, match_color)
+    
+    # PHASE 2: After all cards are placed, check for matches from each placed position
+    # This ensures that when placing 2 adjacent cards, both are on the board before checking
+    all_match_positions = set()  # Use set to avoid collecting same position twice
+    for placed in placed_positions:
+        match_result = game_session.game.check_line_match(placed['row'], placed['col'], placed['color'])
+        match, match_color = match_result
+        if match:
+            matches_made = True
+            for pos in match:
+                all_match_positions.add(pos)
+            print(f"[PLAY_CARDS] Match found from {placed['row']}{placed['col']}: {len(match)} dots")
+    
+    # Collect all matched dots and check for yellow
+    if all_match_positions:
+        # Convert set to list for collect_dots
+        match_list = list(all_match_positions)
+        # Check if yellow dot is in the matched positions
+        for col_idx, row_idx in match_list:
+            dot = game_session.game.grid[row_idx][col_idx]
+            if dot and dot.color == 'yellow':
+                yellow_collected = True
+                print(f"[PLAY_CARDS] Yellow dot collected in match")
+                break
+        # Determine the color for scoring (use the first placed card's color)
+        match_color = placed_positions[0]['color'] if placed_positions else 'red'
+        game_session.game.collect_dots(match_list, player_name, match_color)
     
     # If yellow was replaced or collected, allow player to roll again for new yellow
     if yellow_replaced or yellow_collected:
