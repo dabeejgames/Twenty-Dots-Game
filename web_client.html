@@ -97,13 +97,13 @@
             display: flex;
             flex-direction: column;
             flex: 1;
-            gap: 10px;
+            gap: 15px;
             position: relative;
             min-height: 0;
             overflow: auto;
             align-items: center;
-            justify-content: flex-start;
-            padding-top: 10px;
+            justify-content: center;
+            padding: 0;
         }
         
         /* Players row - hidden on desktop, shown on mobile */
@@ -130,6 +130,7 @@
             justify-content: flex-start;
             text-align: center;
             font-size: 0.9em;
+            min-height: 180px;
         }
         
         .player-box.active { border-color: #4CAF50; background: rgba(76, 175, 80, 0.1); }
@@ -140,10 +141,10 @@
         .player-score-dots { display: flex; justify-content: center; gap: 3px; margin: 5px 0; }
         .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
         .player-hand { font-size: 0.85em; color: #aaa; }
-        .player-discard { font-size: 0.75em; color: #888; margin-top: 5px; }
-        /* Fixed height discard area - tall enough to show cards */
-        .discard-cards { display: flex; justify-content: center; gap: 4px; margin-top: 3px; flex-wrap: nowrap; height: 45px; padding: 3px; overflow: hidden; }
-        .discard-card { width: 50px; height: 38px; border-radius: 4px; font-size: 0.65em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+        .player-discard { font-size: 0.8em; color: #aaa; margin-top: 8px; }
+        /* Fixed height discard area with visible border */
+        .discard-cards { display: flex; justify-content: center; gap: 6px; margin-top: 5px; flex-wrap: nowrap; height: 55px; padding: 5px; overflow: hidden; border: 2px solid #555; border-radius: 6px; background: rgba(0,0,0,0.2); }
+        .discard-card { width: 50px; height: 42px; border-radius: 4px; font-size: 0.65em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
         
         /* Board */
         .board-section {
@@ -1733,8 +1734,8 @@
                                 const cardDiv = document.createElement('div');
                                 cardDiv.className = `card ${card.color}`;
                                 cardDiv.style.width = '50px';
-                                cardDiv.style.minHeight = '38px';
-                                cardDiv.style.fontSize = '0.65em';
+                                cardDiv.style.minHeight = '42px';
+                                cardDiv.style.fontSize = '0.7em';
                                 cardDiv.style.padding = '4px';
                                 cardDiv.style.flexShrink = '0';
                                 cardDiv.style.flexBasis = 'auto';
