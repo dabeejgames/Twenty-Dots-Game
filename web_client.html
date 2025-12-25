@@ -648,7 +648,8 @@
                 display: flex;
                 gap: 4px;
                 height: auto;
-                margin: 0;
+                margin: 0 4px;
+                padding: 0 2px;
                 position: relative;
                 top: auto;
                 left: auto;
@@ -664,16 +665,17 @@
                 min-width: 0;
                 min-height: auto;
                 width: auto;
-                padding: 5px;
-                font-size: 0.7em;
+                padding: 4px 3px;
+                font-size: 0.65em;
             }
             
-            .player-name { font-size: 0.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .player-score { font-size: 0.9em; margin: 2px 0; }
-            .score-dot { width: 12px; height: 12px; font-size: 0.5em; }
+            .player-name { font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .player-score { font-size: 0.85em; margin: 2px 0; }
+            .score-dot { width: 10px; height: 10px; font-size: 0.45em; }
             .player-hand { display: none; }
-            .player-discard { display: none; }
-            .discard-cards { display: none; }
+            .player-discard { font-size: 0.5em; margin-top: 2px; }
+            .discard-cards { display: flex; gap: 1px; height: 18px; padding: 2px; justify-content: center; }
+            .discard-card { width: 14px !important; height: 12px !important; font-size: 0.3em !important; border-radius: 2px !important; }
             
             /* Board section - centered and takes remaining space */
             .board-section {
@@ -804,21 +806,23 @@
             .players-top { 
                 gap: 3px;
                 flex-wrap: nowrap;
+                margin: 0 3px;
             }
             
             .player-box {
-                padding: 4px;
-                font-size: 0.6em;
+                padding: 3px 2px;
+                font-size: 0.55em;
                 border-radius: 5px;
                 min-height: auto;
             }
             
-            .player-name { font-size: 0.75em; }
-            .player-score { font-size: 0.85em; margin: 2px 0; }
-            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
+            .player-name { font-size: 0.7em; }
+            .player-score { font-size: 0.8em; margin: 1px 0; }
+            .score-dot { width: 9px; height: 9px; font-size: 0.4em; }
             .player-hand { display: none; }
-            .player-discard { display: none; }
-            .discard-cards { display: none; }
+            .player-discard { font-size: 0.45em; margin-top: 1px; }
+            .discard-cards { height: 14px; gap: 1px; padding: 1px; }
+            .discard-card { width: 12px !important; height: 10px !important; font-size: 0.25em !important; }
             
             .board {
                 grid-template-columns: 15px repeat(6, 38px) 15px;
