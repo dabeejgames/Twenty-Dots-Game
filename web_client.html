@@ -30,6 +30,37 @@
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
         
+        /* Random background themes */
+        body.bg-default { background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%); }
+        body.bg-space { 
+            background: linear-gradient(135deg, #0c0c1d 0%, #1a0a2e 50%, #0d1b2a 100%);
+            background-size: 400% 400%;
+        }
+        body.bg-ocean { 
+            background: linear-gradient(135deg, #0a1628 0%, #0d2137 50%, #0a2a3a 100%);
+        }
+        body.bg-forest { 
+            background: linear-gradient(135deg, #0a1a0a 0%, #0d2818 50%, #1a2e1a 100%);
+        }
+        body.bg-sunset { 
+            background: linear-gradient(135deg, #1a0a1a 0%, #2e1a2a 50%, #1a1a2e 100%);
+        }
+        body.bg-fire { 
+            background: linear-gradient(135deg, #1a0a0a 0%, #2e1a0d 50%, #1a1510 100%);
+        }
+        body.bg-cyber { 
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 30%, #0a1a2e 70%, #0a1a1a 100%);
+        }
+        body.bg-aurora { 
+            background: linear-gradient(135deg, #0a1a1a 0%, #0a2e1a 30%, #1a0a2e 70%, #0a1a2e 100%);
+        }
+        body.bg-galaxy { 
+            background: radial-gradient(ellipse at top left, #1a0a2e 0%, #0f0f1e 50%, #0a1a2e 100%);
+        }
+        body.bg-nebula { 
+            background: radial-gradient(ellipse at bottom right, #2e0a2e 0%, #0f0f1e 50%, #1a0a1a 100%);
+        }
+        
         .main-container { display: none; width: 100vw; height: 100vh; }
         .main-container.active { display: flex; }
         
@@ -1120,6 +1151,22 @@
         let cardSwapOpponent = null;
         let cardSwapOpponentCards = [];
         let cardSwapOpponentHandSize = 0;
+
+        // Random background themes
+        const backgroundThemes = [
+            'bg-default', 'bg-space', 'bg-ocean', 'bg-forest', 'bg-sunset',
+            'bg-fire', 'bg-cyber', 'bg-aurora', 'bg-galaxy', 'bg-nebula'
+        ];
+        
+        function setRandomBackground() {
+            const randomIndex = Math.floor(Math.random() * backgroundThemes.length);
+            const theme = backgroundThemes[randomIndex];
+            document.body.className = theme;
+            console.log('Background theme set to:', theme);
+        }
+        
+        // Set random background on page load
+        setRandomBackground();
 
         // Mobile viewport height fix (handles address bar hide/show)
         function setMobileViewportHeight() {
