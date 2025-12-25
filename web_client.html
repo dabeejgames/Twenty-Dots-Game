@@ -589,14 +589,14 @@
         /* Mobile Responsive Design - Clean unified approach */
         @media (max-width: 1200px) {
             .board {
-                grid-template-columns: repeat(7, 55px);
-                grid-template-rows: repeat(7, 55px);
+                grid-template-columns: 30px repeat(6, 55px) 30px;
+                grid-template-rows: 30px repeat(6, 55px) 30px;
                 gap: 2px;
                 padding: 10px;
             }
             
             .dot { width: 28px; height: 28px; font-size: 9px; }
-            .left-panel { width: 120px; }
+            .left-panel { width: 260px; }
             .right-panel { width: 220px; }
         }
         
@@ -660,18 +660,18 @@
             .player-box {
                 flex: 1;
                 min-width: 0;
+                min-height: auto;
                 width: auto;
-                padding: 3px;
-                font-size: 0.6em;
+                padding: 5px;
+                font-size: 0.7em;
             }
             
-            .player-name { font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .player-score { font-size: 0.8em; margin: 1px 0; }
-            .score-dot { width: 9px; height: 9px; font-size: 0.45em; }
+            .player-name { font-size: 0.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .player-score { font-size: 0.9em; margin: 2px 0; }
+            .score-dot { width: 12px; height: 12px; font-size: 0.5em; }
             .player-hand { display: none; }
-            .player-discard { font-size: 0.45em; margin-top: 1px; }
-            .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; height: 12px; }
-            .discard-card { width: 10px !important; height: 6px !important; font-size: 0.25em !important; border-radius: 1px !important; }
+            .player-discard { display: none; }
+            .discard-cards { display: none; }
             
             /* Board section - centered and takes remaining space */
             .board-section {
@@ -684,9 +684,9 @@
             }
             
             .board {
-                grid-template-columns: repeat(7, 1fr);
-                grid-template-rows: repeat(7, 1fr);
-                width: min(90vw, 280px);
+                grid-template-columns: 20px repeat(6, 1fr) 20px;
+                grid-template-rows: 20px repeat(6, 1fr) 20px;
+                width: min(90vw, 350px);
                 height: auto;
                 aspect-ratio: 1;
                 gap: 2px;
@@ -694,8 +694,8 @@
             }
             
             .cell { min-width: 0; min-height: 0; }
-            .dot { width: 18px; height: 18px; font-size: 7px; }
-            .board-label { font-size: 0.8em; }
+            .dot { width: 20px; height: 20px; font-size: 7px; }
+            .board-label { font-size: 0.7em; }
             
             /* Hand and controls at bottom */
             .right-panel {
@@ -753,29 +753,33 @@
             }
             
             .landmines-label {
-                font-size: 0.8em;
-                margin-bottom: 3px;
+                font-size: 0.75em;
+                margin-bottom: 2px;
             }
             
             .landmines-display {
                 display: flex;
-                flex-wrap: wrap;
+                flex-direction: row;
+                flex-wrap: nowrap;
                 gap: 5px;
-                padding: 5px;
+                padding: 4px 8px;
                 margin: 0;
                 min-width: auto;
-                height: 60px;  /* Fixed height on mobile too */
-                overflow: hidden;
+                height: 50px;
+                overflow-x: auto;
+                overflow-y: hidden;
+                justify-content: center;
             }
             
             .landmine-card {
-                width: 40px;
-                height: 50px;
-                font-size: 0.7em;
+                width: 35px;
+                height: 40px;
+                font-size: 0.65em;
+                flex-shrink: 0;
             }
             
-            .landmine-card .landmine-icon { font-size: 1.5em; }
-            .landmine-card .landmine-label { font-size: 0.6em; }
+            .landmine-card .landmine-icon { font-size: 1.3em; }
+            .landmine-card .landmine-label { font-size: 0.55em; }
         }
         
         /* Phone screens */
@@ -798,26 +802,49 @@
             }
             
             .player-box {
-                padding: 3px;
-                font-size: 0.55em;
+                padding: 4px;
+                font-size: 0.6em;
                 border-radius: 5px;
+                min-height: auto;
             }
             
-            .player-name { font-size: 0.7em; }
-            .player-score { font-size: 0.75em; margin: 1px 0; }
-            .score-dot { width: 8px; height: 8px; font-size: 0.45em; }
+            .player-name { font-size: 0.75em; }
+            .player-score { font-size: 0.85em; margin: 2px 0; }
+            .score-dot { width: 10px; height: 10px; font-size: 0.5em; }
             .player-hand { display: none; }
-            .player-discard { font-size: 0.45em; margin-top: 1px; }
-            .discard-cards { gap: 1px; max-width: 100%; overflow: hidden; height: 12px; }
-            .discard-card { width: 10px !important; height: 6px !important; font-size: 0.25em !important; border-radius: 1px !important; }
+            .player-discard { display: none; }
+            .discard-cards { display: none; }
             
             .board {
-                width: min(100%, 240px);
+                grid-template-columns: 18px repeat(6, 1fr) 18px;
+                grid-template-rows: 18px repeat(6, 1fr) 18px;
+                width: min(95vw, 320px);
                 padding: 4px;
             }
             
-            .dot { width: 14px; height: 14px; font-size: 5px; }
-            .board-label { font-size: 0.65em; }
+            .dot { width: 18px; height: 18px; font-size: 6px; }
+            .board-label { font-size: 0.6em; }
+            
+            .landmines-section {
+                width: 100%;
+            }
+            
+            .landmines-label {
+                font-size: 0.7em;
+            }
+            
+            .landmines-display {
+                height: 45px;
+                padding: 3px 6px;
+            }
+            
+            .landmine-card {
+                width: 30px;
+                height: 35px;
+            }
+            
+            .landmine-card .landmine-icon { font-size: 1.1em; }
+            .landmine-card .landmine-label { font-size: 0.5em; }
             
             .right-panel {
                 gap: 3px;
@@ -871,20 +898,22 @@
             .turn-info { font-size: 0.65em; }
             
             .player-box {
-                padding: 4px;
-                font-size: 0.6em;
+                padding: 3px;
+                font-size: 0.55em;
             }
             
             .score-dot { width: 9px; height: 9px; }
             
             .board {
-                width: min(100%, 260px);
-                padding: 4px;
+                grid-template-columns: 15px repeat(6, 1fr) 15px;
+                grid-template-rows: 15px repeat(6, 1fr) 15px;
+                width: min(100%, 290px);
+                padding: 3px;
                 gap: 1px;
             }
             
-            .dot { width: 15px; height: 15px; font-size: 6px; }
-            .board-label { font-size: 0.65em; }
+            .dot { width: 16px; height: 16px; font-size: 5px; }
+            .board-label { font-size: 0.55em; }
             
             .right-panel {
                 max-height: 145px;
