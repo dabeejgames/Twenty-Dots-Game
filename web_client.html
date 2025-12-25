@@ -210,7 +210,7 @@
             justify-content: flex-start;
             text-align: center;
             font-size: 0.9em;
-            min-height: 180px;
+            overflow: hidden;
         }
         
         .player-box.active { border-color: #4CAF50; background: rgba(76, 175, 80, 0.1); }
@@ -218,13 +218,13 @@
         
         .player-name { color: #ffd700; font-weight: bold; font-size: 0.95em; }
         .player-score { color: #4CAF50; font-size: 1.2em; font-weight: bold; margin: 5px 0; }
-        .player-score-dots { display: flex; justify-content: center; gap: 3px; margin: 5px 0; }
+        .player-score-dots { display: flex; justify-content: center; gap: 3px; margin: 5px 0; flex-wrap: wrap; }
         .score-dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7em; font-weight: bold; }
         .player-hand { font-size: 0.85em; color: #aaa; }
         .player-discard { font-size: 0.8em; color: #aaa; margin-top: 8px; }
         /* Fixed height discard area with visible border */
-        .discard-cards { display: flex; justify-content: center; gap: 6px; margin-top: 5px; flex-wrap: nowrap; height: 55px; padding: 5px; overflow: hidden; border: 2px solid #555; border-radius: 6px; background: rgba(0,0,0,0.2); }
-        .discard-card { width: 50px; height: 42px; border-radius: 4px; font-size: 0.65em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+        .discard-cards { display: flex; justify-content: center; gap: 6px; margin-top: 5px; flex-wrap: wrap; height: 55px; padding: 5px; overflow: hidden; border: 2px solid #555; border-radius: 6px; background: rgba(0,0,0,0.2); }
+        .discard-card { width: 50px; height: 42px; border-radius: 4px; font-size: 0.65em; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; }
         
         /* Board */
         .board-section {
@@ -671,11 +671,12 @@
             
             .player-name { font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .player-score { font-size: 0.85em; margin: 2px 0; }
+            .player-score-dots { gap: 2px; margin: 2px 0; }
             .score-dot { width: 10px; height: 10px; font-size: 0.45em; }
             .player-hand { display: none; }
             .player-discard { font-size: 0.45em; margin-top: 1px; }
-            .discard-cards { display: flex; gap: 1px; height: 14px; padding: 1px 2px; justify-content: center; border: 1px solid #666; border-radius: 3px; background: rgba(0,0,0,0.3); overflow: hidden; }
-            .discard-card { width: 10px !important; height: 8px !important; font-size: 0 !important; border-radius: 1px !important; }
+            .discard-cards { gap: 2px !important; height: 16px !important; padding: 2px !important; justify-content: center; border: 1px solid #666 !important; border-radius: 3px !important; background: rgba(0,0,0,0.3) !important; overflow: hidden !important; flex-wrap: nowrap !important; margin-top: 2px !important; }
+            .discard-card { width: 10px !important; height: 10px !important; font-size: 0 !important; border-radius: 2px !important; flex-shrink: 0 !important; }
             
             /* Board section - centered and takes remaining space */
             .board-section {
@@ -818,11 +819,12 @@
             
             .player-name { font-size: 0.7em; }
             .player-score { font-size: 0.8em; margin: 1px 0; }
+            .player-score-dots { gap: 1px; margin: 1px 0; }
             .score-dot { width: 9px; height: 9px; font-size: 0.4em; }
             .player-hand { display: none; }
             .player-discard { font-size: 0.4em; margin-top: 1px; }
-            .discard-cards { height: 12px; gap: 1px; padding: 1px; border: 1px solid #666; border-radius: 2px; background: rgba(0,0,0,0.3); overflow: hidden; }
-            .discard-card { width: 8px !important; height: 6px !important; font-size: 0 !important; border-radius: 1px !important; }
+            .discard-cards { height: 14px !important; gap: 1px !important; padding: 1px !important; border: 1px solid #666 !important; border-radius: 2px !important; background: rgba(0,0,0,0.3) !important; overflow: hidden !important; }
+            .discard-card { width: 8px !important; height: 8px !important; font-size: 0 !important; border-radius: 1px !important; }
             
             .board {
                 grid-template-columns: 15px repeat(6, 38px) 15px;
