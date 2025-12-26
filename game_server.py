@@ -167,6 +167,22 @@ class GameSession:
         print(f"Sending hand to {player_name}: {len(cards_data)} cards, power cards: {[c.get('power') for c in cards_data if c.get('power')]}")
         return cards_data
     
+    def advance_turn(self):
+        """Advance to next player and decrement block turns.
+        This should be called instead of game.next_player() directly."""
+        # Decrement block turns and remove expired blocks
+        if hasattr(self.game, 'blocks'):
+            for block in self.game.blocks[:]:  # Iterate over a copy
+                block['turns_remaining'] -= 1
+                if block['turns_remaining'] <= 0:
+                    row_letter = self.game.rows[block['row']]
+                    col_str = self.game.columns[block['col']]
+                    print(f"[ADVANCE_TURN] Block at {row_letter}{col_str} expired")
+                    self.game.blocks.remove(block)
+        
+        # Now advance to next player
+        self.game.next_player()
+    
     def execute_ai_move(self):
         """Execute AI move if current player is AI"""
         if self.ai_move_in_progress:
@@ -257,7 +273,7 @@ class GameSession:
             # Check if AI already played 2 cards this turn
             if cards_played_this_turn >= 2:
                 print(f"[AI_MOVE] {current_player} already played {cards_played_this_turn} cards, advancing turn")
-                self.game.next_player()
+                self.advance_turn()
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
@@ -292,7 +308,7 @@ class GameSession:
             
             if len(cards_to_play_indices) == 0:
                 print(f"[AI_MOVE] {current_player} has no regular cards to play, advancing turn")
-                self.game.next_player()
+                self.advance_turn()
                 new_player = self.game.get_current_player()
                 self.game.turn_cards_played[new_player] = 0
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
@@ -416,7 +432,7 @@ class GameSession:
                     # Advance to next player
                     print(f"[AI_MOVE] {current_player} played 2 cards, advancing turn")
                     self.game.can_roll_dice = False
-                    self.game.next_player()
+                    self.advance_turn()
                     new_player = self.game.get_current_player()
                     self.game.turn_cards_played[new_player] = 0
                     socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
@@ -1160,7 +1176,13 @@ def handle_play_cards(data):
                     emit('error', {'message': f'Cell {row}{col} is blocked for {block["turns_remaining"]} more turn(s)!'})
                     # Put the card back in hand
                     hand.append(card)
+                    # Remove from discard pile since it was added earlier
+                    if player_name in game_session.discard_piles and game_session.discard_piles[player_name]:
+                        game_session.discard_piles[player_name].pop()
                     game_session.game.turn_cards_played[current_player] -= 1
+                    # Send updated hand to player
+                    player_hand = game_session.get_player_hand(player_name)
+                    emit('your_hand', {'hand': player_hand})
                     return
         
         current_dot = game_session.game.grid[row_idx][col_idx]
@@ -1261,7 +1283,7 @@ def handle_play_cards(data):
         if not (yellow_replaced or yellow_collected):
             print(f"[PLAY_CARDS] Auto-advancing turn (yellow not affected)")
             game_session.game.can_roll_dice = False
-            game_session.game.next_player()
+            game_session.advance_turn()
             # Reset card counter for new player
             new_player = game_session.game.get_current_player()
             game_session.game.turn_cards_played[new_player] = 0
@@ -1346,18 +1368,8 @@ def handle_end_turn(data):
     print(f"[END_TURN] Drew {cards_drawn} cards. Hand size now: {len(hand)}")
     
     print(f"[END_TURN] Current player index before: {game_session.game.current_player_idx}")
-    # Move to next turn
-    game_session.game.next_player()
-    
-    # Decrement block turns and remove expired blocks
-    if hasattr(game_session.game, 'blocks'):
-        for block in game_session.game.blocks[:]:  # Iterate over a copy
-            block['turns_remaining'] -= 1
-            if block['turns_remaining'] <= 0:
-                row_letter = game_session.game.rows[block['row']]
-                col_str = game_session.game.columns[block['col']]
-                print(f"[END_TURN] Block at {row_letter}{col_str} expired")
-                game_session.game.blocks.remove(block)
+    # Move to next turn (also decrements block turns)
+    game_session.advance_turn()
     
     # Don't automatically enable roll dice - it should only be enabled at game start or when yellow is affected
     print(f"[END_TURN] Current player index after: {game_session.game.current_player_idx}")
@@ -1482,7 +1494,7 @@ def handle_roll_dice(data):
                 game_session.game.draw_card(player_name)
             print(f"[ROLL_DICE] Drew cards for {player_name}, now has {len(hand)} cards")
             
-            game_session.game.next_player()
+            game_session.advance_turn()
             new_player = game_session.game.get_current_player()
             if new_player not in game_session.game.turn_cards_played:
                 game_session.game.turn_cards_played[new_player] = 0
@@ -1549,7 +1561,7 @@ def handle_pass_turn(data):
     print(f"[PASS_TURN] {player_name} is passing their turn")
     
     # Advance to next player
-    game_session.game.next_player()
+    game_session.advance_turn()
     new_player = game_session.game.get_current_player()
     
     # Initialize turn tracking for new player
@@ -1621,6 +1633,10 @@ def handle_cancel_power_card(data):
                 del game_session.pending_landmine[player_name]
             if hasattr(game_session, 'pending_card_swap') and player_name in game_session.pending_card_swap:
                 del game_session.pending_card_swap[player_name]
+            
+            # Reset turn cards played count so player can still play this turn
+            if player_name in game_session.game.turn_cards_played:
+                game_session.game.turn_cards_played[player_name] = 0
             
             print(f"[CANCEL_POWER] Refunded {power} card to {player_name}")
             
@@ -1719,7 +1735,7 @@ def handle_swap_dots(data):
         game_session.game.draw_card(current_player)
     
     # Move to next turn
-    game_session.game.next_player()
+    game_session.advance_turn()
     new_player = game_session.game.get_current_player()
     
     # Initialize turn tracking for new player
@@ -1848,7 +1864,7 @@ def handle_place_landmine(data):
         game_session.game.draw_card(current_player)
     
     # Move to next turn
-    game_session.game.next_player()
+    game_session.advance_turn()
     new_player = game_session.game.get_current_player()
     
     # Initialize turn tracking for new player
@@ -1948,7 +1964,7 @@ def handle_place_block(data):
         game_session.game.draw_card(current_player)
     
     # Move to next turn
-    game_session.game.next_player()
+    game_session.advance_turn()
     new_player = game_session.game.get_current_player()
     
     # Initialize turn tracking for new player
@@ -2074,7 +2090,7 @@ def handle_place_wild(data):
         game_session.game.draw_card(current_player)
     
     # Move to next turn
-    game_session.game.next_player()
+    game_session.advance_turn()
     new_player = game_session.game.get_current_player()
     
     # Initialize turn tracking for new player
@@ -2253,7 +2269,7 @@ def handle_card_swap_action(data):
             game_session.game.draw_card(current_player)
         
         # Move to next turn
-        game_session.game.next_player()
+        game_session.advance_turn()
         new_player = game_session.game.get_current_player()
         
         # Initialize turn tracking for new player
