@@ -663,20 +663,20 @@
             .player-box {
                 flex: 1;
                 min-width: 0;
-                min-height: auto;
+                max-width: 25%;
                 width: auto;
-                padding: 4px 3px;
-                font-size: 0.65em;
+                padding: 3px 2px;
+                font-size: 0.6em;
             }
             
-            .player-name { font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .player-score { font-size: 0.85em; margin: 2px 0; }
-            .player-score-dots { gap: 2px; margin: 2px 0; }
-            .score-dot { width: 10px; height: 10px; font-size: 0.45em; }
+            .player-name { font-size: 0.7em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .player-score { font-size: 0.8em; margin: 1px 0; }
+            .player-score-dots { gap: 1px; margin: 1px 0; flex-wrap: wrap; justify-content: center; max-width: 100%; }
+            .score-dot { width: 8px; height: 8px; font-size: 0.4em; }
             .player-hand { display: none; }
-            .player-discard { font-size: 0.45em; margin-top: 1px; }
-            .discard-cards { gap: 2px !important; height: 16px !important; padding: 2px !important; justify-content: center; border: 1px solid #666 !important; border-radius: 3px !important; background: rgba(0,0,0,0.3) !important; overflow: hidden !important; flex-wrap: nowrap !important; margin-top: 2px !important; }
-            .discard-card { width: 10px !important; height: 10px !important; font-size: 0 !important; border-radius: 2px !important; flex-shrink: 0 !important; }
+            .player-discard { font-size: 0.4em; margin-top: 1px; }
+            .discard-cards { gap: 1px !important; height: auto !important; min-height: 10px !important; max-height: 20px !important; padding: 1px !important; justify-content: center !important; border: 1px solid #555 !important; border-radius: 2px !important; background: rgba(0,0,0,0.3) !important; overflow: hidden !important; flex-wrap: wrap !important; margin-top: 1px !important; }
+            .discard-card { width: 6px !important; height: 6px !important; font-size: 0 !important; border-radius: 1px !important; flex-shrink: 0 !important; }
             
             /* Board section - centered and takes remaining space */
             .board-section {
@@ -811,20 +811,20 @@
             }
             
             .player-box {
-                padding: 3px 2px;
-                font-size: 0.55em;
-                border-radius: 5px;
-                min-height: auto;
+                padding: 2px 1px;
+                font-size: 0.5em;
+                border-radius: 4px;
+                max-width: 25%;
             }
             
-            .player-name { font-size: 0.7em; }
-            .player-score { font-size: 0.8em; margin: 1px 0; }
-            .player-score-dots { gap: 1px; margin: 1px 0; }
-            .score-dot { width: 9px; height: 9px; font-size: 0.4em; }
+            .player-name { font-size: 0.65em; }
+            .player-score { font-size: 0.75em; margin: 1px 0; }
+            .player-score-dots { gap: 1px; margin: 1px 0; flex-wrap: wrap; }
+            .score-dot { width: 7px; height: 7px; font-size: 0.35em; }
             .player-hand { display: none; }
-            .player-discard { font-size: 0.4em; margin-top: 1px; }
-            .discard-cards { height: 14px !important; gap: 1px !important; padding: 1px !important; border: 1px solid #666 !important; border-radius: 2px !important; background: rgba(0,0,0,0.3) !important; overflow: hidden !important; }
-            .discard-card { width: 8px !important; height: 8px !important; font-size: 0 !important; border-radius: 1px !important; }
+            .player-discard { font-size: 0.35em; margin-top: 1px; }
+            .discard-cards { height: auto !important; min-height: 8px !important; max-height: 16px !important; gap: 1px !important; padding: 1px !important; border: 1px solid #555 !important; border-radius: 2px !important; background: rgba(0,0,0,0.3) !important; overflow: hidden !important; flex-wrap: wrap !important; }
+            .discard-card { width: 5px !important; height: 5px !important; font-size: 0 !important; border-radius: 1px !important; }
             
             .board {
                 grid-template-columns: 15px repeat(6, 38px) 15px;
