@@ -95,15 +95,19 @@ class GameSession:
         
         # Get blocks
         blocks_data = []
+        num_players = len(self.player_order) if self.player_order else 1
         if hasattr(self.game, 'blocks'):
             for block in self.game.blocks:
                 row_letter = self.game.rows[block['row']]
                 col_str = self.game.columns[block['col']]
+                # Calculate rounds remaining (ceiling division)
+                rounds_remaining = (block['turns_remaining'] + num_players - 1) // num_players
                 blocks_data.append({
                     'location': f"{row_letter}{col_str}",
                     'row': block['row'],
                     'col': block['col'],
                     'turns_remaining': block['turns_remaining'],
+                    'rounds_remaining': rounds_remaining,
                     'player': block['player']
                 })
         
@@ -355,11 +359,15 @@ class GameSession:
                 }
                 self.discard_piles[current_player].append(card_info)
                 
-                # Check for landmine at this location BEFORE placing
+                # Place dot on board first
                 location_str = f"{row}{col}"
+                success, replaced_color = self.game.place_card_dot(card)
+                
+                # Check for landmine at this location AFTER placing the dot
+                # This way, the landmine explosion will also remove the dot that triggered it
                 landmine_result = self.game.check_and_detonate_landmine(location_str, current_player)
                 if landmine_result:
-                    print(f"[AI_MOVE] LANDMINE DETONATED at {location_str}! Removed {len(landmine_result.get('removed_positions', []))} dots")
+                    print(f"[AI_MOVE] LANDMINE DETONATED at {location_str}! Removed {len(landmine_result.get('removed_positions', []))} dots (including triggering dot)")
                     # Emit landmine detonation event to all players
                     socketio.emit('landmine_detonated', {
                         'location': location_str,
@@ -368,9 +376,9 @@ class GameSession:
                         'triggered_by': current_player,
                         'placed_by': landmine_result['player']
                     }, room=self.game_id)
+                    # Don't process match checking since dot was destroyed
+                    success = False
                 
-                # Place dot on board
-                success, replaced_color = self.game.place_card_dot(card)
                 if success:
                     # Track if yellow was replaced
                     if replaced_color == 'yellow':
@@ -1171,9 +1179,11 @@ def handle_play_cards(data):
         
         # Check if this cell is blocked
         if hasattr(game_session.game, 'blocks'):
+            num_players = len(game_session.player_order)
             for block in game_session.game.blocks:
                 if block['row'] == row_idx and block['col'] == col_idx:
-                    emit('error', {'message': f'Cell {row}{col} is blocked for {block["turns_remaining"]} more turn(s)!'})
+                    rounds_remaining = (block['turns_remaining'] + num_players - 1) // num_players
+                    emit('error', {'message': f'Cell {row}{col} is blocked for {rounds_remaining} more round(s)!'})
                     # Put the card back in hand
                     hand.append(card)
                     # Remove from discard pile since it was added earlier
@@ -1190,11 +1200,16 @@ def handle_play_cards(data):
             yellow_replaced = True
             print(f"[PLAY_CARDS] Yellow dot will be replaced at {row}{col}")
         
-        # Check for landmine at this location BEFORE placing
+        # Regular card - place dot first (but DON'T check matches yet - wait until all cards are placed)
         location_str = f"{row}{col}"
+        success, replaced_color = game_session.game.place_card_dot(card)
+        print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}, replaced={replaced_color}")
+        
+        # Check for landmine at this location AFTER placing the dot
+        # This way, the landmine explosion will also remove the dot that triggered it
         landmine_result = game_session.game.check_and_detonate_landmine(location_str, player_name)
         if landmine_result:
-            print(f"[PLAY_CARDS] LANDMINE DETONATED at {location_str}! Removed {len(landmine_result.get('removed_positions', []))} dots")
+            print(f"[PLAY_CARDS] LANDMINE DETONATED at {location_str}! Removed {len(landmine_result.get('removed_positions', []))} dots (including triggering dot)")
             # Emit landmine detonation event to all players
             emit('landmine_detonated', {
                 'location': location_str,
@@ -1203,10 +1218,8 @@ def handle_play_cards(data):
                 'triggered_by': player_name,
                 'placed_by': landmine_result['player']
             }, room=game_id)
-            
-        # Regular card - place dot (but DON'T check matches yet - wait until all cards are placed)
-        success, replaced_color = game_session.game.place_card_dot(card)
-        print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}, replaced={replaced_color}")
+            # Don't track this position for match checking since the dot was destroyed
+            success = False
         
         if success:
             # Track the position for later match checking
@@ -1935,25 +1948,27 @@ def handle_place_block(data):
             emit('error', {'message': 'This cell is already blocked'})
             return
     
-    # Place the block (lasts 3 turns)
+    # Place the block (lasts 3 full rounds - turns_remaining = 3 * number of players)
+    num_players = len(game_session.player_order)
+    turns_to_block = 3 * num_players
     game_session.game.blocks.append({
         'row': row,
         'col': col,
-        'turns_remaining': 3,
+        'turns_remaining': turns_to_block,
         'player': player_name
     })
     
     row_letter = game_session.game.rows[row]
     col_str = game_session.game.columns[col]
-    print(f"[PLACE_BLOCK] {player_name} blocked cell {row_letter}{col_str} for 3 turns")
+    print(f"[PLACE_BLOCK] {player_name} blocked cell {row_letter}{col_str} for {turns_to_block} turns (3 rounds)")
     
     # Clear pending block
     del game_session.pending_block[player_name]
     
-    # Emit block placed event
+    # Emit block placed event (show 3 rounds to user, not raw turns)
     emit('block_placed', {
         'position': f"{row_letter}{col_str}",
-        'turns_remaining': 3,
+        'rounds_remaining': 3,
         'player': player_name
     }, room=game_id)
     
@@ -2154,17 +2169,32 @@ def handle_card_swap_action(data):
             return
         
         # Find the indices of these cards in the player's hand
+        # Note: player_hand contains Card objects, cards contains dictionaries from client
         player_hand = game_session.game.players[player_name]['hand']
         card_indices = []
         for card in cards:
+            card_color = card.get('color')
+            card_location = card.get('location')  # This is a list like ['A', '1']
             for i, hand_card in enumerate(player_hand):
-                if (hand_card.get('color') == card.get('color') and 
-                    hand_card.get('location') == card.get('location') and
+                # hand_card is a Card object with .color and .location attributes
+                hand_card_color = hand_card.color
+                # Normalize location for comparison
+                if isinstance(hand_card.location, tuple):
+                    hand_card_loc = list(hand_card.location)
+                elif isinstance(hand_card.location, str):
+                    hand_card_loc = [hand_card.location[0], hand_card.location[1]]
+                else:
+                    hand_card_loc = hand_card.location
+                
+                if (hand_card_color == card_color and 
+                    hand_card_loc == card_location and
                     i not in card_indices):
                     card_indices.append(i)
                     break
         
         if len(card_indices) != 2:
+            print(f"[CARD_SWAP] Could not find cards. Looking for: {cards}")
+            print(f"[CARD_SWAP] Hand has: {[(c.color, c.location) for c in player_hand]}")
             emit('error', {'message': 'Could not find selected cards in hand'})
             return
         
@@ -2242,11 +2272,17 @@ def handle_card_swap_action(data):
         # Clear pending swap
         del game_session.pending_card_swap[player_name]
         
-        # Format cards for display
+        # Format cards for display (c is a Card object, not a dictionary)
         def format_card(c):
-            if c.get('power'):
-                return f"⚡{c.get('power', 'POWER').upper()}"
-            return f"{c.get('color', '?').upper()} {c.get('location', ['?', '?'])[0]}{c.get('location', ['?', '?'])[1]}"
+            if hasattr(c, 'power') and c.power:
+                return f"⚡{c.power.upper()}"
+            loc = c.location
+            if isinstance(loc, tuple):
+                return f"{c.color.upper()} {loc[0]}{loc[1]}"
+            elif isinstance(loc, str):
+                return f"{c.color.upper()} {loc}"
+            else:
+                return f"{c.color.upper()} {loc[0]}{loc[1]}"
         
         gave_cards = [format_card(c) for c in player_cards]
         received_cards = [format_card(c) for c in opponent_cards]
