@@ -2638,40 +2638,43 @@ class TwentyDotsGUI(QMainWindow):
                 row_idx = self.game.rows.index(row)
                 col_idx = self.game.columns.index(col)
                 
-                # Check for landmine at this location
-                detonation = self.game.check_and_detonate_landmine(card.location, player)
-                if detonation:
-                    # Landmine detonated!
-                    removed_count = len(detonation['removed_positions'])
-                    print(f"💥 LANDMINE DETONATED at {detonation['location']}! Removed {removed_count} dots, penalty: -2 {detonation['color']}")
-                    
-                    # Only show dialog for human players
-                    if player not in self.ai_players:
-                        dialog = PowerCardDialog(
-                            title="💥 LAND MINE DETONATED! 💥",
-                            message=f"You triggered a land mine at {detonation['location']}!\n\n"
-                                    f"💥 Removed {removed_count} dots in 3x3 area\n"
-                                    f"⚠️ Penalty: -2 {detonation['color']} dots",
-                            gradient_colors=("#FF4757", "#8B0000"),
-                            parent=self
-                        )
-                        dialog.exec()
-                    
-                    # Update displays after detonation
-                    self.update_board()
-                    self.update_scores()
-                    self.update_landmine_display()
-                    # Don't place the dot - landmine destroyed it!
-                    continue
-                
                 current_dot = self.game.grid[row_idx][col_idx]
                 if current_dot and current_dot.color == 'yellow':
                     yellow_was_replaced = True
                 
+                # Place the dot first
                 success, replaced_color = self.game.place_card_dot(card)
                 if success:
                     print(f"DEBUG: Successfully placed {card.color} dot at {card.location}")
                     print(f"DEBUG: Grid at {card.location}: {self.game.grid[row_idx][col_idx]}")
+                    
+                    # Check for landmine at this location AFTER placing the dot
+                    # This way, the landmine explosion will also remove the dot that triggered it
+                    detonation = self.game.check_and_detonate_landmine(card.location, player)
+                    if detonation:
+                        # Landmine detonated!
+                        removed_count = len(detonation['removed_positions'])
+                        print(f"💥 LANDMINE DETONATED at {detonation['location']}! Removed {removed_count} dots (including triggering dot), penalty: -2 {detonation['color']}")
+                        
+                        # Only show dialog for human players
+                        if player not in self.ai_players:
+                            dialog = PowerCardDialog(
+                                title="💥 LAND MINE DETONATED! 💥",
+                                message=f"You triggered a land mine at {detonation['location']}!\n\n"
+                                        f"💥 Removed {removed_count} dots in 3x3 area (including your dot)\n"
+                                        f"⚠️ Penalty: -2 {detonation['color']} dots",
+                                gradient_colors=("#FF4757", "#8B0000"),
+                                parent=self
+                            )
+                            dialog.exec()
+                        
+                        # Update displays after detonation
+                        self.update_board()
+                        self.update_scores()
+                        self.update_landmine_display()
+                        # Don't check matches - dot was destroyed!
+                        continue
+                    
                     # Award point for replacing a colored dot
                     if replaced_color:
                         self.game.players[player]['score'][replaced_color] += 1

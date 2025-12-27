@@ -1305,11 +1305,11 @@
         let musicInitialized = false;
         let currentTrackIndex = 0;
         
-        // Chill ambient/game music playlist - using Internet Archive (most reliable for web audio)
+        // Music playlist - served from same origin (no CORS issues)
         const musicPlaylist = [
-            'https://ia800605.us.archive.org/8/items/LofiHipHopMusicForStudyingAndRelaxation/Lofi%20Hip%20Hop%20Music%20for%20Studying%20and%20Relaxation.mp3',
-            'https://ia803005.us.archive.org/21/items/laborday2019_202001/lofi.mp3',
-            'https://ia800501.us.archive.org/10/items/cd_ambient-music-for-studying/disc1/01.%20Artist%20Unknown%20-%20Track%2001_sample.mp3'
+            '/static/music/track1.mp3',
+            '/static/music/track2.mp3',
+            '/static/music/track3.mp3'
         ];
         
         // Swap power card state
@@ -2713,7 +2713,6 @@
             // Load first track
             audio.src = musicPlaylist[currentTrackIndex];
             audio.volume = 0.3;
-            audio.crossOrigin = 'anonymous';
             
             // When track ends, play next one
             audio.addEventListener('ended', function() {
