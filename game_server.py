@@ -1512,7 +1512,7 @@ def handle_roll_dice(data):
             if new_player not in game_session.game.turn_cards_played:
                 game_session.game.turn_cards_played[new_player] = 0
             game_session.game.turn_cards_played[new_player] = 0
-            game_session.game.can_roll_dice = True  # New player's turn starts with dice roll
+            game_session.game.can_roll_dice = False  # New player starts by playing cards, NOT rolling
             
             # Trigger AI move if next player is AI
             if new_player in game_session.ai_players:
@@ -2312,7 +2312,7 @@ def handle_card_swap_action(data):
         if not hasattr(game_session.game, 'turn_cards_played'):
             game_session.game.turn_cards_played = {}
         game_session.game.turn_cards_played[new_player] = 0
-        game_session.game.can_roll_dice = True  # New player can roll dice
+        game_session.game.can_roll_dice = False  # New player starts by playing cards, NOT rolling
         
         # Broadcast updated game state
         emit('game_updated', game_session.get_game_state(), room=game_id)
