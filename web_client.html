@@ -125,12 +125,18 @@
         .header h1 { color: #ffd700; font-size: 2em; }
         .turn-info { font-size: 1.5em; color: #ff6b6b; margin: 10px 0; }
         
-        /* Music Toggle Button */
-        .music-toggle {
+        /* Music Controls Container */
+        .music-controls {
             position: absolute;
             right: 15px;
             top: 50%;
             transform: translateY(-50%);
+            display: flex;
+            gap: 8px;
+        }
+        
+        /* Music Toggle Button */
+        .music-toggle {
             background: rgba(255,215,0,0.2);
             border: 2px solid #ffd700;
             border-radius: 50%;
@@ -153,6 +159,10 @@
             background: rgba(76,175,80,0.3);
             border-color: #4CAF50;
             animation: pulse-music 2s infinite;
+        }
+        
+        .skip-btn {
+            font-size: 1.1em;
         }
         
         @keyframes pulse-music {
@@ -841,11 +851,19 @@
             .header h1 { font-size: 0.85em; }
             .turn-info { font-size: 0.75em; }
             
-            .music-toggle {
-                width: 35px;
-                height: 35px;
-                font-size: 1em;
+            .music-controls {
                 right: 8px;
+                gap: 4px;
+            }
+            
+            .music-toggle {
+                width: 32px;
+                height: 32px;
+                font-size: 0.9em;
+            }
+            
+            .skip-btn {
+                font-size: 0.8em;
             }
             
             .game-container {
@@ -1208,9 +1226,14 @@
             <div class="header">
                 <h1>Twenty Dots - Online Multiplayer</h1>
                 <div class="turn-info" id="turnInfo">Waiting for game to start...</div>
-                <button class="music-toggle" id="musicToggle" onclick="toggleMusic()" title="Toggle Music">
-                    🔇
-                </button>
+                <div class="music-controls">
+                    <button class="music-toggle" id="musicToggle" onclick="toggleMusic()" title="Toggle Music">
+                        🔇
+                    </button>
+                    <button class="music-toggle skip-btn" id="skipTrack" onclick="skipTrack()" title="Next Track">
+                        ⏭️
+                    </button>
+                </div>
             </div>
             
             <!-- Game Content -->
@@ -1267,12 +1290,7 @@
     </div>
 
     <!-- Background Music -->
-    <audio id="bgMusic" loop preload="auto">
-        <!-- Chill lofi-style game music - using multiple sources for compatibility -->
-        <source src="https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3" type="audio/mpeg">
-        <!-- Fallback: Upbeat game music -->
-        <source src="https://cdn.pixabay.com/audio/2022/10/25/audio_152015cb65.mp3" type="audio/mpeg">
-    </audio>
+    <audio id="bgMusic" preload="auto"></audio>
 
     <script>
         let socket;
@@ -1285,6 +1303,17 @@
         // Music state
         let musicPlaying = false;
         let musicInitialized = false;
+        let currentTrackIndex = 0;
+        
+        // Chill lofi/game music playlist - all from Pixabay (royalty-free)
+        const musicPlaylist = [
+            'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3',  // Chill lofi vibes
+            'https://cdn.pixabay.com/audio/2022/10/25/audio_152015cb65.mp3',  // Upbeat game music
+            'https://cdn.pixabay.com/audio/2024/11/04/audio_a583d6af54.mp3',  // Relaxing ambient
+            'https://cdn.pixabay.com/audio/2023/07/30/audio_e6f8d6aeb6.mp3',  // Lofi chill beats
+            'https://cdn.pixabay.com/audio/2022/03/15/audio_8eda0d87cb.mp3',  // Calm game background
+            'https://cdn.pixabay.com/audio/2024/02/14/audio_61b7e6c0d0.mp3'   // Dreamy lofi
+        ];
         
         // Swap power card state
         let swapMode = false;
@@ -2678,13 +2707,65 @@
         }
 
         // Music Control Functions
+        function initMusicPlaylist() {
+            const audio = document.getElementById('bgMusic');
+            // Shuffle playlist on init for variety
+            shufflePlaylist();
+            // Load first track
+            audio.src = musicPlaylist[currentTrackIndex];
+            audio.volume = 0.3;
+            
+            // When track ends, play next one
+            audio.addEventListener('ended', function() {
+                playNextTrack();
+            });
+        }
+        
+        function shufflePlaylist() {
+            // Fisher-Yates shuffle
+            for (let i = musicPlaylist.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [musicPlaylist[i], musicPlaylist[j]] = [musicPlaylist[j], musicPlaylist[i]];
+            }
+        }
+        
+        function playNextTrack() {
+            const audio = document.getElementById('bgMusic');
+            currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+            audio.src = musicPlaylist[currentTrackIndex];
+            if (musicPlaying) {
+                audio.play().catch(err => console.log('Next track failed:', err));
+            }
+        }
+        
+        function skipTrack() {
+            if (!musicInitialized) {
+                // Initialize first if not done
+                initMusicPlaylist();
+                musicInitialized = true;
+            }
+            playNextTrack();
+            // Start playing if not already
+            if (!musicPlaying) {
+                const audio = document.getElementById('bgMusic');
+                const btn = document.getElementById('musicToggle');
+                audio.play().then(() => {
+                    btn.textContent = '🎵';
+                    btn.classList.add('playing');
+                    musicPlaying = true;
+                }).catch(err => {
+                    console.log('Skip track failed:', err);
+                });
+            }
+        }
+        
         function toggleMusic() {
             const audio = document.getElementById('bgMusic');
             const btn = document.getElementById('musicToggle');
             
             if (!musicInitialized) {
-                // First time - need user interaction to start audio
-                audio.volume = 0.3; // Set a comfortable volume
+                // First time - initialize playlist
+                initMusicPlaylist();
                 musicInitialized = true;
             }
             
