@@ -119,10 +119,46 @@
             padding: 10px;
             background: rgba(0,0,0,0.3);
             border-bottom: 2px solid #ffd700;
+            position: relative;
         }
         
         .header h1 { color: #ffd700; font-size: 2em; }
         .turn-info { font-size: 1.5em; color: #ff6b6b; margin: 10px 0; }
+        
+        /* Music Toggle Button */
+        .music-toggle {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,215,0,0.2);
+            border: 2px solid #ffd700;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            font-size: 1.3em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .music-toggle:hover {
+            background: rgba(255,215,0,0.4);
+            box-shadow: 0 0 15px rgba(255,215,0,0.5);
+        }
+        
+        .music-toggle.playing {
+            background: rgba(76,175,80,0.3);
+            border-color: #4CAF50;
+            animation: pulse-music 2s infinite;
+        }
+        
+        @keyframes pulse-music {
+            0%, 100% { box-shadow: 0 0 5px rgba(76,175,80,0.5); }
+            50% { box-shadow: 0 0 20px rgba(76,175,80,0.8); }
+        }
         
         /* Game container */
         .game-container {
@@ -805,6 +841,13 @@
             .header h1 { font-size: 0.85em; }
             .turn-info { font-size: 0.75em; }
             
+            .music-toggle {
+                width: 35px;
+                height: 35px;
+                font-size: 1em;
+                right: 8px;
+            }
+            
             .game-container {
                 gap: 4px;
                 padding: 4px;
@@ -1165,6 +1208,9 @@
             <div class="header">
                 <h1>Twenty Dots - Online Multiplayer</h1>
                 <div class="turn-info" id="turnInfo">Waiting for game to start...</div>
+                <button class="music-toggle" id="musicToggle" onclick="toggleMusic()" title="Toggle Music">
+                    🔇
+                </button>
             </div>
             
             <!-- Game Content -->
@@ -1220,6 +1266,14 @@
         </div>
     </div>
 
+    <!-- Background Music -->
+    <audio id="bgMusic" loop preload="auto">
+        <!-- Chill lofi-style game music - using multiple sources for compatibility -->
+        <source src="https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3" type="audio/mpeg">
+        <!-- Fallback: Upbeat game music -->
+        <source src="https://cdn.pixabay.com/audio/2022/10/25/audio_152015cb65.mp3" type="audio/mpeg">
+    </audio>
+
     <script>
         let socket;
         let gameId = '';
@@ -1227,6 +1281,10 @@
         let myHand = [];
         let selectedCards = [];
         let currentGameState = null;
+        
+        // Music state
+        let musicPlaying = false;
+        let musicInitialized = false;
         
         // Swap power card state
         let swapMode = false;
@@ -1618,7 +1676,7 @@
             // Handle block placed confirmation
             socket.on('block_placed', (data) => {
                 console.log('Block placed:', data);
-                showNotification(`🚫 ${data.player} blocked cell ${data.position} for ${data.turns_remaining} turns!`, 'warning');
+                showNotification(`🚫 ${data.player} blocked cell ${data.position} for ${data.rounds_remaining} rounds!`, 'warning');
             });
             
             // Handle card swap power card - multi-step process
@@ -1763,7 +1821,7 @@
                         blockIndicator.className = 'block-indicator';
                         blockIndicator.textContent = '🚫';
                         const block = currentGameState.blocks.find(b => b.row === r && b.col === c);
-                        blockIndicator.title = `Blocked for ${block.turns_remaining} more turn(s)`;
+                        blockIndicator.title = `Blocked for ${block.rounds_remaining || 1} more round(s)`;
                         cell.appendChild(blockIndicator);
                     }
                     
@@ -2618,6 +2676,42 @@
                 alert(shareText);
             }
         }
+
+        // Music Control Functions
+        function toggleMusic() {
+            const audio = document.getElementById('bgMusic');
+            const btn = document.getElementById('musicToggle');
+            
+            if (!musicInitialized) {
+                // First time - need user interaction to start audio
+                audio.volume = 0.3; // Set a comfortable volume
+                musicInitialized = true;
+            }
+            
+            if (musicPlaying) {
+                audio.pause();
+                btn.textContent = '🔇';
+                btn.classList.remove('playing');
+                musicPlaying = false;
+            } else {
+                audio.play().then(() => {
+                    btn.textContent = '🎵';
+                    btn.classList.add('playing');
+                    musicPlaying = true;
+                }).catch(err => {
+                    console.log('Audio playback failed:', err);
+                    showNotification('Click again to enable music', 'info');
+                });
+            }
+        }
+        
+        // Try to resume music context on any user interaction (for mobile)
+        document.addEventListener('click', function initAudioContext() {
+            const audio = document.getElementById('bgMusic');
+            if (audio && musicPlaying && audio.paused) {
+                audio.play().catch(() => {});
+            }
+        }, { once: false });
 
         // Start by showing mode selection
         document.getElementById('modeScreen').style.display = 'flex';
