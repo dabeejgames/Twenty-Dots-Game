@@ -1305,14 +1305,12 @@
         let musicInitialized = false;
         let currentTrackIndex = 0;
         
-        // Chill lofi/game music playlist - all from Pixabay (royalty-free)
+        // Chill lofi/game music playlist - using reliable public domain sources
         const musicPlaylist = [
-            'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3',  // Chill lofi vibes
-            'https://cdn.pixabay.com/audio/2022/10/25/audio_152015cb65.mp3',  // Upbeat game music
-            'https://cdn.pixabay.com/audio/2024/11/04/audio_a583d6af54.mp3',  // Relaxing ambient
-            'https://cdn.pixabay.com/audio/2023/07/30/audio_e6f8d6aeb6.mp3',  // Lofi chill beats
-            'https://cdn.pixabay.com/audio/2022/03/15/audio_8eda0d87cb.mp3',  // Calm game background
-            'https://cdn.pixabay.com/audio/2024/02/14/audio_61b7e6c0d0.mp3'   // Dreamy lofi
+            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/ccCommunity/Kai_Engel/Satin/Kai_Engel_-_04_-_Downfall.mp3',
+            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/ccCommunity/Kai_Engel/Satin/Kai_Engel_-_07_-_Interlude.mp3',
+            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/no_curator/Lobo_Loco/Salad_Mixed/Lobo_Loco_-_07_-_Bright_Stars_ID_989.mp3',
+            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/no_curator/Lobo_Loco/Vagabond_Songs/Lobo_Loco_-_02_-_On_the_Run_ID_688.mp3'
         ];
         
         // Swap power card state
@@ -2719,6 +2717,16 @@
             audio.addEventListener('ended', function() {
                 playNextTrack();
             });
+            
+            // Handle load errors - try next track
+            audio.addEventListener('error', function() {
+                console.log('Track failed to load, trying next...');
+                currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+                audio.src = musicPlaylist[currentTrackIndex];
+                if (musicPlaying) {
+                    audio.play().catch(err => console.log('Retry failed:', err));
+                }
+            });
         }
         
         function shufflePlaylist() {
@@ -2734,7 +2742,11 @@
             currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
             audio.src = musicPlaylist[currentTrackIndex];
             if (musicPlaying) {
-                audio.play().catch(err => console.log('Next track failed:', err));
+                audio.play().catch(err => {
+                    console.log('Next track failed:', err);
+                    // Try another track
+                    setTimeout(() => playNextTrack(), 500);
+                });
             }
         }
         
