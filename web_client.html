@@ -1305,12 +1305,11 @@
         let musicInitialized = false;
         let currentTrackIndex = 0;
         
-        // Chill lofi/game music playlist - using reliable public domain sources
+        // Chill ambient/game music playlist - using Internet Archive (most reliable for web audio)
         const musicPlaylist = [
-            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/ccCommunity/Kai_Engel/Satin/Kai_Engel_-_04_-_Downfall.mp3',
-            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/ccCommunity/Kai_Engel/Satin/Kai_Engel_-_07_-_Interlude.mp3',
-            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/no_curator/Lobo_Loco/Salad_Mixed/Lobo_Loco_-_07_-_Bright_Stars_ID_989.mp3',
-            'https://files.freemusicarchive.org/storage-freemusicarchive-org/music/no_curator/Lobo_Loco/Vagabond_Songs/Lobo_Loco_-_02_-_On_the_Run_ID_688.mp3'
+            'https://ia800605.us.archive.org/8/items/LofiHipHopMusicForStudyingAndRelaxation/Lofi%20Hip%20Hop%20Music%20for%20Studying%20and%20Relaxation.mp3',
+            'https://ia803005.us.archive.org/21/items/laborday2019_202001/lofi.mp3',
+            'https://ia800501.us.archive.org/10/items/cd_ambient-music-for-studying/disc1/01.%20Artist%20Unknown%20-%20Track%2001_sample.mp3'
         ];
         
         // Swap power card state
@@ -2705,6 +2704,8 @@
         }
 
         // Music Control Functions
+        let audioErrorCount = 0;
+        
         function initMusicPlaylist() {
             const audio = document.getElementById('bgMusic');
             // Shuffle playlist on init for variety
@@ -2712,19 +2713,32 @@
             // Load first track
             audio.src = musicPlaylist[currentTrackIndex];
             audio.volume = 0.3;
+            audio.crossOrigin = 'anonymous';
             
             // When track ends, play next one
             audio.addEventListener('ended', function() {
+                audioErrorCount = 0; // Reset error count on successful play
                 playNextTrack();
             });
             
+            // Track successful load
+            audio.addEventListener('canplaythrough', function() {
+                console.log('Audio loaded successfully:', musicPlaylist[currentTrackIndex]);
+                audioErrorCount = 0;
+            });
+            
             // Handle load errors - try next track
-            audio.addEventListener('error', function() {
-                console.log('Track failed to load, trying next...');
-                currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
-                audio.src = musicPlaylist[currentTrackIndex];
-                if (musicPlaying) {
-                    audio.play().catch(err => console.log('Retry failed:', err));
+            audio.addEventListener('error', function(e) {
+                console.log('Track failed to load:', musicPlaylist[currentTrackIndex], e);
+                audioErrorCount++;
+                if (audioErrorCount < musicPlaylist.length) {
+                    currentTrackIndex = (currentTrackIndex + 1) % musicPlaylist.length;
+                    audio.src = musicPlaylist[currentTrackIndex];
+                    if (musicPlaying) {
+                        audio.play().catch(err => console.log('Retry failed:', err));
+                    }
+                } else {
+                    showNotification('Unable to load music - check your connection', 'warning');
                 }
             });
         }
