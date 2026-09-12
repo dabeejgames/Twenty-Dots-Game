@@ -22,12 +22,12 @@ class GameSession:
     def __init__(self, game_id, host_sid, game_mode='twenty_dots', player_count=2, power_cards=False):
         self.game_id = game_id
         self.game_mode = game_mode
-        self.required_players = player_count  # Store the required player count
+        self.required_players = max(2, min(4, int(player_count)))
         self.power_cards = power_cards  # Store the power cards setting
-        self.game = TwentyDots(num_players=2, difficulty='easy', ai_opponents={}, power_cards=power_cards)
+        self.game = TwentyDots(num_players=self.required_players, difficulty='easy', ai_opponents={}, power_cards=power_cards)
         self.game.shuffle_deck()  # CRITICAL: Shuffle the deck!
         self.game.can_roll_dice = True  # First player must roll to place initial wild dot
-        print(f"Created new game {game_id} with mode {game_mode}, power_cards={power_cards}, requires {player_count} players. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
+        print(f"Created new game {game_id} with mode {game_mode}, power_cards={power_cards}, requires {self.required_players} players. First 5 cards in deck: {[(c.location, c.color) for c in self.game.deck[:5]]}")
         self.players = {}  # sid -> player_info
         self.player_order = []  # List of player names in turn order
         self.ai_players = {}  # player_name -> AIPlayer instance
@@ -35,6 +35,31 @@ class GameSession:
         self.started = False
         self.discard_piles = {}  # Track discard piles for each player
         self.ai_move_in_progress = False  # Flag to prevent overlapping AI moves
+
+    def get_lobby_state(self):
+        """Return lightweight lobby metadata for waiting-room clients."""
+        players = []
+        for name in self.player_order:
+            player_info = next((info for info in self.players.values() if info['name'] == name), None)
+            players.append({
+                'name': name,
+                'is_ai': player_info['is_ai'] if player_info else False,
+                'connected': player_info['connected'] if player_info else False
+            })
+
+        host_name = self.players.get(self.host_sid, {}).get('name')
+        return {
+            'game_id': self.game_id,
+            'started': self.started,
+            'game_mode': self.game_mode,
+            'power_cards': self.power_cards,
+            'required_players': self.required_players,
+            'joined_players': len(self.player_order),
+            'open_slots': max(self.required_players - len(self.player_order), 0),
+            'host_name': host_name,
+            'players': players,
+            'player_names': list(self.player_order)
+        }
         
     def add_player(self, sid, player_name, is_ai=False):
         """Add a player to the game"""
@@ -134,7 +159,12 @@ class GameSession:
             'landmines': landmines_data,
             'blocks': blocks_data,
             'can_roll_dice': getattr(self.game, 'can_roll_dice', False),
-            'game_mode': self.game_mode
+            'game_mode': self.game_mode,
+            'required_players': self.required_players,
+            'player_order': list(self.player_order),
+            'started': self.started,
+            'power_cards': self.power_cards,
+            'lobby': self.get_lobby_state()
         }
     
     def get_player_hand(self, player_name):
@@ -521,8 +551,9 @@ def handle_disconnect():
     for game_id, game_session in games.items():
         if request.sid in game_session.players:
             game_session.players[request.sid]['connected'] = False
-            emit('player_disconnected', {
-                'player': game_session.players[request.sid]['name']
+            socketio.emit('player_disconnected', {
+                'player': game_session.players[request.sid]['name'],
+                'lobby': game_session.get_lobby_state()
             }, room=game_id)
 
 @socketio.on('create_game')
@@ -579,12 +610,11 @@ def handle_join_game(data):
         
         games[game_id] = game_session
         join_room(game_id)
-        
-        emit('join_success', {
-            'game_id': game_id,
-            'player_name': player_name,
-            'players': game_session.player_order
-        })
+
+        join_payload = game_session.get_lobby_state()
+        join_payload['player_name'] = player_name
+        emit('join_success', join_payload)
+        socketio.emit('lobby_updated', game_session.get_lobby_state(), room=game_id)
         print(f"[JOIN_GAME] Game auto-created: {game_id} by {player_name}. Player order: {game_session.player_order}")
         return
     
@@ -640,18 +670,19 @@ def handle_join_game(data):
         return
     
     join_room(game_id)
-    
-    # Notify all players in the room
-    emit('player_joined', {
+
+    lobby_state = game_session.get_lobby_state()
+    socketio.emit('player_joined', {
         'player_name': player_name,
-        'players': game_session.player_order
+        'players': game_session.player_order,
+        'required_players': game_session.required_players,
+        'lobby': lobby_state
     }, room=game_id)
-    
-    emit('join_success', {
-        'game_id': game_id,
-        'player_name': player_name,
-        'players': game_session.player_order
-    })
+
+    join_payload = dict(lobby_state)
+    join_payload['player_name'] = player_name
+    emit('join_success', join_payload)
+    socketio.emit('lobby_updated', lobby_state, room=game_id)
     
     print(f"{player_name} joined game {game_id}")
     
@@ -741,7 +772,9 @@ def handle_add_ai(data):
     emit('player_joined', {
         'player_name': ai_name,
         'players': game_session.player_order,
-        'is_ai': True
+        'is_ai': True,
+        'required_players': game_session.required_players,
+        'lobby': game_session.get_lobby_state()
     }, room=game_id)
     
     print(f"AI player {ai_name} added to game {game_id}")
