@@ -1045,10 +1045,22 @@ button:disabled {
 
     .game-header {
         flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        margin-bottom: 8px;
     }
 }
 
 @media (max-width: 640px) {
+    .game-screen {
+        width: calc(100vw - 4px);
+        padding: 6px 2px 12px;
+    }
+
+    .game-layout {
+        gap: 8px;
+    }
+
     .hero-panel,
     .form-panel,
     .panel,
@@ -1056,8 +1068,44 @@ button:disabled {
     .sidebar-panel,
     .controls-panel,
     .lobby-panel {
-        padding: 14px;
-        border-radius: 22px;
+        padding: 10px;
+        border-radius: 16px;
+    }
+
+    .status-chip {
+        justify-content: space-between;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+    }
+
+    .turn-banner {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.82rem;
+        padding: 7px 10px;
+    }
+
+    .toolbar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        align-items: stretch;
+    }
+
+    .board-meta,
+    .music-strip {
+        grid-column: 1 / -1;
+    }
+
+    .music-strip {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .rd-icon-btn {
+        width: 100%;
+        min-height: 42px;
     }
 
     .board {
@@ -1071,7 +1119,58 @@ button:disabled {
     }
 
     .board-frame {
+        padding: 8px;
+    }
+
+    .board-toolbar {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .players-grid,
+    .hand-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        padding-right: 0;
+    }
+
+    .seat-card {
+        padding: 8px;
+    }
+
+    .seat-name {
+        max-width: 100%;
+        font-size: 0.8rem;
+    }
+
+    .hand-card {
+        padding: 8px 9px;
+        min-height: 56px;
+    }
+
+    .hand-card .loc {
+        font-size: 0.92rem;
+    }
+
+    .hand-card .meta {
+        font-size: 0.58rem;
+        line-height: 1.15;
+    }
+
+    .summary-grid {
+        gap: 6px;
+    }
+
+    .summary-card {
         padding: 10px;
+    }
+
+    .help-banner {
+        padding: 10px 12px;
+        font-size: 0.9rem;
     }
 
     .rd-btn,
@@ -1082,7 +1181,6 @@ button:disabled {
 
     .actions-row,
     .toolbar,
-    .board-toolbar,
     .header-row,
     .action-strip,
     .music-strip {
