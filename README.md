@@ -13,6 +13,7 @@ A strategic multiplayer board game where players compete to collect colored dots
 1. **Create a Room:**
    - Open the web client and enter your name.
    - Choose **Create room**, 2–4 players, and a game goal.
+   - Optionally enable **Power Play** for Paint, Shift, and Refresh cards. Leave it off for regular-card play.
    - Send the **Invite friends** link, or copy the room code.
 
 2. **Join Friends:**
@@ -43,7 +44,7 @@ A strategic multiplayer board game where players compete to collect colored dots
    - Choose **Play again** on the results screen. The next round starts when every human player is connected and ready; computer opponents are ready automatically.
    - Keep the same room, invite link, and seats. The starting player rotates each round.
    - Each round win earns one series point. First to **two wins** takes game night: best of three for two players, potentially more rounds with three or four.
-   - After a series finishes, ready up for a fresh series. The host can change the next round’s goal; changing it clears readiness so everyone agrees to the new rules.
+   - After a series finishes, ready up for a fresh series. The host can change the next round’s goal or Power Play setting; changing either clears readiness so everyone agrees to the new rules.
    - Refreshing after a win still lets you rejoin. **Leave & create a different table** is separate from a rematch.
 
 6. **Make It Your Table:**
@@ -59,7 +60,8 @@ A strategic multiplayer board game where players compete to collect colored dots
 - **Mobile-first Table:** Responsive board, card previews, touch controls, and persistent private hands
 - **Room Invites:** Native mobile sharing, clipboard links, and a live waiting room
 - **Reconnect:** Token-protected saved seats and automatic connection recovery
-- **Desktop Power Cards:** Special abilities and landmines are available in the desktop game; browser play uses regular cards
+- **Optional Power Play:** Three tactical online powers with target previews, full-turn costs, and server-validated effects; [power rules](POWER_CARDS_README.md)
+- **Desktop Variant:** The existing desktop powers and landmines remain separate from the focused online set
 - **AI Opponents:** Play against computer players
 - **Real-time Updates:** Instant game state synchronization
 - **Game Nights:** Same-room rematches, rotating starters, and first-to-two series scores
@@ -121,6 +123,7 @@ To play with friends on the same WiFi:
 - Run `npm run test:replay --prefix tests` for deterministic real-backend rematch, series, reaction, preferences, and deck-recycling checks. It starts and stops its own loopback-only fixture server on port 5001. Set `TEST_PYTHON` to your Python interpreter path if needed, or `BROWSER_FIXTURE_PORT` to another unused port. Fixture setup is authenticated with an ephemeral key and exists only in the separate test entry point, never in the production server.
 - Set `PLAYWRIGHT_BROWSER=webkit` to run either browser suite in WebKit (install it with `npx --prefix tests playwright install webkit`). Browser emulation does not replace testing sound/haptics on physical devices.
 - With a local game server running, `npm run test:music --prefix tests` checks actual synthesized audio output, opt-in playback, volume, preference migration, lifecycle pause/resume, and mobile accessibility. It uses `GAME_URL` and `PLAYWRIGHT_BROWSER` like the smoke suite.
+- The replay suite also covers all three powers: target/cancel previews, full-turn costs, yellow rolls, winning moves, private hands, refresh/rejoin, and host Power Play changes at 320px.
 - Browser code and styles are in `static/game.js` and `static/game.css`; no frontend build step is needed.
 
 ## 📁 Project Structure

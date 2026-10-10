@@ -76,6 +76,9 @@
                             <option value="five_colors">Color collector · 5 of each color</option>
                             <option value="five_with_yellow">Wild ambition · 5 of every color + yellow</option>
                         </select>
+                        <label class="power-option" for="power-cards"><input id="power-cards" type="checkbox"><span><strong>Power Play</strong><small>Paint a new possibility. Shift a dot. Refresh your hand.</small></span></label>
+                        <p class="field-note">Optional · 12 tactical cards. Each power uses your whole turn.</p>
+                        <button class="text-button" type="button" data-power-help>Meet the power cards ↗</button>
                     </div>
                     <div id="solo-options" hidden><label for="difficulty">Your opponent</label><select id="difficulty"><option value="easy">Easy · Find your rhythm</option><option value="medium" selected>Medium · A little competition</option><option value="hard">Hard · Make every move count</option></select></div>
                     <p class="form-error" id="form-error" role="alert" hidden></p>
@@ -102,8 +105,10 @@
                 <aside class="score-panel" aria-label="Players and scores"><div class="section-heading"><h3>At the table</h3><span id="player-total"></span></div><div class="score-list" id="score-list"></div><div class="table-tip"><span aria-hidden="true">✳</span><p>Look for the connection.<br>Three in a row is all it takes.</p></div></aside>
                 <div class="table-center">
                     <div class="turn-banner" id="turn-banner" role="status" aria-live="polite"><div class="turn-symbol" aria-hidden="true">↗</div><div><strong id="turn-title">Getting the table ready</strong><p id="turn-subtitle">Your cards will be here in a moment.</p></div><span class="turn-badge" id="turn-badge">LIVE</span></div>
+                    <section class="power-guide" id="power-guide" aria-labelledby="power-title" hidden><div class="power-guide-heading"><strong id="power-title"></strong><button class="text-button" id="cancel-power">Cancel power</button></div><p id="power-description"></p><p id="power-target-status" role="status"></p><button class="text-button" id="reset-power-targets">Choose targets again</button></section>
                     <div class="board-wrap"><div class="board-top"><span>MAKE YOUR MOVE</span><span><i class="tiny-dot yellow"></i> Yellow is wild</span></div><div id="board" class="board" role="group" aria-label="Game board, rows A to F and columns 1 to 6"></div><div class="board-bottom"><span id="board-hint">Tap a card to preview its position.</span><span id="deck-count">— in deck</span></div></div>
                     <p class="move-summary" id="move-summary" role="status">Every good game starts with a little luck.</p>
+                    <button class="text-button" id="power-help-button" data-power-help hidden>Power Play · How powers work ↗</button>
                     <section class="hand-dock" aria-label="Your cards and turn actions"><div class="hand-heading"><h3>Your hand <span id="hand-count"></span></h3><button class="text-button" id="clear-selection" disabled>Clear selection</button></div><div class="hand" id="hand"></div><div class="turn-actions"><button class="button button-primary" id="primary-action" disabled>Waiting for cards</button><button class="button button-secondary" id="end-turn" disabled>Pass turn</button></div><p class="action-note" id="action-note">Your hand is only visible to you.</p></section>
                     <section class="reaction-panel" aria-label="Quick reactions">
                         <div class="reaction-heading"><span>A LITTLE TABLE TALK</span><button class="text-button" id="mute-reactions" data-mute-reactions aria-pressed="false">Mute reactions</button></div>
@@ -118,6 +123,15 @@
 
     <dialog id="rules-dialog" class="modal"><div class="modal-top"><span class="eyebrow">THE LITTLE RULEBOOK</span><button class="icon-button" data-close="rules-dialog" aria-label="Close rules">×</button></div><h2>Easy to start.<br>Fun to figure out.</h2><div class="rule-steps"><article><span>01</span><div><h3>Pick your spot.</h3><p>Each card has a color and a coordinate. A3 puts a dot on row A, column 3. Play up to two cards, together or one at a time.</p></div></article><article><span>02</span><div><h3>Make a connection.</h3><p>Line up 3 or more dots of one color horizontally, vertically, or diagonally. Collect the line to score. Replacing a dot also earns a point.</p></div></article><article><span>03</span><div><h3>A little wild goes a long way.</h3><p>Yellow matches every color. Roll to place it at the start, and again when it’s collected or replaced. If your roll makes a line, roll again.</p></div></article><article><span>04</span><div><h3>Make it count.</h3><p>Classic: first to 20 dots wins. Color collector: collect 5 of each regular color. Wild ambition: collect those plus 5 yellow dots. Finish early with End turn, or pass without playing.</p></div></article></div><button class="button button-primary button-wide" data-close="rules-dialog">Got it. Let’s play.</button></dialog>
 
+    <dialog id="power-rules-dialog" class="modal modal-small" aria-labelledby="power-rules-title">
+        <div class="modal-top"><span class="eyebrow">A LITTLE TACTICAL TWIST</span><button class="icon-button" data-close="power-rules-dialog" aria-label="Close power rules">×</button></div>
+        <h2 id="power-rules-title">Make a power move.</h2>
+        <p class="muted">Power Play adds 12 cards to the regular deck: four Paint, four Shift, and four Refresh.</p>
+        <ul class="power-rule-list"><li><strong>✦ Paint:</strong> Place the card’s color on any empty square.</li><li><strong>↗ Shift:</strong> Move any regular colored dot to an empty square. The dot keeps its color; the card’s color does not matter. Yellow cannot be moved.</li><li><strong>↻ Refresh:</strong> Discard the power and the rest of your hand, then draw up to five cards. Your discarded cards may return after a reshuffle.</li></ul>
+        <p class="muted">Roll first if required. Play one power <strong>instead of</strong> your two regular cards, before playing anything else. Target, preview, then confirm. Paint and Shift score completed lines normally—not for moving or placing alone. Collecting yellow still requires a roll unless you win.</p>
+        <button class="button button-primary button-wide" data-close="power-rules-dialog">Got it. Make it count.</button>
+    </dialog>
+
     <dialog id="leave-dialog" class="modal modal-small"><div class="modal-top"><span class="eyebrow">TAKING A BREAK?</span><button class="icon-button" data-close="leave-dialog" aria-label="Stay in the game">×</button></div><h2>Leave the table?</h2><p class="muted" id="leave-message">Your friends will be waiting for you.</p><div class="modal-actions"><button class="button button-secondary" data-close="leave-dialog">Stay here</button><button class="button button-primary" id="confirm-leave">Leave table</button></div></dialog>
 
     <dialog id="winner-dialog" class="modal winner-modal" aria-labelledby="winner-title">
@@ -126,7 +140,7 @@
         <h2 id="winner-title">Well played.</h2><p class="muted" id="winner-description"></p>
         <p class="series-result" id="series-result"></p><div id="final-scores" class="final-scores"></div>
         <section class="rematch-panel" aria-label="Next round">
-            <div id="rematch-host-options"><label for="rematch-mode">Next round’s game plan</label><select id="rematch-mode"><option value="twenty_dots">The classic · First to 20 dots</option><option value="five_colors">Color collector · 5 of each color</option><option value="five_with_yellow">Wild ambition · Every color + yellow</option></select></div>
+            <div id="rematch-host-options"><label for="rematch-mode">Next round’s game plan</label><select id="rematch-mode"><option value="twenty_dots">The classic · First to 20 dots</option><option value="five_colors">Color collector · 5 of each color</option><option value="five_with_yellow">Wild ambition · Every color + yellow</option></select><label class="power-option" for="rematch-powers"><input id="rematch-powers" type="checkbox"><span><strong>Power Play next round</strong><small>Changing this resets everyone’s readiness.</small></span></label></div>
             <p id="rematch-goal" class="field-note"></p>
             <div id="ready-list" class="ready-list" aria-label="Player readiness"></div>
             <p id="rematch-status" class="field-note" role="status"></p>

@@ -364,6 +364,24 @@ legend { font-size: 12px; font-weight: 600; padding: 0; margin-bottom: 10px; }
 .preference-list label { display: flex; align-items: center; gap: 16px; justify-content: space-between; cursor: pointer; }
 .preference-list strong { display: block; font-size: 13px; }.preference-list small { display: block; font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.6; }
 .preference-list input[type="checkbox"] { appearance: auto; width: 24px; height: 24px; min-height: 24px; flex: 0 0 auto; accent-color: #65547b; }
+.power-option { display: flex !important; align-items: center; gap: 12px; margin: 18px 0 0 !important; padding: 14px; border: 1px solid #c7b9dc; border-radius: 12px; background: #eeebf4; cursor: pointer; text-align: left; }
+.power-option input[type="checkbox"] { appearance: auto; width: 24px; height: 24px; min-height: 24px; padding: 0; margin: 0; flex: 0 0 auto; accent-color: #65547b; }
+.power-option strong { display: block; font-size: 13px; color: #51425f; }
+.power-option small { display: block; margin-top: 5px; font-size: 11px; line-height: 1.6; color: #60516e; }
+.power-card { border-color: #ab96c5; background: #f0ebf7; box-shadow: 0 3px 0 #cdbfe0; }
+.power-card .card-coordinate { font-size: 12px; }.power-card .card-color { font-size: 7px; letter-spacing: .2px; text-align: center; }
+.power-symbol { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; font-size: 24px; color: #252638; }
+.power-guide { padding: 12px 15px; margin-bottom: 12px; border: 1px solid #b5a5d2; border-radius: 14px; background: #eeebf4; scroll-margin-top: 12px; }
+.power-guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.power-guide strong { font-size: 13px; }.power-guide p { font-size: 12px; line-height: 1.6; color: #51425f; }
+.power-guide .text-button { font-size: 11px; flex-shrink: 0; }
+#power-target-status { margin-top: 8px; font-weight: 600; }
+.cell.power-legal { outline: 2px dashed #76608f; outline-offset: -3px; }
+.cell.power-source { box-shadow: inset 0 0 0 3px #76608f; }.cell.power-source .dot { opacity: .5; }
+.cell.power-legal .cell-coordinate, .cell.power-source .cell-coordinate, .cell.last-shifted .cell-coordinate { opacity: 1; }
+.cell.last-shifted { box-shadow: inset 0 0 0 2px #9985b7; }
+.target-plus { color: #65547b; font-size: 20px; pointer-events: none; }
+.power-rule-list { margin: 22px 0; padding: 0 0 0 20px; color: var(--muted); font-size: 12px; line-height: 1.8; }.power-rule-list li { margin: 8px 0; }
 .music-volume { padding: 14px; border-radius: 12px; background: #eeebf4; }
 .music-volume label { font-size: 12px; font-weight: 600; }
 .music-volume output { color: #51425f; }

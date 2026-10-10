@@ -5,6 +5,11 @@
     const $ = id => document.getElementById(id);
     const COLORS = ['red', 'blue', 'green', 'purple'];
     const SYMBOLS = { red: 'R', blue: 'B', green: 'G', purple: 'P', yellow: '✳' };
+    const POWERS = {
+        paint: { title: 'Paint', symbol: '✦', targets: 1, description: 'Place this card’s color on any empty square. Completed lines score normally.' },
+        shift: { title: 'Shift', symbol: '↗', targets: 2, description: 'Move any regular dot to an empty square. Yellow stays put. Completed lines score normally.' },
+        refresh: { title: 'Refresh', symbol: '↻', targets: 0, description: 'Trade all your remaining cards for a fresh draw, up to five. Discarded cards can return after a reshuffle.' },
+    };
     const MODES = {
         twenty_dots: { title: 'The classic', goal: 'First to 20 dots.', short: 'First to 20 dots' },
         five_colors: { title: 'Color collector', goal: 'Five of every color.', short: '5 of each regular color' },
@@ -16,7 +21,7 @@
     const REACTIONS = { nice_move: 'Nice move!', well_played: 'Well played!', close_one: 'Close one!', rematch: 'Rematch?' };
     const app = {
         mode: 'create', socket: null, seat: null, lobby: null, game: null,
-        hand: [], selected: [], joined: false, handReady: false,
+        hand: [], selected: [], powerTargets: [], joined: false, handReady: false,
         pending: null, pendingTimer: null, connecting: false,
         screen: 'home', winnerShown: null, activity: [],
         rematchPending: false, rematchTimer: null, reactionUntil: 0,
@@ -203,10 +208,12 @@
             app.handReady = false;
             clearTimeout(app.pendingTimer);
             app.pending = null;
+            clearSelection();
             clearRematchPending();
             connectionStatus('connecting', 'Reconnecting');
             banner('Connection interrupted. Your seat is saved; moves are paused on this device.');
             renderHand();
+            renderBoard();
             renderControls();
         });
         socket.on('join_success', data => {
@@ -243,7 +250,7 @@
         socket.on('game_started', data => {
             if (!app.seat || data.game_id !== app.seat.game_id) return;
             app.handReady = false;
-            app.selected = [];
+            clearSelection();
             showScreen('game');
             receiveState(data, false);
         });
@@ -264,9 +271,10 @@
         });
         socket.on('your_hand', data => {
             if (!app.seat) return;
-            app.hand = (data.hand || []).filter(card => COLORS.includes(card.color) && /^[A-F][1-6]$/.test(locationOf(card)));
+            app.hand = (data.hand || []).filter(card => COLORS.includes(card.color) && (
+                isPower(card) ? locationOf(card) === 'PWR' : !card.power && /^[A-F][1-6]$/.test(locationOf(card))));
             app.handReady = true;
-            app.selected = [];
+            clearSelection();
             setPending(null);
             renderHand();
             renderBoard();
@@ -333,6 +341,7 @@
         const count = Number(document.querySelector('input[name="player_count"]:checked').value);
         const request = {
             player_name: name, player_count: count,
+            power_cards: $('power-cards').checked,
             game_mode: $('game-mode').value, intent: app.mode === 'join' ? 'join' : 'create',
         };
         app.seat = null;
@@ -358,6 +367,7 @@
         $('lobby-code').textContent = lobby.game_id;
         $('lobby-goal').textContent = mode.short;
         $('lobby-count').textContent = `${lobby.required_players} players · Private room`;
+        $('lobby-count').textContent += lobby.power_cards ? ' · Power Play' : ' · Regular cards';
         const fragment = document.createDocumentFragment();
         for (let i = 0; i < lobby.required_players; i++) {
             const player = lobby.players[i];
@@ -387,6 +397,67 @@
         return Array.isArray(card.location) ? card.location.join('') : String(card.location || '');
     }
 
+    function isPower(card) { return Boolean(card && Object.hasOwn(POWERS, card.power)); }
+
+    function selectedPower() {
+        const card = app.hand[app.selected[0]];
+        return app.selected.length === 1 && isPower(card) ? card : null;
+    }
+
+    function clearSelection() { app.selected = []; app.powerTargets = []; }
+
+    function boardColor(location) {
+        return app.game?.board[location.charCodeAt(0) - 65]?.[Number(location[1]) - 1]?.color || null;
+    }
+
+    function canUsePower() {
+        return Boolean(canSelect() && myTurn() && app.game.power_cards && !app.game.can_roll_dice && app.game.cards_played_this_turn === 0);
+    }
+
+    function validPowerTarget(location) {
+        const card = selectedPower();
+        if (!card || !canUsePower()) return false;
+        const count = app.powerTargets.length;
+        if (count >= POWERS[card.power].targets || app.powerTargets.includes(location)) return false;
+        return card.power === 'shift' && count === 0 ? COLORS.includes(boardColor(location)) : boardColor(location) === null;
+    }
+
+    function powerReady() {
+        const card = selectedPower();
+        if (!card || !canUsePower() || app.powerTargets.length !== POWERS[card.power].targets) return false;
+        if (card.power === 'refresh') return true;
+        return boardColor(app.powerTargets.at(-1)) === null
+            && (card.power !== 'shift' || COLORS.includes(boardColor(app.powerTargets[0])));
+    }
+
+    function powerInstructions() {
+        const card = selectedPower();
+        if (!card) return '';
+        if (!myTurn()) return 'Plan ahead. Choose your power again when your turn begins.';
+        if (app.game.can_roll_dice) return 'Roll the wild dice first. Then choose a power or regular cards.';
+        if (app.game.cards_played_this_turn > 0) return 'Powers need a fresh turn. You have already played a card.';
+        if (card.power === 'refresh') return `Confirm to discard your ${Math.max(0, app.hand.length - 1)} remaining cards and end your turn.`;
+        const cells = app.game.board.flat();
+        if (!cells.some(dot => !dot)) return 'No empty squares right now. Cancel and choose another card, or pass.';
+        if (card.power === 'shift' && !cells.some(dot => COLORS.includes(dot?.color))) return 'No regular dots to shift yet. Cancel and choose another card, or pass.';
+        if (powerReady()) return `${app.powerTargets.join(' → ')} selected. Check the preview, then confirm below.`;
+        if (card.power === 'shift' && !app.powerTargets.length) return 'Step 1 of 2 · Tap a colored dot to move. Yellow cannot move.';
+        return `${card.power === 'shift' ? 'Step 2 of 2' : 'Choose your spot'} · Tap an empty square marked +.`;
+    }
+
+    function renderPowerGuide() {
+        const card = selectedPower();
+        $('power-guide').hidden = !card;
+        if (!card) return;
+        $('power-title').textContent = `${POWERS[card.power].symbol} ${POWERS[card.power].title} · Full turn`;
+        $('power-description').textContent = card.power === 'paint'
+            ? `Place a ${card.color} dot on any empty square. Completed lines score normally.` : POWERS[card.power].description;
+        $('power-target-status').textContent = powerInstructions();
+        $('cancel-power').disabled = Boolean(app.pending);
+        $('reset-power-targets').hidden = card.power === 'refresh';
+        $('reset-power-targets').disabled = !app.powerTargets.length || Boolean(app.pending);
+    }
+
     function coloredDot(color) {
         const dot = node('i', `dot ${Object.hasOwn(SYMBOLS, color) ? color : ''}`, SYMBOLS[color] || '');
         dot.setAttribute('aria-hidden', 'true');
@@ -406,13 +477,14 @@
         if (app.game && state.round_id < app.game.round_id) return;
         const newRound = !app.game || app.game.round_id !== state.round_id;
         const previous = newRound ? null : app.game;
+        if (previous && previous.last_move?.id !== state.last_move?.id) app.powerTargets = [];
         if (newRound) {
             clearTimeout(app.pendingTimer);
             app.pending = null;
             clearRematchPending();
             app.hand = [];
             app.handReady = false;
-            app.selected = [];
+            clearSelection();
             app.activity = [];
             app.winnerShown = null;
             $('winner-dialog').close();
@@ -431,7 +503,7 @@
         }
         if (!previous || previous.current_turn !== state.current_turn) {
             log(`${state.current_turn === app.seat.player_name ? 'Your' : `${state.current_turn}’s`} turn.`);
-            app.selected = [];
+            clearSelection();
         }
         app.game = state;
         // A pass does not change the hand. Other actions unlock on the private hand event.
@@ -439,6 +511,8 @@
         const mode = MODES[state.game_mode] || MODES.twenty_dots;
         $('game-title').textContent = mode.title.toUpperCase();
         $('game-goal').textContent = mode.goal;
+        $('game-goal').textContent += state.power_cards ? ' · Power Play' : '';
+        $('power-help-button').hidden = !state.power_cards;
         $('game-room-code').textContent = app.seat.game_id;
         $('deck-count').textContent = `${state.deck_size} in deck`;
         $('deck-count').title = `${state.deck_reshuffles || 0} reshuffles this round. Played cards return when the deck runs out.`;
@@ -542,7 +616,16 @@
                 const cell = $(`cell-${location}`);
                 const color = app.game.board[row]?.[column]?.color;
                 const selectedIndex = app.selected.findIndex(index => locationOf(app.hand[index]) === location);
-                const previewCard = selectedIndex >= 0 ? app.hand[app.selected[selectedIndex]] : null;
+                let previewCard = selectedIndex >= 0 ? app.hand[app.selected[selectedIndex]] : null;
+                const power = selectedPower();
+                const targetIndex = app.powerTargets.indexOf(location);
+                const source = power?.power === 'shift' && targetIndex === 0;
+                const destination = power && power.power !== 'refresh' && app.powerTargets.length === POWERS[power.power].targets && location === app.powerTargets.at(-1);
+                if (destination) previewCard = { color: power.power === 'paint' ? power.color : boardColor(app.powerTargets[0]) };
+                const legal = validPowerTarget(location);
+                cell.classList.toggle('power-legal', legal);
+                cell.classList.toggle('power-source', Boolean(source));
+                cell.classList.toggle('last-shifted', Boolean(app.game.last_move?.removed?.includes(location)));
                 cell.classList.toggle('preview', Boolean(previewCard));
                 cell.classList.toggle('changed', Boolean(previousBoard && previousBoard[row]?.[column]?.color !== color));
                 const placed = app.game.last_move?.placements?.some(dot => dot.location === location);
@@ -551,13 +634,15 @@
                 cell.classList.toggle('last-collected', Boolean(collected));
                 const content = [node('span', 'cell-coordinate', location)];
                 if (previewCard || color) content.push(coloredDot(previewCard ? previewCard.color : color));
-                if (previewCard) content.push(node('span', 'selection-number', selectedIndex + 1));
+                if (legal && !color) content.push(node('span', 'target-plus', '+'));
+                if (previewCard || source) content.push(node('span', 'selection-number', power ? targetIndex + 1 : selectedIndex + 1));
                 cell.replaceChildren(...content);
                 cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${placed ? '; last move placed here' : ''}${collected ? '; last move collected here' : ''}${previewCard ? `; preview ${previewCard.color}, card ${selectedIndex + 1}` : ''}`);
-                cell.setAttribute('aria-pressed', String(Boolean(previewCard)));
+                if (power) cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${source ? '; selected source' : destination ? `; preview ${previewCard.color} destination` : legal ? '; valid power target' : ''}`);
+                cell.setAttribute('aria-pressed', String(Boolean(previewCard || source)));
             }
         }
-        $('board-hint').textContent = app.selected.length ? 'Outlined dots preview your selected cards.' : 'Tap a card to preview its position.';
+        $('board-hint').textContent = selectedPower() ? 'Power targets are previews until you confirm.' : app.selected.length ? 'Outlined dots preview your selected cards.' : 'Tap a card to preview its position.';
     }
 
     function boardKeyboard(event) {
@@ -582,6 +667,15 @@
             button.setAttribute('aria-pressed', String(selected));
             button.setAttribute('aria-label', `${card.color}, ${locationOf(card)}${selected ? ', selected' : ''}`);
             button.append(node('span', 'card-coordinate', locationOf(card)), coloredDot(card.color), node('span', 'card-color', card.color.toUpperCase()));
+            if (isPower(card)) {
+                button.classList.add('power-card');
+                button.dataset.power = card.power;
+                button.setAttribute('aria-label', `${POWERS[card.power].title}, ${card.color}, full turn${selected ? ', selected' : ''}`);
+                button.title = POWERS[card.power].description;
+                const badge = node('span', `power-symbol ${card.color}`, POWERS[card.power].symbol);
+                badge.setAttribute('aria-hidden', 'true');
+                button.replaceChildren(node('span', 'card-coordinate', POWERS[card.power].title), badge, node('span', 'card-color', card.power === 'paint' ? `${card.color.toUpperCase()} · POWER` : 'FULL TURN'));
+            }
             if (selected) button.append(node('span', 'card-check', '✓'));
             button.addEventListener('click', () => toggleCard(index));
             fragment.append(button);
@@ -593,6 +687,20 @@
 
     function toggleCard(index) {
         if (!canSelect()) return;
+        const card = app.hand[index];
+        if (isPower(card)) {
+            if (myTurn() && app.game.cards_played_this_turn > 0) {
+                toast('A power uses the whole turn. Save it for your next turn.');
+                return;
+            }
+            const deselect = app.selected.includes(index);
+            clearSelection();
+            if (!deselect) app.selected = [index];
+            renderHand(); renderBoard(); renderControls();
+            if (!deselect && myTurn() && !app.game.can_roll_dice) $('power-guide').scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'instant' : 'smooth' });
+            return;
+        }
+        if (selectedPower()) clearSelection();
         if (app.selected.includes(index)) app.selected = app.selected.filter(i => i !== index);
         else {
             const max = myTurn() ? Math.max(0, 2 - app.game.cards_played_this_turn) : 2;
@@ -613,6 +721,15 @@
 
     function selectAt(location) {
         if (!canSelect()) return;
+        if (selectedPower()) {
+            if (!validPowerTarget(location)) {
+                toast(powerReady() ? 'Targets selected. Confirm your power or choose targets again.' : powerInstructions());
+                return;
+            }
+            app.powerTargets.push(location);
+            renderBoard(); renderControls();
+            return;
+        }
         const selected = app.selected.find(index => locationOf(app.hand[index]) === location);
         if (selected !== undefined) return toggleCard(selected);
         const indices = app.hand.map((card, index) => locationOf(card) === location ? index : -1).filter(index => index >= 0);
@@ -624,6 +741,7 @@
     function renderControls() {
         renderReactions();
         renderRematch();
+        renderPowerGuide();
         if (!app.game || !app.seat) return;
         const state = app.game;
         const mine = myTurn();
@@ -663,6 +781,14 @@
             subtitle = connected ? 'Look over your hand. Your next move is coming.' : 'They’re reconnecting. Their seat is saved.';
             action = 'Waiting for your turn'; note = selected ? 'Just a preview. Choose again when your turn begins.' : 'Your hand stays visible. Plan a little something.';
         }
+        if (selectedPower() && mine && available && !state.can_roll_dice) {
+            const power = selectedPower();
+            title = `Your turn. ${POWERS[power.power].title} a possibility.`;
+            subtitle = powerInstructions();
+            action = powerReady() ? (power.power === 'refresh' ? 'Trade hand & end turn ↻' : `Use ${POWERS[power.power].title} ↗`) : 'Choose power targets';
+            note = 'Uses your whole turn. No card is spent until you confirm.';
+            $('primary-action').disabled = !powerReady();
+        }
         $('turn-title').textContent = title;
         $('turn-subtitle').textContent = subtitle;
         $('primary-action').textContent = action;
@@ -682,6 +808,9 @@
         if (app.game?.winner) return $('winner-dialog').showModal();
         if (!myTurn()) return;
         if (app.game.can_roll_dice) sendAction('roll_dice');
+        else if (selectedPower()) {
+            if (powerReady()) sendAction('play_power', { card: selectedPower(), targets: [...app.powerTargets] });
+        }
         else if (app.selected.length) sendAction('play_cards', { cards: app.selected.map(index => app.hand[index]) });
     }
 
@@ -735,9 +864,11 @@
             ? `${series.winner} wins game night ${series.number}! Two wins, one great table. Ready for a fresh series?`
             : `Round ${series?.round || 1} complete. First to 2 wins takes the series. Keep your seat for the next round.`;
         $('rematch-host-options').hidden = !host;
-        $('rematch-mode').value = rematch?.next_game_mode || app.game.game_mode;
+        if (!app.rematchPending) $('rematch-mode').value = rematch?.next_game_mode || app.game.game_mode;
         $('rematch-mode').disabled = !available;
-        $('rematch-goal').textContent = `Next up: ${MODES[rematch?.next_game_mode || app.game.game_mode]?.short}. ${host ? 'You set the game plan.' : 'The host sets the game plan.'}`;
+        if (!app.rematchPending) $('rematch-powers').checked = Boolean(rematch?.next_power_cards ?? app.game.power_cards);
+        $('rematch-powers').disabled = !available;
+        $('rematch-goal').textContent = `Next up: ${MODES[rematch?.next_game_mode || app.game.game_mode]?.short} · ${$('rematch-powers').checked ? 'Power Play' : 'Regular cards'}. ${host ? 'You set the game plan.' : 'The host sets the game plan.'}`;
         $('ready-list').replaceChildren(...players.map(player => {
             const isReady = ready.includes(player.name) && player.connected;
             return node('span', `ready-player${isReady ? ' is-ready' : ''}`, `${player.name} · ${!player.connected ? 'Reconnecting' : isReady ? 'Ready ✓' : 'Not ready yet'}`);
@@ -857,6 +988,10 @@
         const callout = wildFinish ? 'Wild finish! ' : move.lines >= 2 ? `${move.lines === 2 ? 'Double' : 'Multiple'} line! ` : move.lines ? 'A lovely line! ' : '';
         const positions = (move.placements || []).map(dot => dot.location).join(', ');
         $('move-summary').textContent = `${callout}${move.player} ${move.kind === 'roll' ? 'rolled wild' : 'played'}${positions ? ` at ${positions}` : ''}${move.points ? ` · +${move.points} dots` : ''}.`;
+        if (move.kind === 'power' && Object.hasOwn(POWERS, move.power)) {
+            const detail = move.power === 'refresh' ? 'traded their hand' : move.power === 'shift' ? `moved ${move.removed?.[0]} → ${positions}` : `painted ${positions}`;
+            $('move-summary').textContent = `${callout}${move.player} used ${POWERS[move.power].title} · ${detail}${move.points ? ` · +${move.points} dots` : ''}.`;
+        }
         if (!animate || document.hidden) return;
         playNote(move.points > 0, Boolean(app.game.series?.winner));
         if (move.points > 0 && move.player === app.seat.player_name && preferences.haptics) {
@@ -927,6 +1062,7 @@
         clearTimeout(app.pendingTimer);
         clearRematchPending();
         Object.assign(app, { seat: null, lobby: null, game: null, hand: [], selected: [], pending: null, handReady: false, winnerShown: null, activity: [] });
+        clearSelection();
         for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
         $('board').replaceChildren();
         formBusy(false);
@@ -953,8 +1089,10 @@
         });
     });
     $('setup-form').addEventListener('submit', submitSetup);
+    document.querySelectorAll('[data-power-help]').forEach(button => button.addEventListener('click', () => $('power-rules-dialog').showModal()));
     $('rematch-button').addEventListener('click', () => sendRematch('rematch_ready', { ready: !app.game.rematch?.ready?.includes(app.seat.player_name) }));
     $('rematch-mode').addEventListener('change', event => sendRematch('rematch_options', { game_mode: event.target.value }));
+    $('rematch-powers').addEventListener('change', event => sendRematch('rematch_options', { power_cards: event.target.checked }));
     document.querySelectorAll('[data-reaction]').forEach(button => button.addEventListener('click', () => sendReaction(button.dataset.reaction)));
     document.querySelectorAll('[data-mute-reactions]').forEach(button => button.addEventListener('click', () => { preferences.muted = !preferences.muted; applyPreferences(); }));
     document.querySelectorAll('[data-preferences]').forEach(button => button.addEventListener('click', () => $('preferences-dialog').showModal()));
@@ -977,7 +1115,10 @@
     applyPreferences();
     $('primary-action').addEventListener('click', primaryAction);
     $('end-turn').addEventListener('click', () => sendAction(app.game.cards_played_this_turn ? 'end_turn' : 'pass_turn'));
-    $('clear-selection').addEventListener('click', () => { app.selected = []; renderHand(); renderBoard(); renderControls(); });
+    function cancelSelection() { clearSelection(); renderHand(); renderBoard(); renderControls(); }
+    $('clear-selection').addEventListener('click', cancelSelection);
+    $('cancel-power').addEventListener('click', cancelSelection);
+    $('reset-power-targets').addEventListener('click', () => { app.powerTargets = []; renderBoard(); renderControls(); });
     $('rules-button').addEventListener('click', () => $('rules-dialog').showModal());
     $('table-rules').addEventListener('click', () => $('rules-dialog').showModal());
     document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()));
@@ -990,6 +1131,7 @@
         setMode('create');
         if (previous) {
             $('game-mode').value = previous.game_mode;
+            $('power-cards').checked = Boolean(previous.power_cards);
             const count = document.querySelector(`input[name="player_count"][value="${previous.required_players}"]`);
             if (count) count.checked = true;
         }

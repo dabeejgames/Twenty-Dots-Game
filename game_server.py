@@ -10,7 +10,9 @@ import os
 import secrets
 import time
 from threading import RLock
-from twenty_dots import TwentyDots
+from functools import wraps
+from importlib import import_module
+from twenty_dots import TwentyDots, Card, Dot
 from ai_player import AIPlayer
 
 app = Flask(__name__)
@@ -21,8 +23,39 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Active games dictionary: game_id -> game_data
 games = {}
 
+ONLINE_POWERS = ('paint', 'shift', 'refresh')
+
+
+def make_round_lock():
+    """Reentrant ownership must follow the Socket.IO worker, not just its OS thread."""
+    # These optional modules are available only when Socket.IO selected that backend.
+    module = {'eventlet': 'eventlet.green.threading', 'gevent': 'gevent.lock',
+              'gevent_uwsgi': 'gevent.lock'}.get(socketio.async_mode)
+    return import_module(module).RLock() if module else RLock()
+
+
+def serialized_event(handler):
+    """Serialize gameplay against rematches, including legacy packets queued at the lock."""
+    @wraps(handler)
+    def locked(data):
+        if not isinstance(data, dict) or not isinstance(data.get('game_id'), str):
+            emit('error', {'message': 'Expected game_id'})
+            return
+        session = games.get(data['game_id'])
+        if session is None:
+            emit('error', {'message': 'Game not found'})
+            return
+        received_round = session.round_id
+        with session.round_lock:
+            if received_round != session.round_id:
+                emit('error', {'message': 'Stale round_id'})
+                return
+            return handler(data)
+    return locked
+
+
 class GameSession:
-    def __init__(self, game_id, host_sid, game_mode='twenty_dots', player_count=2):
+    def __init__(self, game_id, host_sid, game_mode='twenty_dots', player_count=2, power_cards=False):
         self.game_id = game_id
         self.game_mode = game_mode
         self.required_players = player_count  # Store the required player count
@@ -46,13 +79,14 @@ class GameSession:
         self.awarded_round = None
         self.ready_players = set()  # Human readiness only; AI seats are always ready.
         self.next_game_mode = game_mode
-        self.power_cards = False
+        self.power_cards = power_cards
+        self.next_power_cards = power_cards
         self.recycle_pool = []  # Actual played Card objects, never public discard metadata.
         self.deck_reshuffles = 0
         self.last_move = None
         self.move_id = 0
         self.reaction_times = {}
-        self.round_lock = RLock()
+        self.round_lock = make_round_lock()
         
     def add_player(self, sid, player_name, is_ai=False, token_enabled=False):
         """Add a player to the game"""
@@ -123,16 +157,21 @@ class GameSession:
             'resume_token': player.get('resume_token'),
         }, room=sid)
 
-    def initialize_game(self, power_cards=False):
+    def initialize_game(self, power_cards=None):
         """Initialize every route identically, without overlapping-name pop collisions."""
-        self.power_cards = power_cards
+        if power_cards is not None:
+            self.power_cards = power_cards
+        self.next_power_cards = self.power_cards
         self.winner = None
         self.ready_players.clear()
         self.recycle_pool = []
         self.deck_reshuffles = 0
         self.last_move = None
         self.game = TwentyDots(num_players=len(self.player_order), difficulty='easy',
-                               ai_opponents={}, power_cards=power_cards)
+                               ai_opponents={}, power_cards=False)
+        if self.power_cards:
+            self.game.deck.extend(Card('PWR', color, power)
+                                  for color in self.game.colors for power in ONLINE_POWERS)
         self.game.players = dict(zip(self.player_order, self.game.players.values()))
         for name, player in self.game.players.items():
             player['is_ai'] = name in self.ai_players
@@ -201,12 +240,14 @@ class GameSession:
             self.check_winner()
             return {
                 'round_id': self.round_id,
+                'power_cards': self.power_cards,
                 'series': {'number': self.series_number, 'round': self.series_round,
                            'wins': dict(self.series_wins), 'target_wins': 2,
                            'winner': self.series_winner},
                 'rematch': {'ready': [name for name in self.player_order
                                       if name in self.ai_players or name in self.ready_players],
-                            'next_game_mode': self.next_game_mode},
+                            'next_game_mode': self.next_game_mode,
+                            'next_power_cards': self.next_power_cards},
             }
 
     def broadcast_rematch(self):
@@ -229,7 +270,7 @@ class GameSession:
             self.series_round += 1
         self.round_id += 1
         self.game_mode = self.next_game_mode
-        self.initialize_game(power_cards=self.power_cards)
+        self.initialize_game(power_cards=self.next_power_cards)
         self.broadcast_lobby()
         self.send_started_game()
         self.schedule_ai()
@@ -285,6 +326,8 @@ class GameSession:
 
     def apply_cards(self, player_name, cards):
         """Shared human/AI placement, recycling, scoring and last-move recording."""
+        if any(card.power is not None or card.location == 'PWR' for card in cards):
+            raise ValueError('Power cards require play_power')
         hand = self.game.players[player_name]['hand']
         player = self.game.players[player_name]
         move = self.begin_move(player_name, 'play')
@@ -297,8 +340,6 @@ class GameSession:
             info = {'location': ''.join(card.location), 'color': card.color}
             self.discard_piles.setdefault(player_name, []).append(info)
             self.game.turn_cards_played[player_name] += 1
-            if card.power:
-                continue  # Retain the existing network power-card behavior.
             success, replaced_color = self.game.place_card_dot(card)
             if not success:
                 continue
@@ -319,6 +360,122 @@ class GameSession:
                 self.collect_match(player_name, row, col, match, match_color, move)
         self.finish_move(move)
         return yellow_replaced, yellow_collected
+
+    def resolve_power(self, player_name, card_data, targets):
+        """Validate completely before mutation; callers hold round_lock."""
+        if (not self.started or self.winner or not self.power_cards
+                or player_name != self.game.get_current_player()):
+            raise ValueError('Power Play is unavailable or not your turn')
+        if self.game.can_roll_dice:
+            raise ValueError('You must roll the wild dice first')
+        if self.game.turn_cards_played.get(player_name, 0) != 0:
+            raise ValueError('A power costs your entire turn; play it before regular cards')
+        if (not isinstance(card_data, dict) or card_data.get('location') != 'PWR'
+                or card_data.get('power') not in ONLINE_POWERS
+                or card_data.get('color') not in self.game.colors):
+            raise ValueError('Invalid power card')
+        card = next((c for c in self.game.players[player_name]['hand']
+                     if c.location == 'PWR' and c.color == card_data['color']
+                     and c.power == card_data['power']), None)
+        if card is None:
+            raise ValueError('Power card is not in your hand')
+        count = {'paint': 1, 'shift': 2, 'refresh': 0}[card.power]
+        if not isinstance(targets, list) or len(targets) != count:
+            raise ValueError('Invalid power targets')
+        for target in targets:
+            if (not isinstance(target, str) or len(target) != 2
+                    or target[0] not in self.game.rows or target[1] not in self.game.columns):
+                raise ValueError('Invalid power target coordinate')
+        if len(set(targets)) != len(targets):
+            raise ValueError('Power targets must be distinct')
+        cells = [(self.game.rows.index(t[0]), self.game.columns.index(t[1])) for t in targets]
+        if cells:
+            row, col = cells[-1]
+            if self.game.grid[row][col] is not None:
+                raise ValueError('Power destination must be empty')
+        if card.power == 'shift':
+            row, col = cells[0]
+            dot = self.game.grid[row][col]
+            if dot is None or dot.color not in self.game.colors:
+                raise ValueError('Shift source must contain a regular colored dot')
+        return card, cells
+
+    def apply_power(self, player_name, card_data, targets):
+        """Shared human/AI execution; validation precedes every state change."""
+        card, cells = self.resolve_power(player_name, card_data, targets)
+        hand = self.game.players[player_name]['hand']
+        move = self.begin_move(player_name, 'power')
+        move['power'] = card.power
+        hand.remove(card)
+        self.recycle_pool.append(card)
+        self.discard_piles.setdefault(player_name, []).append(
+            {'location': 'PWR', 'color': card.color, 'power': card.power})
+        self.game.turn_cards_played[player_name] = 2
+        yellow_collected = False
+        if card.power == 'refresh':
+            self.recycle_pool.extend(hand)
+            hand.clear()
+        else:
+            dot = Dot(card.color)
+            if card.power == 'shift':
+                row, col = cells[0]
+                dot = self.game.grid[row][col]
+                self.game.grid[row][col] = None
+                move['removed'] = [targets[0]]
+            row_idx, col_idx = cells[-1]
+            self.game.grid[row_idx][col_idx] = dot
+            move['placements'].append({'location': targets[-1], 'color': dot.color})
+            row, col = targets[-1]
+            match, color = self.game.check_line_match(row, col, dot.color)
+            if match:
+                yellow_collected = any(self.game.grid[y][x].color == 'yellow' for x, y in match)
+                self.collect_match(player_name, row, col, match, color, move)
+        if yellow_collected:
+            self.game.yellow_dot_position = None
+        self.finish_move(move)
+        self.refill_hand(player_name)
+        if self.check_winner():
+            self.game.can_roll_dice = False
+            self.game.must_advance_after_roll[player_name] = False
+        elif yellow_collected:
+            self.game.can_roll_dice = True
+            self.game.must_advance_after_roll[player_name] = True
+        else:
+            self.advance_turn()
+
+    def choose_ai_power(self, player_name):
+        """Deterministic safe fallback, with exactly the same validation as human plays."""
+        empty = [r + c for y, r in enumerate(self.game.rows)
+                 for x, c in enumerate(self.game.columns) if self.game.grid[y][x] is None]
+        sources = [r + c for y, r in enumerate(self.game.rows)
+                   for x, c in enumerate(self.game.columns)
+                   if self.game.grid[y][x] is not None
+                   and self.game.grid[y][x].color in self.game.colors]
+        for card in self.get_player_hand(player_name):
+            power = card['power']
+            if power == 'refresh':
+                targets = []
+            elif power == 'paint' and empty:
+                targets = empty[:1]
+            elif power == 'shift' and sources and empty:
+                targets = [sources[0], empty[0]]
+            else:
+                continue
+            try:
+                self.resolve_power(player_name, card, targets)
+            except ValueError:
+                continue
+            return card, targets
+        return None
+
+    def broadcast_action(self):
+        """Public board/recycling notice and one private hand per connected human."""
+        socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+        if self.check_winner():
+            socketio.emit('game_over', self.winner_payload(), room=self.game_id)
+        for sid, player in self.players.items():
+            if player['connected'] and not player['is_ai']:
+                socketio.emit('your_hand', {'hand': self.get_player_hand(player['name'])}, room=sid)
 
     def winner_payload(self):
         result = self.check_winner()
@@ -391,8 +548,9 @@ class GameSession:
         hand = self.game.players[player_name]['hand']
         cards_data = []
         for c in hand:
-            # Skip power cards for now
-            if hasattr(c, 'power') and c.power:
+            if c.power is not None:
+                if c.location == 'PWR' and c.power in ONLINE_POWERS:
+                    cards_data.append({'location': 'PWR', 'color': c.color, 'power': c.power})
                 continue
                 
             # Handle both string and tuple locations
@@ -435,146 +593,74 @@ class GameSession:
         return match
 
     def execute_ai_move(self):
-        """Execute AI move if current player is AI"""
-        if not self.started or self.check_winner() or self.ai_move_in_progress:
-            return
-        
-        current_player = self.game.get_current_player()
-        
-        if current_player not in self.ai_players:
-            return
-        
-        self.ai_move_in_progress = True
-        try:
-            ai_player = self.ai_players[current_player]
-            hand = self.game.players[current_player]['hand']
-            if not hand:
-                self.refill_hand(current_player)
-            
-            # Initialize turn_cards_played if not exists
-            if not hasattr(self.game, 'turn_cards_played'):
-                self.game.turn_cards_played = {}
-            if current_player not in self.game.turn_cards_played:
-                self.game.turn_cards_played[current_player] = 0
-            
-            cards_played_this_turn = self.game.turn_cards_played[current_player]
-            
-            # AI must roll first if can_roll_dice is True
-            if self.game.can_roll_dice:
-                print(f"[AI_MOVE] {current_player} must roll first (hand has {len(hand)} cards)")
-                match = self.roll_wild(current_player)
-                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                if self.check_winner():
-                    socketio.emit('game_over', self.winner_payload(), room=self.game_id)
-                    return
-                if match:
-                    # A matching roll collects the wild, so the AI must roll again
-                    self.game.can_roll_dice = True
-                    import time
-                    time.sleep(0.5)
-                    self.ai_move_in_progress = False
-                    self.execute_ai_move()
-                    return
-                self.game.can_roll_dice = False
-                # After rolling, AI needs to play cards
-                print(f"[AI_MOVE] {current_player} rolled, now choosing cards to play")
-            
-            # Check if AI already played 2 cards this turn
-            if cards_played_this_turn >= 2:
-                print(f"[AI_MOVE] {current_player} already played {cards_played_this_turn} cards, advancing turn")
-                self.refill_hand(current_player)
-                self.advance_turn()
-                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                import time
-                time.sleep(0.5)
+        """Run one AI turn iteratively; never feed PWR locations to the desktop AI."""
+        with self.round_lock:
+            if not self.started or self.check_winner() or self.ai_move_in_progress:
+                return
+            name = self.game.get_current_player()
+            if name not in self.ai_players:
+                return
+            self.ai_move_in_progress = True
+            try:
+                # Bound repeated matching rolls; continuation uses scheduling, not recursion.
+                for _ in range(64):
+                    if self.check_winner() or self.game.get_current_player() != name:
+                        break
+                    used = self.game.turn_cards_played.get(name, 0)
+                    if self.game.can_roll_dice:
+                        match = self.roll_wild(name)
+                        self.game.can_roll_dice = bool(match)
+                        if not self.check_winner() and not match and (
+                                used >= 2 or self.game.must_advance_after_roll.get(name, False)):
+                            self.refill_hand(name)
+                            self.advance_turn()
+                        self.broadcast_action()
+                        continue
+                    if used >= 2:
+                        self.refill_hand(name)
+                        self.advance_turn()
+                        self.broadcast_action()
+                        break
+                    hand = self.game.players[name]['hand']
+                    if not hand:
+                        self.refill_hand(name)
+                    regular = [c for c in hand if c.power is None and c.location != 'PWR']
+                    indices = self.ai_players[name].choose_cards(regular) if regular else []
+                    selected = []
+                    locations = set()
+                    for index in indices:
+                        if type(index) is not int or not 0 <= index < len(regular):
+                            continue
+                        card = regular[index]
+                        location = ''.join(card.location)
+                        if location not in locations:
+                            selected.append(card)
+                            locations.add(location)
+                        if len(selected) == 2 - used:
+                            break
+                    if not selected:
+                        power = self.choose_ai_power(name) if used == 0 else None
+                        if power:
+                            self.apply_power(name, *power)
+                        else:
+                            self.refill_hand(name)
+                            self.advance_turn()
+                        self.broadcast_action()
+                        continue
+                    replaced, collected = self.apply_cards(name, selected)
+                    if replaced or collected:
+                        self.game.yellow_dot_position = None
+                        self.game.can_roll_dice = True
+                    if self.game.turn_cards_played[name] >= 2 and not self.check_winner():
+                        self.refill_hand(name)
+                        if self.game.can_roll_dice:
+                            self.game.must_advance_after_roll[name] = True
+                        else:
+                            self.advance_turn()
+                    self.broadcast_action()
+            finally:
                 self.ai_move_in_progress = False
-                self.execute_ai_move()
-                return
-            
-            # Choose cards to play (up to 2 - cards_played_this_turn)
-            cards_needed = 2 - cards_played_this_turn
-            cards_to_play_indices = ai_player.choose_cards(hand)[:cards_needed]
-            
-            if len(cards_to_play_indices) == 0:
-                print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
-                self.refill_hand(current_player)
-                self.advance_turn()
-                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                import time
-                time.sleep(0.5)
-                self.ai_move_in_progress = False
-                self.execute_ai_move()
-                return
-            
-            cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
-            yellow_replaced, yellow_collected = self.apply_cards(current_player, cards_to_play)
-
-            # A winning AI play is terminal even if yellow now requires a roll.
-            # Do not recurse into another AI action or advance the turn first.
-            if self.check_winner():
-                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                socketio.emit('game_over', self.winner_payload(), room=self.game_id)
-                return
-            
-            # After playing cards
-            total_played_this_turn = self.game.turn_cards_played[current_player]
-            print(f"[AI_MOVE] {current_player} played cards, total this turn: {total_played_this_turn}")
-            
-            # Check if AI played 2 cards this turn
-            if total_played_this_turn >= 2:
-                # Draw replacement cards
-                self.refill_hand(current_player)
-                
-                # If yellow was replaced or collected, AI must roll again
-                if yellow_replaced or yellow_collected:
-                    self.game.can_roll_dice = True
-                    print(f"[AI_MOVE] {current_player} replaced/collected yellow after 2 cards, must roll then end turn")
-                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                    import time
-                    time.sleep(0.5)
-                    self.ai_move_in_progress = False
-                    # Roll then end turn
-                    self.execute_ai_move()
-                    return
-                else:
-                    # Advance to next player
-                    print(f"[AI_MOVE] {current_player} played 2 cards, advancing turn")
-                    self.game.can_roll_dice = False
-                    self.advance_turn()
-                    socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                    
-                    # Check for winner
-                    winner_result = self.check_winner()
-                    if winner_result:
-                        socketio.emit('game_over', {
-                            'winner': winner_result['winner'],
-                            'condition': winner_result['mode']
-                        }, room=self.game_id)
-                        return
-                    
-                    import time
-                    time.sleep(0.5)
-                    self.ai_move_in_progress = False
-                    self.execute_ai_move()
-                    return
-            else:
-                # Still need to play more cards
-                if yellow_replaced or yellow_collected:
-                    self.game.can_roll_dice = True
-                    print(f"[AI_MOVE] {current_player} replaced/collected yellow, must roll again")
-                socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
-                import time
-                time.sleep(0.5)
-                self.ai_move_in_progress = False
-                self.execute_ai_move()
-                return
-                
-        except Exception as e:
-            print(f"[AI_MOVE] Error: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            self.ai_move_in_progress = False
+        self.schedule_ai()
     
     def check_winner(self):
         """Latch the round result and award its series point exactly once."""
@@ -704,12 +790,17 @@ def handle_rematch_options(data):
         if request.sid != session.host_sid:
             emit('error', {'message': 'Only host can change rematch options'})
             return
-        mode = data.get('game_mode')
+        mode = data.get('game_mode', session.next_game_mode)
         if mode not in ('twenty_dots', 'five_colors', 'five_with_yellow'):
             emit('error', {'message': 'Invalid game_mode'})
             return
-        if mode != session.next_game_mode:
+        powers = data.get('power_cards', session.next_power_cards)
+        if type(powers) is not bool:
+            emit('error', {'message': 'power_cards must be a boolean'})
+            return
+        if mode != session.next_game_mode or powers != session.next_power_cards:
             session.next_game_mode = mode
+            session.next_power_cards = powers
             session.ready_players.clear()
         session.broadcast_rematch()
 
@@ -742,6 +833,8 @@ def validate_join_data(data):
     """Validate room options before lookup or engine construction; retain integer strings."""
     if not isinstance(data, dict):
         raise ValueError('Expected an object')
+    if type(data.get('power_cards', False)) is not bool:
+        raise ValueError('power_cards must be a boolean')
     for field, limit in (('player_name', 24), ('game_id', 64)):
         value = data.get(field)
         if not isinstance(value, str) or not value.strip() or len(value) > limit:
@@ -813,7 +906,8 @@ def handle_create_game(data):
         emit('error', {'message': 'Game ID already exists'})
         return
     
-    game_session = GameSession(game_id, request.sid, game_mode, player_count)
+    game_session = GameSession(game_id, request.sid, game_mode, player_count,
+                               power_cards=data.get('power_cards', False))
     success, message = game_session.add_player(
         request.sid, player_name, token_enabled='intent' in data or 'resume_token' in data)
     
@@ -856,7 +950,8 @@ def handle_join_game(data):
         emit('error', {'message': 'Game ID already exists'})
         return
     if game_session is None:
-        game_session = GameSession(game_id, request.sid, game_mode, player_count)
+        game_session = GameSession(game_id, request.sid, game_mode, player_count,
+                                   power_cards=data.get('power_cards', False))
 
     existing_sid = next((sid for sid, p in game_session.players.items()
                          if p['name'] == player_name), None)
@@ -915,6 +1010,7 @@ def handle_join_game(data):
         game_session.schedule_ai()
 
 @socketio.on('add_ai_player')
+@serialized_event
 def handle_add_ai(data):
     """Host adds an AI player"""
     game_id = data.get('game_id')
@@ -959,6 +1055,9 @@ def handle_add_ai(data):
 @socketio.on('start_single_player')
 def handle_start_single_player(data):
     """Start a single-player game with AI opponents"""
+    if not isinstance(data, dict):
+        emit('error', {'message': 'Expected an object'})
+        return
     player_name = data.get('player_name', 'Player')
     num_players = data.get('num_players', 2)
     difficulty = data.get('difficulty', 'medium')
@@ -979,7 +1078,8 @@ def handle_start_single_player(data):
     game_id = f"sp_{uuid.uuid4().hex[:8]}"
     
     # Create game session
-    game_session = GameSession(game_id, request.sid, game_mode, num_players)
+    game_session = GameSession(game_id, request.sid, game_mode, num_players,
+                               power_cards=data.get('power_cards', False))
     games[game_id] = game_session
     join_room(game_id)
     
@@ -1017,6 +1117,7 @@ def handle_start_single_player(data):
     print(f"Single-player game {game_id} started with {player_name} vs {num_players - 1} AI opponents")
 
 @socketio.on('start_game')
+@serialized_event
 def handle_start_game(data):
     """Host starts the game"""
     game_id = data.get('game_id')
@@ -1038,7 +1139,7 @@ def handle_start_game(data):
         emit('error', {'message': 'Need at least 2 players to start'})
         return
     
-    game_session.initialize_game(power_cards=True)
+    game_session.initialize_game()
     game_session.broadcast_lobby()
     
     # Send game state to all players
@@ -1054,7 +1155,25 @@ def handle_start_game(data):
     game_session.schedule_ai()
     print(f"Game {game_id} started with players: {game_session.player_order}")
 
+@socketio.on('play_power')
+@serialized_event
+def handle_play_power(data):
+    session = event_session(data)
+    if session is None or not session.valid_round(data):
+        return
+    if not session.action_allowed(request.sid, data):
+        return
+    try:
+        session.apply_power(session.get_player_name(request.sid), data.get('card'), data.get('targets'))
+    except ValueError as exc:
+        emit('error', {'message': str(exc)})
+        return
+    session.broadcast_action()
+    session.schedule_ai()
+
+
 @socketio.on('play_cards')
+@serialized_event
 def handle_play_cards(data):
     """Player plays one or more cards"""
     game_id = data.get('game_id')
@@ -1088,6 +1207,9 @@ def handle_play_cards(data):
         if not isinstance(card_data, dict):
             emit('error', {'message': 'Invalid cards selected'})
             return
+        if card_data.get('power') is not None:
+            emit('error', {'message': 'Power cards require play_power'})
+            return
         location = card_data.get('location')
         if (not isinstance(location, (str, list, tuple)) or len(location) != 2
                 or location[0] not in game_session.game.rows
@@ -1115,7 +1237,7 @@ def handle_play_cards(data):
             # Normalize card location to string format
             card_loc = card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}"
             
-            if card.color == card_data['color'] and card_loc == req_loc:
+            if card.power is None and card.color == card_data['color'] and card_loc == req_loc:
                 cards_to_play.append(card)
                 print(f"[PLAY_CARDS] Found matching card: {card.color} at {card_loc}")
                 break
@@ -1231,6 +1353,7 @@ def handle_play_cards(data):
 
 
 @socketio.on('end_turn')
+@serialized_event
 def handle_end_turn(data):
     """Player ends their turn"""
     game_id = data.get('game_id')
@@ -1301,6 +1424,7 @@ def handle_end_turn(data):
 
 
 @socketio.on('roll_dice')
+@serialized_event
 def handle_roll_dice(data):
     """Player rolls dice for yellow wild dot"""
     game_id = data.get('game_id')
@@ -1376,6 +1500,7 @@ def handle_roll_dice(data):
     print(f"{player_name} rolled dice")
 
 @socketio.on('pass_turn')
+@serialized_event
 def handle_pass_turn(data):
     """Player passes their turn without playing cards"""
     game_id = data.get('game_id')
@@ -1432,39 +1557,10 @@ def handle_pass_turn(data):
     game_session.schedule_ai()
 
 def execute_ai_turn(game_session, ai_name):
-    """Execute an AI player's turn"""
-    ai_player = game_session.ai_players[ai_name]
-    
-    # AI chooses cards to play
-    cards = ai_player.choose_cards(
-        game_session.game.players[ai_name]['hand'],
-        game_session.game.grid
-    )
-    
-    if cards:
-        success, message = game_session.game.play_cards(ai_name, cards)
-        if not success:
-            print(f"AI {ai_name} play failed: {message}")
-    
-    # AI ends turn
-    game_session.game.next_turn()
-    
-    # Broadcast updated game state
-    game_state = game_session.get_game_state()
-    socketio.emit('game_updated', game_state, room=game_session.game_id)
-    
-    # If next player is also AI, continue
-    next_player = game_session.game.current_turn
-    if next_player in game_session.ai_players:
-        socketio.sleep(1)  # Brief delay for visibility
-        execute_ai_turn(game_session, next_player)
-    else:
-        # Send hand to human player
-        for sid, player_info in game_session.players.items():
-            if player_info['name'] == next_player:
-                hand = game_session.get_player_hand(next_player)
-                socketio.emit('your_hand', {'hand': hand}, room=sid)
-                break
+    """Legacy entry point delegates to the same power-aware online AI executor."""
+    with game_session.round_lock:
+        if game_session.game.get_current_player() == ai_name:
+            game_session.execute_ai_move()
 
 @socketio.on('list_games')
 def handle_list_games():

@@ -202,6 +202,7 @@ async function audit(page, label) {
         assert.equal(await guest.locator('#mute-reactions').getAttribute('aria-pressed'), 'true');
         await audit(host, 'New series table');
         for (const page of pages) assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await require('./browser_powers.cjs')(browser, base, request, audit, exceptions);
         assert.deepEqual(exceptions, []);
         console.log(`PASS (${process.env.PLAYWRIGHT_BROWSER || 'chromium'}): real-backend deck recycling, double-line/wild feedback, motion preferences/dedup, reactions/cooldown/mute, terminal refresh, host goal/readiness reset, two rematches, rotating starters, fresh series, accessibility.`);
     } finally {
