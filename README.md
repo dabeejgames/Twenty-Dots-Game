@@ -31,12 +31,25 @@ A strategic multiplayer board game where players compete to collect colored dots
    - Yellow wild dots can complete any color match
    - Roll at the start and whenever yellow is collected or replaced. A roll that makes a match requires another roll.
    - Your hand stays visible between turns so you can plan ahead.
+   - When the deck runs out, played cards are shuffled back in. Held cards, scores, and the board stay untouched.
 
 4. **Stay at the Table:**
    - Connection interruptions trigger automatic rejoining; moves stay disabled until the state is restored.
    - After refreshing, choose **Rejoin** to recover your saved seat and private hand.
    - A saved seat belongs to this browser/device and expires locally after 24 hours.
    - Rooms are held in server memory, so a server restart ends existing games.
+
+5. **Play Another:**
+   - Choose **Play again** on the results screen. The next round starts when every human player is connected and ready; computer opponents are ready automatically.
+   - Keep the same room, invite link, and seats. The starting player rotates each round.
+   - Each round win earns one series point. First to **two wins** takes game night: best of three for two players, potentially more rounds with three or four.
+   - After a series finishes, ready up for a fresh series. The host can change the next round’s goal; changing it clears readiness so everyone agrees to the new rules.
+   - Refreshing after a win still lets you rejoin. **Leave & create a different table** is separate from a rematch.
+
+6. **Make It Your Table:**
+   - Send **Nice move!**, **Well played!**, **Close one!**, or **Rematch?** during play or from the results screen. Reactions have a three-second cooldown and can be muted.
+   - **Sound & preferences** offers optional game sounds, supported-device vibration, and reduced motion. Sound and vibration default to off; preferences stay on this device.
+   - Last-move highlights and collection summaries stay readable without animation. Motion also respects the operating system’s reduced-motion setting.
 
 ## 🚀 Features
 
@@ -47,6 +60,10 @@ A strategic multiplayer board game where players compete to collect colored dots
 - **Desktop Power Cards:** Special abilities and landmines are available in the desktop game; browser play uses regular cards
 - **AI Opponents:** Play against computer players
 - **Real-time Updates:** Instant game state synchronization
+- **Game Nights:** Same-room rematches, rotating starters, and first-to-two series scores
+- **Fresh Decks:** Played cards recycle when the draw pile empties, including in four-player games
+- **Table Talk:** Preset reactions, cooldowns, and a local mute preference
+- **Move Feedback:** Collection effects, line/wild-finish callouts, optional audio and haptics
 
 ## 💻 Local Development
 
@@ -98,6 +115,8 @@ To play with friends on the same WiFi:
 - With the game server running locally, run `npm test --prefix tests`.
 - Set `GAME_URL` to test another **local/test** server. Browser checks create real rooms and run four players through turns, refresh/rejoin, offline recovery, and AI practice.
 - Browser checks also audit accessibility and layouts from 320 px to desktop, and save screenshots under `test-results/` (ignored by git).
+- Run `npm run test:replay --prefix tests` for deterministic real-backend rematch, series, reaction, preferences, and deck-recycling checks. It starts and stops its own loopback-only fixture server on port 5001. Set `TEST_PYTHON` to your Python interpreter path if needed, or `BROWSER_FIXTURE_PORT` to another unused port. Fixture setup is authenticated with an ephemeral key and exists only in the separate test entry point, never in the production server.
+- Set `PLAYWRIGHT_BROWSER=webkit` to run either browser suite in WebKit (install it with `npx --prefix tests playwright install webkit`). Browser emulation does not replace testing sound/haptics on physical devices.
 - Browser code and styles are in `static/game.js` and `static/game.css`; no frontend build step is needed.
 
 ## 📁 Project Structure

@@ -8,6 +8,8 @@ from flask_cors import CORS
 import json
 import os
 import secrets
+import time
+from threading import RLock
 from twenty_dots import TwentyDots
 from ai_player import AIPlayer
 
@@ -36,6 +38,21 @@ class GameSession:
         self.discard_piles = {}  # Track discard piles for each player
         self.ai_move_in_progress = False  # Flag to prevent overlapping AI moves
         self.winner = None
+        self.round_id = 1
+        self.series_number = 1
+        self.series_round = 1
+        self.series_wins = {}
+        self.series_winner = None
+        self.awarded_round = None
+        self.ready_players = set()  # Human readiness only; AI seats are always ready.
+        self.next_game_mode = game_mode
+        self.power_cards = False
+        self.recycle_pool = []  # Actual played Card objects, never public discard metadata.
+        self.deck_reshuffles = 0
+        self.last_move = None
+        self.move_id = 0
+        self.reaction_times = {}
+        self.round_lock = RLock()
         
     def add_player(self, sid, player_name, is_ai=False, token_enabled=False):
         """Add a player to the game"""
@@ -56,6 +73,7 @@ class GameSession:
             'resume_token': secrets.token_urlsafe(32) if token_enabled and not is_ai else None
         }
         self.player_order.append(player_name)
+        self.series_wins[player_name] = 0
         
         if is_ai:
             self.ai_players[player_name] = AIPlayer('medium')  # Will be updated later if needed
@@ -67,6 +85,8 @@ class GameSession:
         if sid in self.players:
             player_name = self.players[sid]['name']
             self.player_order.remove(player_name)
+            self.series_wins.pop(player_name, None)
+            self.ready_players.discard(player_name)
             if player_name in self.ai_players:
                 del self.ai_players[player_name]
             del self.players[sid]
@@ -78,8 +98,10 @@ class GameSession:
 
     def get_lobby_state(self):
         """Public lobby data: never expose seat credentials."""
+        round_state = self.get_round_state()
         by_name = {p['name']: (sid, p) for sid, p in self.players.items()}
         return {
+            **round_state,
             'game_id': self.game_id,
             'players': [
                 {'name': name, 'connected': by_name[name][1]['connected'],
@@ -103,6 +125,12 @@ class GameSession:
 
     def initialize_game(self, power_cards=False):
         """Initialize every route identically, without overlapping-name pop collisions."""
+        self.power_cards = power_cards
+        self.winner = None
+        self.ready_players.clear()
+        self.recycle_pool = []
+        self.deck_reshuffles = 0
+        self.last_move = None
         self.game = TwentyDots(num_players=len(self.player_order), difficulty='easy',
                                ai_opponents={}, power_cards=power_cards)
         self.game.players = dict(zip(self.player_order, self.game.players.values()))
@@ -112,6 +140,7 @@ class GameSession:
         self.game.deal_cards(5)
         self.game.turn_cards_played = dict.fromkeys(self.player_order, 0)
         self.game.must_advance_after_roll = {}
+        self.game.current_player_idx = (self.round_id - 1) % len(self.player_order)
         self.discard_piles = {name: [] for name in self.player_order}
         self.game.can_roll_dice = True
         self.started = True
@@ -139,8 +168,15 @@ class GameSession:
         new_player = self.game.get_current_player()
         self.game.turn_cards_played[new_player] = 0
         self.game.must_advance_after_roll[new_player] = False
+        # A hand may have emptied while every remaining card was held elsewhere.
+        if not self.game.players[new_player]['hand'] and self.refill_hand(new_player):
+            for sid, player in self.players.items():
+                if player['name'] == new_player and player['connected'] and not player['is_ai']:
+                    socketio.emit('your_hand', {'hand': self.get_player_hand(new_player)}, room=sid)
 
-    def action_allowed(self, sid):
+    def action_allowed(self, sid, data=None):
+        if data is not None and 'round_id' in data and not self.valid_round(data):
+            return False
         if not self.started:
             emit('error', {'message': 'Game has not started'})
             return False
@@ -153,6 +189,137 @@ class GameSession:
             return False
         return True
 
+    def valid_round(self, data):
+        if type(data.get('round_id')) is not int or data['round_id'] != self.round_id:
+            emit('error', {'message': 'Stale or missing round_id'})
+            return False
+        return True
+
+    def get_round_state(self):
+        # Latch and award BEFORE constructing the series, including the first terminal snapshot.
+        with self.round_lock:
+            self.check_winner()
+            return {
+                'round_id': self.round_id,
+                'series': {'number': self.series_number, 'round': self.series_round,
+                           'wins': dict(self.series_wins), 'target_wins': 2,
+                           'winner': self.series_winner},
+                'rematch': {'ready': [name for name in self.player_order
+                                      if name in self.ai_players or name in self.ready_players],
+                            'next_game_mode': self.next_game_mode},
+            }
+
+    def broadcast_rematch(self):
+        socketio.emit('rematch_updated', {
+            'game_id': self.game_id, **self.get_round_state(),
+        }, room=self.game_id)
+
+    def start_rematch_if_ready(self):
+        """Called under round_lock so simultaneous ready requests cannot start twice."""
+        humans = [p for p in self.players.values() if not p['is_ai']]
+        if not self.check_winner() or not all(
+                p['connected'] and p['name'] in self.ready_players for p in humans):
+            return False
+        if self.series_winner:
+            self.series_number += 1
+            self.series_round = 1
+            self.series_wins = dict.fromkeys(self.player_order, 0)
+            self.series_winner = None
+        else:
+            self.series_round += 1
+        self.round_id += 1
+        self.game_mode = self.next_game_mode
+        self.initialize_game(power_cards=self.power_cards)
+        self.broadcast_lobby()
+        self.send_started_game()
+        self.schedule_ai()
+        return True
+
+    def refill_hand(self, player_name):
+        """Recycle only played objects, only on depletion, without touching the board."""
+        hand = self.game.players[player_name]['hand']
+        drawn = 0
+        while len(hand) < 5:
+            if not self.game.deck:
+                if not self.recycle_pool:
+                    break
+                self.game.deck, self.recycle_pool = self.recycle_pool, []
+                self.game.shuffle_deck()
+                self.deck_reshuffles += 1
+            self.game.draw_card(player_name)
+            drawn += 1
+        return drawn
+
+    def begin_move(self, player_name, kind):
+        self.move_id += 1
+        return {'id': self.move_id, 'player': player_name, 'kind': kind,
+                'placements': [], 'collected': [],
+                'points': -self.game.players[player_name]['total_dots'], 'lines': 0}
+
+    def finish_move(self, move):
+        # Points are the actual total_dots delta, not an estimate from removed dots.
+        move['points'] += self.game.players[move['player']]['total_dots']
+        self.last_move = move
+
+    def collect_match(self, player_name, row, col, match, match_color, move):
+        """Snapshot actual dot colors before removal; count completed axes, not triples."""
+        positions = set(match)
+        x, y = self.game.columns.index(col), self.game.rows.index(row)
+        for dx, dy in ((1, 0), (0, 1), (1, 1), (1, -1)):
+            length = 1
+            for sign in (-1, 1):
+                step = 1
+                while (x + sign * step * dx, y + sign * step * dy) in positions:
+                    length += 1
+                    step += 1
+            if length >= 3:
+                move['lines'] += 1
+        for col_idx, row_idx in match:
+            dot = self.game.grid[row_idx][col_idx]
+            if dot:
+                move['collected'].append({
+                    'location': self.game.rows[row_idx] + self.game.columns[col_idx],
+                    'color': dot.color,
+                })
+        self.game.collect_dots(match, player_name, match_color)
+
+    def apply_cards(self, player_name, cards):
+        """Shared human/AI placement, recycling, scoring and last-move recording."""
+        hand = self.game.players[player_name]['hand']
+        player = self.game.players[player_name]
+        move = self.begin_move(player_name, 'play')
+        yellow_replaced = yellow_collected = False
+        for card in cards:
+            if card not in hand:
+                continue
+            hand.remove(card)
+            self.recycle_pool.append(card)
+            info = {'location': ''.join(card.location), 'color': card.color}
+            self.discard_piles.setdefault(player_name, []).append(info)
+            self.game.turn_cards_played[player_name] += 1
+            if card.power:
+                continue  # Retain the existing network power-card behavior.
+            success, replaced_color = self.game.place_card_dot(card)
+            if not success:
+                continue
+            move['placements'].append(info)
+            if replaced_color == 'yellow':
+                yellow_replaced = True
+                player['yellow_dots'] += 1
+                player['total_dots'] += 1
+            elif replaced_color in self.game.colors:
+                player['score'][replaced_color] += 1
+                player['total_dots'] += 1
+            if replaced_color:
+                move['collected'].append({'location': info['location'], 'color': replaced_color})
+            row, col = card.location
+            match, match_color = self.game.check_line_match(row, col, card.color)
+            if match:
+                yellow_collected |= any(self.game.grid[y][x].color == 'yellow' for x, y in match)
+                self.collect_match(player_name, row, col, match, match_color, move)
+        self.finish_move(move)
+        return yellow_replaced, yellow_collected
+
     def winner_payload(self):
         result = self.check_winner()
         return {'winner': result['winner'], 'condition': result['mode']} if result else None
@@ -164,6 +331,7 @@ class GameSession:
     
     def get_game_state(self):
         """Get current game state for broadcasting"""
+        round_state = self.get_round_state()
         connected = {p['name']: p['connected'] for p in self.players.values()}
         # Build board with proper format
         board_data = []
@@ -192,6 +360,7 @@ class GameSession:
             yellow_position = [self.game.rows[row_idx], self.game.columns[col_idx]]
         
         return {
+            **round_state,
             'game_id': self.game_id,
             'board': board_data,
             'players': {name: {
@@ -205,6 +374,8 @@ class GameSession:
             'current_turn': self.game.get_current_player(),
             'turn_number': getattr(self.game, 'turn_number', 1),
             'deck_size': len(self.game.deck),
+            'deck_reshuffles': self.deck_reshuffles,
+            'last_move': self.last_move,
             'yellow_dot_position': yellow_position,
             'landmines': landmines_data,
             'can_roll_dice': getattr(self.game, 'can_roll_dice', False),
@@ -245,19 +416,22 @@ class GameSession:
     def roll_wild(self, player_name):
         """Roll the wild dice, place yellow, and collect any match it completes. Returns the match."""
         from twenty_dots import Dot
+        move = self.begin_move(player_name, 'roll')
         row, col = self.game.roll_dice()
         row_idx = self.game.rows.index(row)
         col_idx = self.game.columns.index(col)
         old_dot = self.game.grid[row_idx][col_idx]
         self.game.grid[row_idx][col_idx] = Dot('yellow')
         self.game.yellow_dot_position = (row_idx, col_idx)
+        move['placements'].append({'location': row + col, 'color': 'yellow'})
         print(f"[ROLL_DICE] {player_name} rolled {row}{col} (replaced: {old_dot.color if old_dot else 'empty'})")
 
         match, match_color = self.game.check_line_match(row, col, 'yellow')
         if match:
             print(f"[ROLL_DICE] MATCH FOUND! Collecting {len(match)} positions for color {match_color}")
-            self.game.collect_dots(match, player_name, match_color)
+            self.collect_match(player_name, row, col, match, match_color, move)
             self.game.yellow_dot_position = None
+        self.finish_move(move)
         return match
 
     def execute_ai_move(self):
@@ -274,6 +448,8 @@ class GameSession:
         try:
             ai_player = self.ai_players[current_player]
             hand = self.game.players[current_player]['hand']
+            if not hand:
+                self.refill_hand(current_player)
             
             # Initialize turn_cards_played if not exists
             if not hasattr(self.game, 'turn_cards_played'):
@@ -306,9 +482,8 @@ class GameSession:
             # Check if AI already played 2 cards this turn
             if cards_played_this_turn >= 2:
                 print(f"[AI_MOVE] {current_player} already played {cards_played_this_turn} cards, advancing turn")
-                self.game.next_player()
-                new_player = self.game.get_current_player()
-                self.game.turn_cards_played[new_player] = 0
+                self.refill_hand(current_player)
+                self.advance_turn()
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 import time
                 time.sleep(0.5)
@@ -322,9 +497,8 @@ class GameSession:
             
             if len(cards_to_play_indices) == 0:
                 print(f"[AI_MOVE] {current_player} has no cards to play, advancing turn")
-                self.game.next_player()
-                new_player = self.game.get_current_player()
-                self.game.turn_cards_played[new_player] = 0
+                self.refill_hand(current_player)
+                self.advance_turn()
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                 import time
                 time.sleep(0.5)
@@ -333,45 +507,7 @@ class GameSession:
                 return
             
             cards_to_play = [hand[i] for i in cards_to_play_indices if i < len(hand)]
-            yellow_replaced = False
-            yellow_collected = False
-            
-            # Play the cards (similar to handle_play_cards but for AI)
-            for card in cards_to_play:
-                if card not in hand:
-                    continue
-                
-                # Remove from hand
-                hand.remove(card)
-                self.game.turn_cards_played[current_player] += 1
-                
-                # Place dot on board
-                success, replaced_color = self.game.place_card_dot(card)
-                if success:
-                    # Track if yellow was replaced
-                    if replaced_color == 'yellow':
-                        yellow_replaced = True
-                        self.game.players[current_player]['yellow_dots'] += 1
-                        self.game.players[current_player]['total_dots'] += 1
-                    elif replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
-                        self.game.players[current_player]['score'][replaced_color] += 1
-                        self.game.players[current_player]['total_dots'] += 1
-                    
-                    # Check for matches
-                    row = card.location[0]
-                    col = card.location[1]
-                    row_idx = self.game.rows.index(row)
-                    col_idx = self.game.columns.index(col)
-                    match_result = self.game.check_line_match(row, col, card.color)
-                    match, match_color = match_result
-                    if match:
-                        # Check if yellow dot is in the matched positions
-                        for col_idx_m, row_idx_m in match:
-                            dot = self.game.grid[row_idx_m][col_idx_m]
-                            if dot and dot.color == 'yellow':
-                                yellow_collected = True
-                                break
-                        self.game.collect_dots(match, current_player, match_color)
+            yellow_replaced, yellow_collected = self.apply_cards(current_player, cards_to_play)
 
             # A winning AI play is terminal even if yellow now requires a roll.
             # Do not recurse into another AI action or advance the turn first.
@@ -387,8 +523,7 @@ class GameSession:
             # Check if AI played 2 cards this turn
             if total_played_this_turn >= 2:
                 # Draw replacement cards
-                while len(hand) < 5 and self.game.deck:
-                    self.game.draw_card(current_player)
+                self.refill_hand(current_player)
                 
                 # If yellow was replaced or collected, AI must roll again
                 if yellow_replaced or yellow_collected:
@@ -405,9 +540,7 @@ class GameSession:
                     # Advance to next player
                     print(f"[AI_MOVE] {current_player} played 2 cards, advancing turn")
                     self.game.can_roll_dice = False
-                    self.game.next_player()
-                    new_player = self.game.get_current_player()
-                    self.game.turn_cards_played[new_player] = 0
+                    self.advance_turn()
                     socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
                     
                     # Check for winner
@@ -444,6 +577,18 @@ class GameSession:
             self.ai_move_in_progress = False
     
     def check_winner(self):
+        """Latch the round result and award its series point exactly once."""
+        with self.round_lock:
+            result = self._find_winner()
+            if result and self.awarded_round != self.round_id:
+                name = result['winner']
+                self.series_wins[name] += 1
+                self.awarded_round = self.round_id
+                if self.series_wins[name] >= 2:
+                    self.series_winner = name
+            return result
+
+    def _find_winner(self):
         """Check if anyone has won based on game_mode"""
         if self.winner:
             return self.winner
@@ -493,11 +638,104 @@ def handle_disconnect():
     # Find and update player's connection status
     for game_id, game_session in games.items():
         if request.sid in game_session.players:
-            game_session.players[request.sid]['connected'] = False
-            emit('player_disconnected', {
-                'player': game_session.players[request.sid]['name']
-            }, room=game_id)
-            game_session.broadcast_lobby()
+            with game_session.round_lock:
+                name = game_session.players[request.sid]['name']
+                game_session.players[request.sid]['connected'] = False
+                game_session.ready_players.discard(name)
+                emit('player_disconnected', {'player': name}, room=game_id)
+                game_session.broadcast_lobby()
+                game_session.broadcast_rematch()
+
+
+def event_session(data):
+    """Validate the new event envelope and authorize a connected human seat."""
+    if not isinstance(data, dict) or not isinstance(data.get('game_id'), str):
+        emit('error', {'message': 'Expected game_id'})
+        return None
+    session = games.get(data['game_id'])
+    if (session is None or not session.get_player_name(request.sid)
+            or session.players[request.sid]['is_ai']):
+        emit('error', {'message': 'You are not in this game'})
+        return None
+    return session
+
+
+def rematch_allowed(session, data):
+    # Recheck after acquiring round_lock: a disconnect may have won the race.
+    if not session.get_player_name(request.sid):
+        emit('error', {'message': 'You are not in this game'})
+        return False
+    if not session.valid_round(data):
+        return False
+    if not session.started or not session.check_winner():
+        emit('error', {'message': 'Rematch is only available after a winner'})
+        return False
+    return True
+
+
+@socketio.on('rematch_ready')
+def handle_rematch_ready(data):
+    session = event_session(data)
+    if session is None:
+        return
+    with session.round_lock:
+        if not rematch_allowed(session, data):
+            return
+        if type(data.get('ready')) is not bool:
+            emit('error', {'message': 'ready must be a boolean'})
+            return
+        name = session.get_player_name(request.sid)
+        if data['ready']:
+            session.ready_players.add(name)
+        else:
+            session.ready_players.discard(name)
+        session.broadcast_rematch()
+        session.start_rematch_if_ready()
+
+
+@socketio.on('rematch_options')
+def handle_rematch_options(data):
+    session = event_session(data)
+    if session is None:
+        return
+    with session.round_lock:
+        if not rematch_allowed(session, data):
+            return
+        if request.sid != session.host_sid:
+            emit('error', {'message': 'Only host can change rematch options'})
+            return
+        mode = data.get('game_mode')
+        if mode not in ('twenty_dots', 'five_colors', 'five_with_yellow'):
+            emit('error', {'message': 'Invalid game_mode'})
+            return
+        if mode != session.next_game_mode:
+            session.next_game_mode = mode
+            session.ready_players.clear()
+        session.broadcast_rematch()
+
+
+@socketio.on('reaction')
+def handle_reaction(data):
+    session = event_session(data)
+    if session is None:
+        return
+    with session.round_lock:
+        key = data.get('reaction')
+        name = session.get_player_name(request.sid)
+        if not name:
+            emit('error', {'message': 'You are not in this game'})
+            return
+        if not session.started or key not in ('nice_move', 'well_played', 'close_one', 'rematch'):
+            emit('error', {'message': 'Invalid reaction or game not started'})
+            return
+        now = time.monotonic()
+        previous = session.reaction_times.get(name)
+        if previous is not None and now - previous < 3:
+            emit('error', {'message': 'Reaction cooldown: wait 3 seconds'})
+            return
+        session.reaction_times[name] = now
+        emit('reaction', {'game_id': session.game_id, 'player': name, 'reaction': key},
+             room=session.game_id)
 
 
 def validate_join_data(data):
@@ -537,8 +775,12 @@ def handle_leave_game(data):
         emit('error', {'message': 'You are not in this game'})
         return
     if session.started:
-        session.players[request.sid]['connected'] = False
-        emit('player_disconnected', {'player': session.players[request.sid]['name']}, room=game_id)
+        with session.round_lock:
+            name = session.players[request.sid]['name']
+            session.players[request.sid]['connected'] = False
+            session.ready_players.discard(name)
+            emit('player_disconnected', {'player': name}, room=game_id)
+            session.broadcast_rematch()
     else:
         session.remove_player(request.sid)
         if request.sid == session.host_sid:
@@ -825,7 +1067,7 @@ def handle_play_cards(data):
         return
     
     game_session = games[game_id]
-    if not game_session.action_allowed(request.sid):
+    if not game_session.action_allowed(request.sid, data):
         return
     player_name = game_session.get_player_name(request.sid)
     
@@ -917,71 +1159,7 @@ def handle_play_cards(data):
         print(f"[PLAY_CARDS] ERROR: {current_player} tried to play {len(cards_to_play)} cards but already played {cards_played_this_turn} this turn")
         return
     
-    # Play each card
-    matches_made = False
-    yellow_replaced = False
-    yellow_collected = False
-    for card in cards_to_play:
-        # Add card to discard pile first
-        if player_name not in game_session.discard_piles:
-            game_session.discard_piles[player_name] = []
-        
-        card_info = {
-            'location': card.location if isinstance(card.location, str) else f"{card.location[0]}{card.location[1]}",
-            'color': card.color
-        }
-        game_session.discard_piles[player_name].append(card_info)
-        print(f"[PLAY_CARDS] Added {card.color} {card.location} to {player_name}'s discard pile")
-        
-        # Remove card from hand
-        hand.remove(card)
-        print(f"[PLAY_CARDS] Removed {card.color} {card.location} from hand")
-        
-        # Place dot on board
-        if card.power:
-            # Handle power cards (simplified for now)
-            continue
-        
-        # Check if we're placing on yellow
-        row = card.location[0]
-        col = card.location[1]
-        row_idx = game_session.game.rows.index(row)
-        col_idx = game_session.game.columns.index(col)
-        current_dot = game_session.game.grid[row_idx][col_idx]
-        if current_dot and current_dot.color == 'yellow':
-            yellow_replaced = True
-            print(f"[PLAY_CARDS] Yellow dot will be replaced at {row}{col}")
-            
-        # Regular card - place dot
-        success, replaced_color = game_session.game.place_card_dot(card)
-        print(f"[PLAY_CARDS] Placed {card.color} at {row}{col}: success={success}, replaced={replaced_color}")
-        
-        if success:
-            # Award point if we replaced a colored dot (red, blue, purple, green)
-            if replaced_color and replaced_color in ['red', 'blue', 'purple', 'green']:
-                game_session.game.players[player_name]['score'][replaced_color] += 1
-                game_session.game.players[player_name]['total_dots'] += 1
-                print(f"[PLAY_CARDS] Awarded point for replacing {replaced_color} dot")
-            
-            # Track yellow dots collected - when a yellow dot is replaced
-            if replaced_color == 'yellow':
-                game_session.game.players[player_name]['yellow_dots'] += 1
-                game_session.game.players[player_name]['total_dots'] += 1
-                print(f"[PLAY_CARDS] {player_name} collected a yellow dot! Total yellow: {game_session.game.players[player_name]['yellow_dots']}")
-            
-            # Check for matches
-            match_result = game_session.game.check_line_match(row, col, card.color)
-            match, match_color = match_result
-            if match:  # Check if match list has items
-                matches_made = True
-                # Check if yellow dot is in the matched positions
-                for col_idx, row_idx in match:
-                    dot = game_session.game.grid[row_idx][col_idx]
-                    if dot and dot.color == 'yellow':
-                        yellow_collected = True
-                        print(f"[PLAY_CARDS] Yellow dot collected in match")
-                        break
-                game_session.game.collect_dots(match, player_name, match_color)
+    yellow_replaced, yellow_collected = game_session.apply_cards(player_name, cards_to_play)
     
     # If yellow was replaced or collected, allow player to roll again for new yellow
     if yellow_replaced or yellow_collected:
@@ -1000,10 +1178,7 @@ def handle_play_cards(data):
     if total_played_this_turn >= 2:
         print(f"[PLAY_CARDS] {player_name} has played {total_played_this_turn} cards this turn, drawing replacements")
         # Draw cards back to 5 AFTER playing 2 cards
-        cards_drawn = 0
-        while len(hand) < 5 and game_session.game.deck:
-            game_session.game.draw_card(player_name)
-            cards_drawn += 1
+        cards_drawn = game_session.refill_hand(player_name)
         print(f"[PLAY_CARDS] Drew {cards_drawn} cards")
         
         # Only advance turn if yellow was NOT replaced or collected
@@ -1067,7 +1242,7 @@ def handle_end_turn(data):
         return
     
     game_session = games[game_id]
-    if not game_session.action_allowed(request.sid):
+    if not game_session.action_allowed(request.sid, data):
         return
     player_name = game_session.get_player_name(request.sid)
     print(f"[END_TURN] Player name from session: {player_name}")
@@ -1091,10 +1266,7 @@ def handle_end_turn(data):
     print(f"[END_TURN] Validations passed. Drawing cards...")
     # Draw cards to 5 before ending turn
     hand = game_session.game.players[player_name]['hand']
-    cards_drawn = 0
-    while len(hand) < 5 and game_session.game.deck:
-        game_session.game.draw_card(player_name)
-        cards_drawn += 1
+    cards_drawn = game_session.refill_hand(player_name)
     print(f"[END_TURN] Drew {cards_drawn} cards. Hand size now: {len(hand)}")
     
     print(f"[END_TURN] Current player index before: {game_session.game.current_player_idx}")
@@ -1138,7 +1310,7 @@ def handle_roll_dice(data):
         return
     
     game_session = games[game_id]
-    if not game_session.action_allowed(request.sid):
+    if not game_session.action_allowed(request.sid, data):
         return
     player_name = game_session.get_player_name(request.sid)
     
@@ -1213,7 +1385,7 @@ def handle_pass_turn(data):
         return
     
     game_session = games[game_id]
-    if not game_session.action_allowed(request.sid):
+    if not game_session.action_allowed(request.sid, data):
         return
     player_name = game_session.get_player_name(request.sid)
     

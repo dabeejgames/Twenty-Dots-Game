@@ -12,13 +12,23 @@
     };
     const SAVE_KEY = 'twenty-dots.seat.v1';
     const NAME_KEY = 'twenty-dots.name';
+    const PREF_KEY = 'twenty-dots.preferences.v1';
+    const REACTIONS = { nice_move: 'Nice move!', well_played: 'Well played!', close_one: 'Close one!', rematch: 'Rematch?' };
     const app = {
         mode: 'create', socket: null, seat: null, lobby: null, game: null,
         hand: [], selected: [], joined: false, handReady: false,
         pending: null, pendingTimer: null, connecting: false,
         screen: 'home', winnerShown: null, activity: [],
+        rematchPending: false, rematchTimer: null, reactionUntil: 0,
     };
     let toastTimer;
+    let reactionTimer, reactionMessageTimer, audio;
+    let preferences = { sound: false, haptics: false, motion: false, muted: false };
+    try {
+        const saved = JSON.parse(storageGet(PREF_KEY));
+        for (const key of Object.keys(preferences)) preferences[key] = saved?.[key] === true;
+    } catch { /* Invalid preferences fall back to quiet defaults. */ }
+    const deviceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     function node(tag, className, text) {
         const element = document.createElement(tag);
@@ -49,7 +59,7 @@
     }
 
     function persistSeat() {
-        if (app.seat && !app.game?.winner) {
+        if (app.seat) {
             storageSet(SAVE_KEY, JSON.stringify({ ...app.seat, updated: Date.now() }));
         }
     }
@@ -180,6 +190,7 @@
             app.handReady = false;
             clearTimeout(app.pendingTimer);
             app.pending = null;
+            clearRematchPending();
             connectionStatus('connecting', 'Reconnecting');
             banner('Connection interrupted. Your seat is saved; moves are paused on this device.');
             renderHand();
@@ -213,15 +224,31 @@
                 }
                 renderScores();
                 renderControls();
+                renderRematch();
             } else renderLobby();
         });
         socket.on('game_started', data => {
+            if (!app.seat || data.game_id !== app.seat.game_id) return;
             app.handReady = false;
             app.selected = [];
-            receiveState(data);
             showScreen('game');
+            receiveState(data, false);
         });
         socket.on('game_updated', receiveState);
+        socket.on('rematch_updated', data => {
+            if (!app.game || data.game_id !== app.seat?.game_id || data.round_id !== app.game.round_id) return;
+            app.game.series = data.series;
+            app.game.rematch = data.rematch;
+            clearRematchPending();
+            renderScores();
+            renderRematch();
+        });
+        socket.on('reaction', data => {
+            if (data.game_id !== app.seat?.game_id || !Object.hasOwn(REACTIONS, data.reaction) || preferences.muted) return;
+            clearTimeout(reactionMessageTimer);
+            document.querySelectorAll('.reaction-message').forEach(el => { el.textContent = `${data.player}: ${REACTIONS[data.reaction]}`; });
+            reactionMessageTimer = setTimeout(clearReactionMessage, 6000);
+        });
         socket.on('your_hand', data => {
             if (!app.seat) return;
             app.hand = (data.hand || []).filter(card => COLORS.includes(card.color) && /^[A-F][1-6]$/.test(locationOf(card)));
@@ -242,6 +269,7 @@
         socket.on('error', data => {
             const message = data?.message || 'That move couldn’t be completed. Please try again.';
             setPending(null);
+            clearRematchPending();
             if (!app.joined) {
                 disposeSocket();
                 formBusy(false);
@@ -360,11 +388,26 @@
         return Boolean(app.joined && app.socket?.connected && app.handReady && app.game && !app.game.winner && !app.pending);
     }
 
-    function receiveState(state) {
+    function receiveState(state, animate = true) {
         if (!app.seat || state.game_id !== app.seat.game_id) return;
-        const previous = app.game;
+        if (app.game && state.round_id < app.game.round_id) return;
+        const newRound = !app.game || app.game.round_id !== state.round_id;
+        const previous = newRound ? null : app.game;
+        if (newRound) {
+            clearTimeout(app.pendingTimer);
+            app.pending = null;
+            clearRematchPending();
+            app.hand = [];
+            app.handReady = false;
+            app.selected = [];
+            app.activity = [];
+            app.winnerShown = null;
+            $('winner-dialog').close();
+            document.querySelectorAll('.collection-particle').forEach(el => el.remove());
+            clearReactionMessage();
+        }
         if (!previous) log('The table is ready. Let the good moves begin.');
-        if (previous) {
+        if (previous && animate) {
             for (const [name, player] of Object.entries(state.players)) {
                 const difference = player.total_dots - (previous.players[name]?.total_dots || 0);
                 if (difference > 0) log(`${name} collected ${difference} ${difference === 1 ? 'dot' : 'dots'}.`);
@@ -385,10 +428,16 @@
         $('game-goal').textContent = mode.goal;
         $('game-room-code').textContent = app.seat.game_id;
         $('deck-count').textContent = `${state.deck_size} in deck`;
+        $('deck-count').title = `${state.deck_reshuffles || 0} reshuffles this round. Played cards return when the deck runs out.`;
         renderScores();
-        renderBoard(previous?.board);
+        renderBoard(animate ? previous?.board : null);
         renderHand();
         renderControls();
+        renderMove(state.last_move, Boolean(previous && animate && state.last_move?.id !== previous.last_move?.id));
+        if (previous && animate && state.deck_reshuffles > previous.deck_reshuffles) {
+            log('Fresh possibilities: played cards were shuffled back into the deck.');
+            toast('Deck refreshed! Played cards are back in the shuffle.');
+        }
         persistSeat();
         if (state.winner) showWinner(state.winner);
     }
@@ -396,12 +445,15 @@
     function renderScores() {
         if (!app.game) return;
         const entries = Object.entries(app.game.players);
+        const series = app.game.series;
+        $('series-label').textContent = `Game night ${series?.number || 1} · Round ${series?.round || 1} · First to 2 wins`;
         $('player-total').textContent = `${entries.length} players`;
         $('score-list').dataset.count = String(entries.length);
         const fragment = document.createDocumentFragment();
         entries.forEach(([name, player], index) => {
             const active = name === app.game.current_turn && !app.game.winner;
             const scoreCard = node('div', `score-card${active ? ' active' : ''}${player.connected ? '' : ' disconnected'}`);
+            scoreCard.dataset.player = name;
             const person = node('div', 'score-person');
             const avatar = node('span', 'avatar', initials(name));
             avatar.dataset.index = String(index);
@@ -436,6 +488,15 @@
                 colors.append(count);
             });
             scoreCard.append(person, main, progress, colors);
+            const wins = series?.wins?.[name] || 0;
+            const seriesScore = node('div', 'series-wins');
+            for (let i = 0; i < 2; i++) {
+                const pip = node('i', i < wins ? 'won' : '');
+                pip.setAttribute('aria-hidden', 'true');
+                seriesScore.append(pip);
+            }
+            seriesScore.append(node('span', '', `${wins} / 2 wins`));
+            scoreCard.append(seriesScore);
             fragment.append(scoreCard);
         });
         $('score-list').replaceChildren(fragment);
@@ -471,11 +532,15 @@
                 const previewCard = selectedIndex >= 0 ? app.hand[app.selected[selectedIndex]] : null;
                 cell.classList.toggle('preview', Boolean(previewCard));
                 cell.classList.toggle('changed', Boolean(previousBoard && previousBoard[row]?.[column]?.color !== color));
+                const placed = app.game.last_move?.placements?.some(dot => dot.location === location);
+                const collected = app.game.last_move?.collected?.some(dot => dot.location === location);
+                cell.classList.toggle('last-placement', Boolean(placed));
+                cell.classList.toggle('last-collected', Boolean(collected));
                 const content = [node('span', 'cell-coordinate', location)];
                 if (previewCard || color) content.push(coloredDot(previewCard ? previewCard.color : color));
                 if (previewCard) content.push(node('span', 'selection-number', selectedIndex + 1));
                 cell.replaceChildren(...content);
-                cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${previewCard ? `; preview ${previewCard.color}, card ${selectedIndex + 1}` : ''}`);
+                cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${placed ? '; last move placed here' : ''}${collected ? '; last move collected here' : ''}${previewCard ? `; preview ${previewCard.color}, card ${selectedIndex + 1}` : ''}`);
                 cell.setAttribute('aria-pressed', String(Boolean(previewCard)));
             }
         }
@@ -544,6 +609,8 @@
     }
 
     function renderControls() {
+        renderReactions();
+        renderRematch();
         if (!app.game || !app.seat) return;
         const state = app.game;
         const mine = myTurn();
@@ -595,7 +662,7 @@
         if (!app.joined || !app.socket?.connected || !app.handReady || app.pending || !myTurn()) return;
         setPending(event);
         renderHand();
-        app.socket.emit(event, { game_id: app.seat.game_id, ...data });
+        app.socket.emit(event, { game_id: app.seat.game_id, round_id: app.game.round_id, ...data });
     }
 
     function primaryAction() {
@@ -612,9 +679,11 @@
     }
 
     function showWinner(result) {
-        if (app.winnerShown === app.seat.game_id) return;
-        app.winnerShown = app.seat.game_id;
-        storageSet(SAVE_KEY, null);
+        renderRematch();
+        const key = `${app.seat.game_id}:${app.game.round_id}`;
+        if (app.winnerShown === key) return;
+        app.winnerShown = key;
+        persistSeat();
         $('winner-title').textContent = result.winner === app.seat.player_name ? 'A win well earned.' : `${result.winner} takes the win.`;
         $('winner-description').textContent = `${MODES[result.condition]?.short || 'The goal is reached'}. Good company, great game.`;
         const entries = Object.entries(app.game.players).sort((a, b) => {
@@ -624,12 +693,164 @@
         });
         $('final-scores').replaceChildren(...entries.map(([name, player], index) => {
             const row = node('div', 'final-score');
-            row.append(node('span', '', `${index === 0 ? '✳ ' : ''}${name}`), node('strong', '', `${player.total_dots} dots`));
+            const label = node('span', '', `${index === 0 ? '✳ ' : ''}${name}`);
+            label.append(node('small', '', `${app.game.series?.wins?.[name] || 0} / 2 series wins`));
+            row.append(label, node('strong', '', `${player.total_dots} dots`));
             return row;
         }));
         for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
         $('winner-dialog').showModal();
         renderHand();
+    }
+
+    function clearRematchPending() {
+        clearTimeout(app.rematchTimer);
+        app.rematchPending = false;
+        renderRematch();
+    }
+
+    function renderRematch() {
+        if (!app.game || !app.seat) return;
+        const { series, rematch } = app.game;
+        const players = app.lobby?.players || [];
+        const ready = rematch?.ready || [];
+        const mine = ready.includes(app.seat.player_name);
+        const host = players.find(p => p.name === app.seat.player_name)?.is_host;
+        const available = app.joined && app.socket?.connected && app.game.winner && !app.rematchPending;
+        $('result-eyebrow').textContent = series?.winner ? 'GAME NIGHT CHAMPION' : 'ROUND COMPLETE';
+        $('series-result').textContent = series?.winner
+            ? `${series.winner} wins game night ${series.number}! Two wins, one great table. Ready for a fresh series?`
+            : `Round ${series?.round || 1} complete. First to 2 wins takes the series. Keep your seat for the next round.`;
+        $('rematch-host-options').hidden = !host;
+        $('rematch-mode').value = rematch?.next_game_mode || app.game.game_mode;
+        $('rematch-mode').disabled = !available;
+        $('rematch-goal').textContent = `Next up: ${MODES[rematch?.next_game_mode || app.game.game_mode]?.short}. ${host ? 'You set the game plan.' : 'The host sets the game plan.'}`;
+        $('ready-list').replaceChildren(...players.map(player => {
+            const isReady = ready.includes(player.name) && player.connected;
+            return node('span', `ready-player${isReady ? ' is-ready' : ''}`, `${player.name} · ${!player.connected ? 'Reconnecting' : isReady ? 'Ready ✓' : 'Not ready yet'}`);
+        }));
+        const count = players.filter(p => p.connected && ready.includes(p.name)).length;
+        $('rematch-status').textContent = !app.joined || !app.socket?.connected
+            ? 'Reconnect to ready up. Your seat is saved.'
+            : app.rematchPending ? 'Checking with the table…'
+                : `${count}/${players.length} ready. ${mine ? 'Waiting for your company. Tap again to cancel readiness.' : 'Ready for another? Everyone must be connected and ready.'}`;
+        $('rematch-button').disabled = !available;
+        $('rematch-button').setAttribute('aria-pressed', String(mine));
+        $('rematch-button').textContent = mine ? 'Ready ✓ · Cancel' : series?.winner ? 'Start a new series ↗' : 'Play again ↗';
+    }
+
+    function sendRematch(event, data) {
+        if (!app.game?.winner || !app.joined || !app.socket?.connected || app.rematchPending) return;
+        app.rematchPending = true;
+        app.rematchTimer = setTimeout(() => {
+            clearRematchPending();
+            toast('Reconnecting to check the next round.');
+            reconnect();
+        }, 15000);
+        app.socket.emit(event, { game_id: app.seat.game_id, round_id: app.game.round_id, ...data });
+        renderRematch();
+    }
+
+    function clearReactionMessage() {
+        document.querySelectorAll('.reaction-message').forEach(el => { el.textContent = ''; });
+    }
+
+    function renderReactions() {
+        const cooling = Date.now() < app.reactionUntil;
+        document.querySelectorAll('[data-reaction]').forEach(button => {
+            button.disabled = !app.game || !app.joined || !app.socket?.connected || cooling || preferences.muted;
+            button.title = preferences.muted ? 'Unmute reactions to join in.' : cooling ? 'Give the table a moment. Reactions refresh in 3 seconds.' : REACTIONS[button.dataset.reaction];
+        });
+        document.querySelectorAll('[data-mute-reactions]').forEach(button => {
+            button.setAttribute('aria-pressed', String(preferences.muted));
+            button.textContent = preferences.muted ? 'Unmute reactions' : 'Mute reactions';
+        });
+    }
+
+    function sendReaction(reaction) {
+        if (!Object.hasOwn(REACTIONS, reaction) || !app.game || !app.joined || !app.socket?.connected || preferences.muted || Date.now() < app.reactionUntil) return;
+        app.reactionUntil = Date.now() + 3100;
+        app.socket.emit('reaction', { game_id: app.seat.game_id, reaction });
+        renderReactions();
+        clearTimeout(reactionTimer);
+        reactionTimer = setTimeout(renderReactions, 3100);
+    }
+
+    function reducedMotion() { return preferences.motion || deviceMotion.matches; }
+
+    function applyPreferences() {
+        storageSet(PREF_KEY, JSON.stringify(preferences));
+        document.body.classList.toggle('reduce-motion', reducedMotion());
+        for (const key of ['sound', 'haptics', 'motion']) $(`pref-${key}`).checked = preferences[key];
+        if (reducedMotion()) document.querySelectorAll('.collection-particle').forEach(el => el.remove());
+        if (preferences.muted) clearReactionMessage();
+        renderReactions();
+    }
+
+    function unlockAudio() {
+        if (!preferences.sound) return;
+        try {
+            const Audio = window.AudioContext || window.webkitAudioContext;
+            if (!Audio) return;
+            audio ||= new Audio();
+            if (audio.state === 'suspended') audio.resume().catch(() => {});
+        } catch { /* Audio is optional, including in embedded browsers. */ }
+    }
+
+    function playNote(scored, champion) {
+        if (!preferences.sound || audio?.state !== 'running' || document.hidden) return;
+        try {
+            const notes = champion ? [523, 659, 784, 1047] : scored ? [523, 659] : [392];
+            notes.forEach((frequency, index) => {
+                const oscillator = audio.createOscillator();
+                const gain = audio.createGain();
+                const start = audio.currentTime + index * .09;
+                oscillator.frequency.value = frequency;
+                gain.gain.setValueAtTime(0, start);
+                gain.gain.linearRampToValueAtTime(.045, start + .01);
+                gain.gain.exponentialRampToValueAtTime(.001, start + .16);
+                oscillator.connect(gain).connect(audio.destination);
+                oscillator.start(start);
+                oscillator.stop(start + .18);
+                oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+            });
+        } catch { /* Gameplay never depends on audio permissions. */ }
+    }
+
+    function renderMove(move, animate) {
+        $('move-summary').classList.toggle('celebrate', Boolean(move?.lines >= 2 || app.game?.winner));
+        if (!move) {
+            $('move-summary').textContent = 'Every good game starts with a little luck.';
+            return;
+        }
+        const wildFinish = app.game.winner && move.collected?.some(dot => dot.color === 'yellow');
+        const callout = wildFinish ? 'Wild finish! ' : move.lines >= 2 ? `${move.lines === 2 ? 'Double' : 'Multiple'} line! ` : move.lines ? 'A lovely line! ' : '';
+        const positions = (move.placements || []).map(dot => dot.location).join(', ');
+        $('move-summary').textContent = `${callout}${move.player} ${move.kind === 'roll' ? 'rolled wild' : 'played'}${positions ? ` at ${positions}` : ''}${move.points ? ` · +${move.points} dots` : ''}.`;
+        if (!animate || document.hidden) return;
+        playNote(move.points > 0, Boolean(app.game.series?.winner));
+        if (move.points > 0 && move.player === app.seat.player_name && preferences.haptics) {
+            try { navigator.vibrate?.(app.game.winner ? [25, 40, 25] : 20); } catch { /* Unsupported device. */ }
+        }
+        if (reducedMotion()) return;
+        const destination = Array.from(document.querySelectorAll('.score-card')).find(el => el.dataset.player === move.player)?.getBoundingClientRect();
+        if (!destination || destination.bottom < 0 || destination.top > innerHeight) return;
+        for (const [index, dot] of (move.collected || []).slice(0, 36).entries()) {
+            const origin = $(`cell-${dot.location}`)?.getBoundingClientRect();
+            if (!origin || origin.bottom < 0 || origin.top > innerHeight) continue;
+            const particle = coloredDot(dot.color);
+            particle.classList.add('collection-particle');
+            particle.style.left = `${origin.x + origin.width / 2 - 9}px`;
+            particle.style.top = `${origin.y + origin.height / 2 - 9}px`;
+            document.body.append(particle);
+            const dx = destination.x + destination.width / 2 - origin.x - origin.width / 2;
+            const dy = destination.y + destination.height / 2 - origin.y - origin.height / 2;
+            const animation = particle.animate([
+                { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+                { transform: `translate(${dx}px, ${dy}px) scale(.4)`, opacity: 0 },
+            ], { duration: 460, delay: index * 16, easing: 'ease-in', fill: 'both' });
+            animation.finished.catch(() => {}).finally(() => particle.remove());
+        }
     }
 
     function inviteURL() {
@@ -674,6 +895,7 @@
         else persistSeat();
         disposeSocket();
         clearTimeout(app.pendingTimer);
+        clearRematchPending();
         Object.assign(app, { seat: null, lobby: null, game: null, hand: [], selected: [], pending: null, handReady: false, winnerShown: null, activity: [] });
         for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
         $('board').replaceChildren();
@@ -701,6 +923,19 @@
         });
     });
     $('setup-form').addEventListener('submit', submitSetup);
+    $('rematch-button').addEventListener('click', () => sendRematch('rematch_ready', { ready: !app.game.rematch?.ready?.includes(app.seat.player_name) }));
+    $('rematch-mode').addEventListener('change', event => sendRematch('rematch_options', { game_mode: event.target.value }));
+    document.querySelectorAll('[data-reaction]').forEach(button => button.addEventListener('click', () => sendReaction(button.dataset.reaction)));
+    document.querySelectorAll('[data-mute-reactions]').forEach(button => button.addEventListener('click', () => { preferences.muted = !preferences.muted; applyPreferences(); }));
+    $('preferences-button').addEventListener('click', () => $('preferences-dialog').showModal());
+    for (const key of ['sound', 'haptics', 'motion']) $(`pref-${key}`).addEventListener('change', event => {
+        preferences[key] = event.target.checked;
+        applyPreferences();
+        if (key === 'sound') { unlockAudio(); playNote(true, false); }
+    });
+    document.addEventListener('click', unlockAudio);
+    deviceMotion.addEventListener('change', applyPreferences);
+    applyPreferences();
     $('primary-action').addEventListener('click', primaryAction);
     $('end-turn').addEventListener('click', () => sendAction(app.game.cards_played_this_turn ? 'end_turn' : 'pass_turn'));
     $('clear-selection').addEventListener('click', () => { app.selected = []; renderHand(); renderBoard(); renderControls(); });

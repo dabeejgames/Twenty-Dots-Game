@@ -422,6 +422,499 @@ class MultiplayerTests(unittest.TestCase):
             self.payload(self.emit(first, 'play_cards', game_id='room', cards=cards), 'error')
             self.assertEqual(session.get_game_state(), before)
 
+    def table(self, count=2, room='room', mode='twenty_dots'):
+        clients = [self.client() for _ in range(count)]
+        for index, client in enumerate(clients):
+            self.join(client, f'P{index}', room, player_count=count, game_mode=mode,
+                      intent='create' if index == 0 else 'join')
+        return clients, server.games[room]
+
+    def ready(self, client, session, ready=True, round_id=None):
+        return self.emit(client, 'rematch_ready', game_id=session.game_id,
+                         round_id=session.round_id if round_id is None else round_id, ready=ready)
+
+    def win_round(self, session, name):
+        session.game.players[name]['total_dots'] = 20
+        return session.get_game_state()
+
+    def assert_card_partition(self, session, originals):
+        cards = list(session.game.deck) + list(session.recycle_pool)
+        for player in session.game.players.values():
+            cards.extend(player['hand'])
+        self.assertEqual(len(cards), len(originals))
+        self.assertEqual({id(card) for card in cards}, originals)
+        self.assertEqual(len({id(card) for card in cards}), len(cards))
+
+    def test_round_schema_and_first_terminal_snapshot_awards_once(self):
+        clients, session = self.table()
+        expected = {'number': 1, 'round': 1, 'wins': {'P0': 0, 'P1': 0},
+                    'target_wins': 2, 'winner': None}
+        for state in (session.get_game_state(), session.get_lobby_state()):
+            self.assertEqual(state['round_id'], 1)
+            self.assertEqual(state['series'], expected)
+            self.assertEqual(state['rematch'], {'ready': [], 'next_game_mode': 'twenty_dots'})
+        self.assertIsNone(session.get_game_state()['last_move'])
+        self.assertEqual(session.get_game_state()['deck_reshuffles'], 0)
+        state = self.win_round(session, 'P0')
+        self.assertEqual(state['series']['wins'], {'P0': 1, 'P1': 0})
+        self.assertEqual(state['winner'], {'winner': 'P0', 'condition': 'twenty_dots'})
+        # Every public/read path, including terminal replays, must be idempotent.
+        for _ in range(5):
+            session.check_winner()
+            session.winner_payload()
+            session.get_lobby_state()
+            session.get_game_state()
+            self.emit(clients[0], 'roll_dice', game_id=session.game_id)
+        self.assertEqual(session.series_wins, {'P0': 1, 'P1': 0})
+
+    def test_rematch_consensus_reset_private_hands_and_rotation_two_to_four(self):
+        for count in (2, 3, 4):
+            with self.subTest(count=count):
+                clients, session = self.table(count, f'consensus{count}')
+                original_game = session.game
+                seats = {sid: dict(player) for sid, player in session.players.items()}
+                session.game.grid[0][0] = Dot('red')
+                session.game.yellow_dot_position = (0, 0)
+                session.game.landmines = [{'location': 'C3', 'color': 'blue', 'player': 'P0'}]
+                session.game.turn_cards_played['P1'] = 2
+                session.game.must_advance_after_roll['P1'] = True
+                session.discard_piles['P0'] = [{'location': 'A1', 'color': 'red'}]
+                session.recycle_pool = [session.game.deck.pop()]
+                session.deck_reshuffles = 3
+                session.last_move = {'id': 8}
+                self.win_round(session, 'P0')
+                events = self.ready(clients[0], session)
+                self.assertEqual(self.payload(events, 'rematch_updated')['rematch']['ready'], ['P0'])
+                self.ready(clients[0], session, False)
+                self.assertEqual(session.ready_players, set())
+                self.ready(clients[0], session)
+                self.ready(clients[0], session)  # Idempotent, not a second vote.
+                for client in clients[1:-1]:
+                    self.ready(client, session)
+                self.assertEqual(session.round_id, 1)
+                for client in clients:
+                    client.get_received()
+                final_events = self.ready(clients[-1], session)
+                self.assertEqual(session.round_id, 2)
+                self.assertIsNot(session.game, original_game)
+                self.assertEqual(session.players, seats)
+                self.assertEqual(session.player_order, [f'P{i}' for i in range(count)])
+                self.assertEqual(list(session.game.players), session.player_order)
+                self.assertEqual(session.game.get_current_player(), 'P1')
+                self.assertEqual(session.game.turn_cards_played, dict.fromkeys(session.player_order, 0))
+                self.assertFalse(session.game.must_advance_after_roll)
+                self.assertEqual(session.discard_piles, {name: [] for name in session.player_order})
+                self.assertFalse(session.recycle_pool)
+                self.assertFalse(session.game.landmines)
+                self.assertIsNone(session.game.yellow_dot_position)
+                self.assertTrue(all(dot is None for row in session.game.grid for dot in row))
+                for client, events in [(client, client.get_received()) for client in clients[:-1]] + [
+                        (clients[-1], final_events)]:
+                    state = self.payload(events, 'game_started')
+                    self.assertEqual(state['round_id'], 2)
+                    self.assertIsNone(state['winner'])
+                    self.assertIsNone(state['last_move'])
+                    self.assertEqual(state['deck_reshuffles'], 0)
+                    self.assertTrue(state['can_roll_dice'])
+                    self.assertEqual(state['rematch']['ready'], [])
+                    self.assertTrue(all(p['total_dots'] == p['yellow_dots'] == 0
+                                        for p in state['players'].values()))
+                    self.assertTrue(all('hand' not in p for p in state['players'].values()))
+                    hands = [e for e in events if e['name'] == 'your_hand']
+                    self.assertEqual(len(hands), 1)
+                    name = f'P{clients.index(client)}'
+                    self.assertEqual(hands[0]['args'][0]['hand'], session.get_player_hand(name))
+                    self.assertNotIn('resume_token', str(events))
+
+    def test_first_to_two_series_can_exceed_three_rounds_and_new_series_rotates(self):
+        for count in (2, 3, 4):
+            with self.subTest(count=count):
+                clients, session = self.table(count, f'series{count}')
+                wins = dict.fromkeys(session.player_order, 0)
+                for round_number, name in enumerate(session.player_order + ['P0'], 1):
+                    self.assertEqual(session.round_id, round_number)
+                    self.assertEqual(session.game.get_current_player(), f'P{(round_number - 1) % count}')
+                    wins[name] += 1
+                    state = self.win_round(session, name)
+                    expected = {'number': 1, 'round': round_number, 'wins': dict(wins),
+                                'target_wins': 2, 'winner': 'P0' if wins['P0'] == 2 else None}
+                    self.assertEqual(state['series'], expected)
+                    self.assertEqual(session.get_lobby_state()['series'], expected)
+                    self.assertEqual(session.get_game_state()['series'], expected)
+                    for client in clients:
+                        self.ready(client, session)
+                state = session.get_game_state()
+                self.assertEqual(state['round_id'], count + 2)
+                self.assertEqual(state['series'], {
+                    'number': 2, 'round': 1, 'wins': dict.fromkeys(session.player_order, 0),
+                    'target_wins': 2, 'winner': None})
+                self.assertEqual(state['current_turn'], 'P1')
+                self.assertEqual(self.win_round(session, 'P1')['series']['wins']['P1'], 1)
+
+    def test_rematch_mode_host_only_and_changed_options_clear_human_readiness(self):
+        clients, session = self.table(3)
+        self.win_round(session, 'P0')
+        self.ready(clients[1], session)
+        for client, mode in ((clients[1], 'five_colors'), (self.client(), 'five_colors'),
+                             (clients[0], 'invalid'), (clients[0], [])):
+            events = self.emit(client, 'rematch_options', game_id='room', round_id=1, game_mode=mode)
+            self.payload(events, 'error')
+            self.assertEqual(session.next_game_mode, 'twenty_dots')
+            self.assertEqual(session.ready_players, {'P1'})
+        unchanged = self.emit(clients[0], 'rematch_options', game_id='room', round_id=1,
+                              game_mode='twenty_dots')
+        self.assertEqual(self.payload(unchanged, 'rematch_updated')['rematch']['ready'], ['P1'])
+        for mode in ('five_colors', 'five_with_yellow'):
+            changed = self.emit(clients[0], 'rematch_options', game_id='room', round_id=1,
+                                game_mode=mode)
+            state = self.payload(changed, 'rematch_updated')
+            self.assertEqual(state['rematch'], {'ready': [], 'next_game_mode': mode})
+            self.assertEqual(session.game_mode, 'twenty_dots')
+            self.assertEqual(state['series']['wins']['P0'], 1)
+            self.ready(clients[1], session)
+        self.ready(clients[0], session)
+        self.assertEqual(session.round_id, 1)
+        self.ready(clients[2], session)
+        self.assertEqual(session.game_mode, 'five_with_yellow')
+        self.assertEqual(session.get_game_state()['series']['round'], 2)
+        winner = session.game.players['P2']
+        winner['score'] = dict.fromkeys(session.game.colors, 5)
+        winner['yellow_dots'] = 5
+        state = session.get_game_state()
+        self.assertEqual(state['winner'], {'winner': 'P2', 'condition': 'five_with_yellow'})
+        self.assertEqual(state['series']['wins'], {'P0': 1, 'P1': 0, 'P2': 1})
+
+    def test_rematch_ai_auto_ready_and_rotating_ai_start_is_scheduled(self):
+        client = self.client()
+        events = self.emit(client, 'start_single_player', player_name='Human', num_players=4)
+        session = server.games[self.payload(events, 'game_started')['game_id']]
+        self.win_round(session, 'AI 2')
+        self.assertEqual(session.get_round_state()['rematch']['ready'], ['AI 1', 'AI 2', 'AI 3'])
+        changed = self.emit(client, 'rematch_options', game_id=session.game_id, round_id=1,
+                            game_mode='five_colors')
+        self.assertEqual(self.payload(changed, 'rematch_updated')['rematch']['ready'],
+                         ['AI 1', 'AI 2', 'AI 3'])
+        events = self.ready(client, session)
+        self.assertEqual(self.payload(events, 'game_started')['current_turn'], 'AI 1')
+        self.assertEqual(session.series_wins['AI 2'], 1)
+        self.schedule.assert_called_once_with(session.execute_ai_move)
+
+    def test_disconnect_or_leave_clears_ready_and_resume_requires_explicit_vote(self):
+        for action in ('disconnect', 'leave_game'):
+            with self.subTest(action=action):
+                clients, session = self.table(3, action)
+                host, peer, third = clients
+                token = session.players[session.host_sid]['resume_token']
+                self.win_round(session, 'P0')
+                self.ready(host, session)
+                peer.get_received()
+                if action == 'disconnect':
+                    host.disconnect()
+                else:
+                    self.emit(host, action, game_id=session.game_id)
+                updated = self.payload(peer.get_received(), 'rematch_updated')
+                self.assertEqual(updated['rematch']['ready'], [])
+                self.ready(peer, session)
+                self.ready(third, session)
+                self.assertEqual(session.round_id, 1)
+                if action == 'leave_game':
+                    self.payload(self.ready(host, session), 'error')
+                resumed = self.client()
+                events = self.join(resumed, 'P0', session.game_id, intent='rejoin', resume_token=token)
+                self.assertEqual(self.payload(events, 'game_started')['round_id'], 1)
+                self.assertEqual(session.get_player_name(session.host_sid), 'P0')
+                self.assertEqual(session.ready_players, {'P1', 'P2'})
+                self.assertEqual(session.players[session.host_sid]['resume_token'], token)
+                self.ready(resumed, session)
+                self.assertEqual(session.round_id, 2)
+
+    def test_rematch_authorization_validation_and_required_round_id(self):
+        host = self.client()
+        self.join(host, 'Alice')
+        for event, options in (('rematch_ready', {'ready': True}),
+                               ('rematch_options', {'game_mode': 'five_colors'})):
+            self.payload(self.emit(host, event, game_id='room', round_id=1, **options), 'error')
+        peer = self.client()
+        self.join(peer, 'Bob')
+        session = server.games['room']
+        for event, options in (('rematch_ready', {'ready': True}),
+                               ('rematch_options', {'game_mode': 'five_colors'})):
+            self.payload(self.emit(host, event, game_id='room', round_id=1, **options), 'error')
+        self.win_round(session, 'Alice')
+        self.payload(self.ready(self.client(), session), 'error')
+        for value in ('true', 1, None, []):
+            self.payload(self.emit(host, 'rematch_ready', game_id='room', round_id=1, ready=value), 'error')
+        for event, options in (('rematch_ready', {'ready': True}),
+                               ('rematch_options', {'game_mode': 'five_colors'})):
+            for extra in ({}, {'round_id': 0}, {'round_id': 2}, {'round_id': True}, {'round_id': '1'}):
+                self.payload(self.emit(host, event, game_id='room', **options, **extra), 'error')
+        for event in ('rematch_ready', 'rematch_options', 'reaction'):
+            for data in (None, [], {'game_id': []}, {'game_id': 'missing'}):
+                host.get_received()
+                host.emit(event, data)
+                self.payload(host.get_received(), 'error')
+        self.assertEqual(session.ready_players, set())
+        self.assertEqual(session.round_id, 1)
+
+    def test_stale_rematch_and_normal_actions_do_not_mutate_next_round(self):
+        clients, session = self.table()
+        self.win_round(session, 'P0')
+        for client in clients:
+            self.ready(client, session)
+        before = session.get_game_state()
+        for event, options in (
+                ('rematch_ready', {'ready': True}),
+                ('rematch_options', {'game_mode': 'five_colors'}),
+                ('roll_dice', {}), ('play_cards', {'cards': session.get_player_hand('P1')[:1]}),
+                ('end_turn', {}), ('pass_turn', {})):
+            self.payload(self.emit(clients[1], event, game_id='room', round_id=1, **options), 'error')
+            self.assertEqual(session.get_game_state(), before)
+        with patch.object(session.game, 'roll_dice', return_value=('F', '6')):
+            self.payload(self.emit(clients[1], 'roll_dice', game_id='room', round_id=2), 'game_updated')
+        # Legacy normal actions still work without a round ID.
+        self.payload(self.emit(clients[1], 'end_turn', game_id='room'), 'game_updated')
+        self.assertEqual(session.game.get_current_player(), 'P0')
+        # Even when a later round is also terminal, old ready/options packets are invalid.
+        before = self.win_round(session, 'P1')
+        for event, options in (('rematch_ready', {'ready': True}),
+                               ('rematch_options', {'game_mode': 'five_colors'})):
+            self.payload(self.emit(clients[0], event, game_id='room', round_id=1, **options), 'error')
+            self.assertEqual(session.get_game_state(), before)
+        self.ready(clients[0], session)
+        self.assertEqual(session.ready_players, {'P0'})
+
+    def test_reaction_whitelist_cooldown_room_isolation_and_reconnect(self):
+        clients, session = self.table()
+        outsider = self.client()
+        other, other_session = self.table(room='other')
+        with patch.object(server.time, 'monotonic', return_value=100) as clock:
+            for key in ('hello there', '', 'NICE_MOVE', None, [], {'text': 'hi'}):
+                self.payload(self.emit(clients[0], 'reaction', game_id='room', reaction=key), 'error')
+            self.payload(self.emit(outsider, 'reaction', game_id='room', reaction='nice_move'), 'error')
+            for client in clients[1:] + other:
+                client.get_received()
+            events = self.emit(clients[0], 'reaction', game_id='room', reaction='nice_move', text='not relayed')
+            expected = {'game_id': 'room', 'player': 'P0', 'reaction': 'nice_move'}
+            self.assertEqual(self.payload(events, 'reaction'), expected)
+            self.assertEqual(self.payload(clients[1].get_received(), 'reaction'), expected)
+            self.assertTrue(all(not c.get_received() for c in other))
+            self.payload(self.emit(clients[1], 'reaction', game_id='room', reaction='well_played'), 'reaction')
+            self.payload(self.emit(other[0], 'reaction', game_id=other_session.game_id,
+                                   reaction='close_one'), 'reaction')
+            clock.return_value = 102.999
+            self.payload(self.emit(clients[0], 'reaction', game_id='room', reaction='close_one'), 'error')
+            clock.return_value = 103
+            self.payload(self.emit(clients[0], 'reaction', game_id='room', reaction='close_one'), 'reaction')
+            token = session.players[session.host_sid]['resume_token']
+            clients[0].disconnect()
+            resumed = self.client()
+            self.join(resumed, 'P0', intent='rejoin', resume_token=token)
+            self.payload(self.emit(resumed, 'reaction', game_id='room', reaction='rematch'), 'error')
+            clock.return_value = 106
+            self.win_round(session, 'P0')
+            events = self.emit(resumed, 'reaction', game_id='room', reaction='rematch')
+            self.assertEqual(self.payload(events, 'reaction')['reaction'], 'rematch')
+            self.ready(resumed, session)
+            self.ready(clients[1], session)
+            self.payload(self.emit(resumed, 'reaction', game_id='room', reaction='nice_move'), 'error')
+            self.assertFalse(session.ready_players)
+
+    def test_reactions_reject_lobby_and_disconnected_seats(self):
+        host = self.client()
+        self.join(host, 'Alice')
+        self.payload(self.emit(host, 'reaction', game_id='room', reaction='nice_move'), 'error')
+        peer = self.client()
+        self.join(peer, 'Bob')
+        self.emit(host, 'leave_game', game_id='room')
+        self.payload(self.emit(host, 'reaction', game_id='room', reaction='nice_move'), 'error')
+        self.assertFalse(server.games['room'].reaction_times)
+
+    def test_real_deck_depletion_across_four_hands_preserves_every_card_identity(self):
+        # A stable deck order and no yellow prevent a winner while exercising real scoring.
+        with patch.object(server.TwentyDots, 'shuffle_deck'):
+            clients, session = self.table(4, mode='five_with_yellow')
+        originals = {id(c) for c in session.game.deck}
+        for player in session.game.players.values():
+            originals.update(id(c) for c in player['hand'])
+        self.assertEqual(len(originals), 144)
+        session.game.can_roll_dice = False
+        played_by = set()
+        with patch.object(session.game, 'shuffle_deck') as shuffle:
+            for _ in range(140):
+                name = session.game.get_current_player()
+                hand = session.get_player_hand(name)
+                selected = [hand[0], next(c for c in hand[1:] if c['location'] != hand[0]['location'])]
+                events = self.emit(clients[int(name[1:])], 'play_cards', game_id='room', cards=selected)
+                self.assertNotIn('error', [e['name'] for e in events])
+                played_by.add(name)
+                self.assert_card_partition(session, originals)
+                self.assertTrue(all(len(p['hand']) == 5 for p in session.game.players.values()))
+                self.assertEqual(shuffle.call_count, session.deck_reshuffles)
+                self.assertIsNone(session.winner)
+                if session.deck_reshuffles >= 2:
+                    break
+        self.assertEqual(played_by, set(session.player_order))
+        self.assertEqual(session.deck_reshuffles, 2)
+        self.assertTrue(all(session.discard_piles[name] for name in session.player_order))
+
+    def test_refill_waits_for_empty_deck_shuffles_once_and_does_not_touch_board(self):
+        clients, session = self.table(4)
+        originals = {id(c) for c in session.game.deck}
+        for player in session.game.players.values():
+            originals.update(id(c) for c in player['hand'])
+        session.game.can_roll_dice = False
+        cards = list(session.game.players['P0']['hand'][:2])
+        session.apply_cards('P0', cards)
+        board = session.get_game_state()['board']
+        held = {name: list(p['hand']) for name, p in session.game.players.items() if name != 'P0'}
+        with patch.object(session.game, 'shuffle_deck') as shuffle:
+            self.assertEqual(session.refill_hand('P0'), 2)
+            shuffle.assert_not_called()
+            self.assertEqual(session.recycle_pool, cards)
+            # Move the remaining unplayed deck into hands, never into the recycle pool.
+            session.game.players['P1']['hand'].extend(session.game.deck)
+            session.game.deck.clear()
+            held['P1'] = list(session.game.players['P1']['hand'])
+            session.game.players['P2']['hand'].extend(session.game.players['P0']['hand'])
+            session.game.players['P0']['hand'].clear()
+            held['P2'] = list(session.game.players['P2']['hand'])
+            self.assertEqual(session.refill_hand('P0'), 2)
+            shuffle.assert_called_once()
+            self.assertEqual(session.game.players['P0']['hand'], cards)
+            self.assertEqual(session.refill_hand('P0'), 0)
+            self.assertEqual(shuffle.call_count, 1)
+        self.assertEqual(session.get_game_state()['board'], board)
+        for name, hand in held.items():
+            self.assertEqual(session.game.players[name]['hand'], hand)
+        self.assert_card_partition(session, originals)
+
+    def test_all_empty_hands_recover_on_their_turn_and_receive_private_updates(self):
+        clients, session = self.table(4)
+        session.game.can_roll_dice = False
+        # Model a fully depleted table with four previously played cards available.
+        originals = [Card(f'{row}1', color) for row, color in zip('ABCD', session.game.colors)]
+        session.game.deck = []
+        for player in session.game.players.values():
+            player['hand'] = []
+        session.recycle_pool = list(originals)
+        with patch.object(session.game, 'shuffle_deck') as shuffle:
+            for outgoing, incoming in ((0, 1), (1, 2), (2, 3), (3, 0)):
+                clients[incoming].get_received()
+                self.emit(clients[outgoing], 'pass_turn', game_id='room')
+                events = clients[incoming].get_received()
+                self.assertEqual(len(self.payload(events, 'your_hand')['hand']), 4)
+                self.assertEqual(session.game.get_current_player(), f'P{incoming}')
+                session.apply_cards(f'P{incoming}', list(session.game.players[f'P{incoming}']['hand']))
+                self.assert_card_partition(session, {id(c) for c in originals})
+            self.assertEqual(shuffle.call_count, 4)
+
+    def test_human_end_turn_recycles_a_single_played_card(self):
+        first, second, session = self.started()
+        session.game.can_roll_dice = False
+        card = Card('A1', 'red')
+        session.game.deck = []
+        session.game.players['Alice']['hand'] = [card]
+        self.emit(first, 'play_cards', game_id='room', cards=session.get_player_hand('Alice'))
+        self.assertEqual(session.recycle_pool, [card])
+        self.assertEqual(session.deck_reshuffles, 0)
+        with patch.object(session.game, 'shuffle_deck') as shuffle:
+            self.emit(first, 'end_turn', game_id='room')
+            shuffle.assert_called_once()
+        self.assertEqual(session.game.players['Alice']['hand'], [card])
+        self.assertEqual(session.game.grid[0][0].color, 'red')
+
+    def test_ai_records_and_recycles_played_cards_and_recovers_empty_hand(self):
+        for empty in (False, True):
+            with self.subTest(empty=empty):
+                clients, session = self.table(room=f'ai{empty}')
+                session.game.can_roll_dice = False
+                cards = [Card('A1', 'red'), Card('C3', 'blue')]
+                session.game.deck = []
+                session.game.players['P0']['hand'] = [] if empty else list(cards)
+                session.recycle_pool = list(cards) if empty else []
+                held = list(session.game.players['P1']['hand'])
+                session.ai_players['P0'] = server.AIPlayer('medium')
+                with patch.object(session.ai_players['P0'], 'choose_cards', return_value=[0, 1]), \
+                        patch.object(session.game, 'shuffle_deck') as shuffle, \
+                        patch.object(server.time, 'sleep'):
+                    session.execute_ai_move()
+                self.assertEqual(session.game.get_current_player(), 'P1')
+                self.assertEqual(session.game.players['P0']['hand'], cards)
+                self.assertEqual(session.game.players['P1']['hand'], held)
+                self.assertEqual(shuffle.call_count, 2 if empty else 1)
+                self.assertEqual(session.deck_reshuffles, shuffle.call_count)
+                self.assertFalse(session.recycle_pool)
+                self.assertEqual(session.discard_piles['P0'], [
+                    {'location': 'A1', 'color': 'red'}, {'location': 'C3', 'color': 'blue'}])
+                state = self.payload(clients[0].get_received(), 'game_updated')
+                self.assertEqual(state['last_move'], {
+                    'id': 1, 'player': 'P0', 'kind': 'play',
+                    'placements': session.discard_piles['P0'], 'collected': [], 'points': 0, 'lines': 0})
+
+    def test_last_move_counts_intersecting_lines_replacements_and_actual_score(self):
+        first, second, session = self.started()
+        session.game.can_roll_dice = False
+        session.game.players['Alice']['hand'] = [Card('B2', 'red')]
+        for row, col in ((1, 0), (1, 2), (0, 1), (2, 1)):
+            session.game.grid[row][col] = Dot('red')
+        session.game.grid[1][1] = Dot('blue')
+        events = self.emit(first, 'play_cards', game_id='room', cards=session.get_player_hand('Alice'))
+        move = self.payload(events, 'game_updated')['last_move']
+        self.assertEqual(move['placements'], [{'location': 'B2', 'color': 'red'}])
+        self.assertEqual(move['collected'][0], {'location': 'B2', 'color': 'blue'})
+        self.assertEqual({c['location'] for c in move['collected'][1:]}, {'A2', 'B1', 'B2', 'B3', 'C2'})
+        self.assertTrue(all(c['color'] == 'red' for c in move['collected'][1:]))
+        self.assertEqual(move['points'], 6)
+        self.assertEqual(move['lines'], 2)
+        self.assertEqual(move['player'], 'Alice')
+        self.assertEqual(move['kind'], 'play')
+        self.assertEqual(move['id'], 1)
+        self.emit(first, 'end_turn', game_id='room')
+        self.assertEqual(session.last_move, move)  # Passing is not a fabricated placement.
+        self.payload(self.emit(first, 'play_cards', game_id='room', cards=[]), 'error')
+        self.assertEqual(session.last_move, move)
+
+    def test_roll_metadata_does_not_claim_unscored_replacement_and_ids_span_rematches(self):
+        first, second, session = self.started()
+        session.game.grid[0][0] = Dot('blue')
+        with patch.object(session.game, 'roll_dice', return_value=('A', '1')):
+            self.emit(first, 'roll_dice', game_id='room')
+        self.assertEqual(session.last_move, {
+            'id': 1, 'player': 'Alice', 'kind': 'roll',
+            'placements': [{'location': 'A1', 'color': 'yellow'}],
+            'collected': [], 'points': 0, 'lines': 0})
+        self.win_round(session, 'Alice')
+        self.ready(first, session)
+        self.ready(second, session)
+        self.assertIsNone(session.last_move)
+        session.game.grid[0][0] = Dot('red')
+        session.game.grid[0][1] = Dot('red')
+        with patch.object(session.game, 'roll_dice', return_value=('A', '3')):
+            self.emit(second, 'roll_dice', game_id='room')
+        self.assertEqual(session.last_move, {
+            'id': 2, 'player': 'Bob', 'kind': 'roll',
+            'placements': [{'location': 'A3', 'color': 'yellow'}],
+            'collected': [{'location': 'A1', 'color': 'red'}, {'location': 'A2', 'color': 'red'},
+                          {'location': 'A3', 'color': 'yellow'}], 'points': 2, 'lines': 1})
+
+    def test_ai_winning_roll_metadata_and_series_are_in_first_terminal_event(self):
+        clients, session = self.table()
+        session.ai_players['P0'] = server.AIPlayer('medium')
+        session.game.players['P0']['total_dots'] = 18
+        session.game.grid[0][0] = Dot('red')
+        session.game.grid[0][1] = Dot('red')
+        clients[0].get_received()
+        with patch.object(session.game, 'roll_dice', return_value=('A', '3')):
+            session.execute_ai_move()
+        events = clients[0].get_received()
+        state = self.payload(events, 'game_updated')
+        self.assertEqual(state['series']['wins'], {'P0': 1, 'P1': 0})
+        self.assertEqual(state['last_move']['kind'], 'roll')
+        self.assertEqual(state['last_move']['points'], 2)
+        self.assertEqual(state['last_move']['lines'], 1)
+        self.assertEqual(len(state['last_move']['collected']), 3)
+        self.assertEqual(self.payload(events, 'game_over'), {'winner': 'P0', 'condition': 'twenty_dots'})
+
 
 if __name__ == '__main__':
     unittest.main()

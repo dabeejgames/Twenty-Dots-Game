@@ -2,7 +2,8 @@
   "name": "twenty-dots-browser-tests",
   "private": true,
   "scripts": {
-    "test": "node browser_smoke.cjs"
+    "test": "node browser_smoke.cjs",
+    "test:replay": "node browser_replay.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

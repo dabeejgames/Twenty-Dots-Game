@@ -96,12 +96,19 @@
 
         <section class="game-screen screen" id="game-screen" aria-labelledby="game-title" hidden>
             <div class="game-topline"><div><span class="eyebrow" id="game-title">THE CLASSIC</span><h2 id="game-goal">First to 20 dots.</h2></div><div class="table-tools"><button class="button button-quiet" id="share-game" aria-label="Share room invite"><span aria-hidden="true">↗</span> <span id="game-room-code">Room</span></button><button class="button button-quiet leave-button">Leave</button></div></div>
+            <div class="series-strip"><span id="series-label">Game night · First to 2 wins</span><button class="text-button" id="preferences-button">Sound &amp; preferences</button></div>
             <div class="game-layout">
                 <aside class="score-panel" aria-label="Players and scores"><div class="section-heading"><h3>At the table</h3><span id="player-total"></span></div><div class="score-list" id="score-list"></div><div class="table-tip"><span aria-hidden="true">✳</span><p>Look for the connection.<br>Three in a row is all it takes.</p></div></aside>
                 <div class="table-center">
                     <div class="turn-banner" id="turn-banner" role="status" aria-live="polite"><div class="turn-symbol" aria-hidden="true">↗</div><div><strong id="turn-title">Getting the table ready</strong><p id="turn-subtitle">Your cards will be here in a moment.</p></div><span class="turn-badge" id="turn-badge">LIVE</span></div>
                     <div class="board-wrap"><div class="board-top"><span>MAKE YOUR MOVE</span><span><i class="tiny-dot yellow"></i> Yellow is wild</span></div><div id="board" class="board" role="group" aria-label="Game board, rows A to F and columns 1 to 6"></div><div class="board-bottom"><span id="board-hint">Tap a card to preview its position.</span><span id="deck-count">— in deck</span></div></div>
+                    <p class="move-summary" id="move-summary" role="status">Every good game starts with a little luck.</p>
                     <section class="hand-dock" aria-label="Your cards and turn actions"><div class="hand-heading"><h3>Your hand <span id="hand-count"></span></h3><button class="text-button" id="clear-selection" disabled>Clear selection</button></div><div class="hand" id="hand"></div><div class="turn-actions"><button class="button button-primary" id="primary-action" disabled>Waiting for cards</button><button class="button button-secondary" id="end-turn" disabled>Pass turn</button></div><p class="action-note" id="action-note">Your hand is only visible to you.</p></section>
+                    <section class="reaction-panel" aria-label="Quick reactions">
+                        <div class="reaction-heading"><span>A LITTLE TABLE TALK</span><button class="text-button" id="mute-reactions" data-mute-reactions aria-pressed="false">Mute reactions</button></div>
+                        <div class="reaction-buttons"><button data-reaction="nice_move">Nice move!</button><button data-reaction="well_played">Well played!</button><button data-reaction="close_one">Close one!</button><button data-reaction="rematch">Rematch?</button></div>
+                        <p class="reaction-message" id="reaction-message" role="status" aria-live="polite"></p>
+                    </section>
                 </div>
                 <aside class="activity-panel"><div class="section-heading"><h3>The game so far</h3><span class="tiny-dot"></span></div><ol class="activity-list" id="activity-list" aria-live="polite" aria-relevant="additions"></ol><div class="mini-rules"><span class="eyebrow">A GOOD MOVE TO KNOW</span><h3>Find your line.</h3><div class="example-line" aria-hidden="true"><i class="dot purple">P</i><i class="dot yellow">✳</i><i class="dot purple">P</i></div><p>Match 3 or more in any direction. Yellow joins every color.</p><button class="text-button" id="table-rules">The little rulebook ↗</button></div></aside>
             </div>
@@ -112,7 +119,39 @@
 
     <dialog id="leave-dialog" class="modal modal-small"><div class="modal-top"><span class="eyebrow">TAKING A BREAK?</span><button class="icon-button" data-close="leave-dialog" aria-label="Stay in the game">×</button></div><h2>Leave the table?</h2><p class="muted" id="leave-message">Your friends will be waiting for you.</p><div class="modal-actions"><button class="button button-secondary" data-close="leave-dialog">Stay here</button><button class="button button-primary" id="confirm-leave">Leave table</button></div></dialog>
 
-    <dialog id="winner-dialog" class="modal winner-modal"><div class="modal-top"><span class="eyebrow">THAT’S A WRAP</span><button class="icon-button" data-close="winner-dialog" aria-label="View final board">×</button></div><div class="winner-art" aria-hidden="true"><i class="dot red">R</i><span>✳</span><i class="dot purple">P</i></div><h2 id="winner-title">Well played.</h2><p class="muted" id="winner-description"></p><div id="final-scores" class="final-scores"></div><button class="button button-primary button-wide" id="new-game">Set up another round ↗</button><button class="text-button winner-back" data-close="winner-dialog">Take one last look at the board</button></dialog>
+    <dialog id="winner-dialog" class="modal winner-modal" aria-labelledby="winner-title">
+        <div class="modal-top"><span class="eyebrow" id="result-eyebrow">ROUND COMPLETE</span><button class="icon-button" data-close="winner-dialog" aria-label="View final board">×</button></div>
+        <div class="winner-art" aria-hidden="true"><i class="dot red">R</i><span>✳</span><i class="dot purple">P</i></div>
+        <h2 id="winner-title">Well played.</h2><p class="muted" id="winner-description"></p>
+        <p class="series-result" id="series-result"></p><div id="final-scores" class="final-scores"></div>
+        <section class="rematch-panel" aria-label="Next round">
+            <div id="rematch-host-options"><label for="rematch-mode">Next round’s game plan</label><select id="rematch-mode"><option value="twenty_dots">The classic · First to 20 dots</option><option value="five_colors">Color collector · 5 of each color</option><option value="five_with_yellow">Wild ambition · Every color + yellow</option></select></div>
+            <p id="rematch-goal" class="field-note"></p>
+            <div id="ready-list" class="ready-list" aria-label="Player readiness"></div>
+            <p id="rematch-status" class="field-note" role="status"></p>
+            <button class="button button-primary button-wide" id="rematch-button" aria-pressed="false">Play again ↗</button>
+            <p class="field-note">Same room, same company. Everyone readies up; the starting player rotates. Changing the goal resets readiness.</p>
+        </section>
+        <section class="reaction-panel" aria-label="Round-end reactions">
+            <div class="reaction-heading"><span>WELL PLAYED, EVERYONE</span><button class="text-button" data-mute-reactions aria-pressed="false">Mute reactions</button></div>
+            <div class="reaction-buttons"><button data-reaction="nice_move">Nice move!</button><button data-reaction="well_played">Well played!</button><button data-reaction="close_one">Close one!</button><button data-reaction="rematch">Rematch?</button></div>
+            <p class="reaction-message" role="status" aria-live="polite"></p>
+        </section>
+        <button class="text-button winner-back" data-close="winner-dialog">Take one last look at the board</button>
+        <button class="text-button winner-back" id="new-game">Leave &amp; create a different table</button>
+    </dialog>
+
+    <dialog id="preferences-dialog" class="modal modal-small" aria-labelledby="preferences-title">
+        <div class="modal-top"><span class="eyebrow">YOUR KIND OF GAME NIGHT</span><button class="icon-button" data-close="preferences-dialog" aria-label="Close preferences">×</button></div>
+        <h2 id="preferences-title">Set the mood.</h2>
+        <div class="preference-list">
+            <label><span><strong>Game sounds</strong><small>Quiet notes for moves and collections.</small></span><input id="pref-sound" type="checkbox"></label>
+            <label><span><strong>Light vibration</strong><small>On your scoring moves, where supported.</small></span><input id="pref-haptics" type="checkbox"></label>
+            <label><span><strong>Reduce motion</strong><small>Also respects your device’s preference.</small></span><input id="pref-motion" type="checkbox"></label>
+        </div>
+        <p class="field-note">Sound and vibration are off until you choose them. Preferences stay on this device.</p>
+        <button class="button button-primary button-wide" data-close="preferences-dialog">That feels right.</button>
+    </dialog>
 
     <dialog id="share-dialog" class="modal modal-small"><div class="modal-top"><span class="eyebrow">SAVE THEM A SEAT</span><button class="icon-button" data-close="share-dialog" aria-label="Close invite">×</button></div><h2>A little friendly competition.</h2><label for="invite-url">Copy this invite link</label><input id="invite-url" readonly><p class="field-note">Select and copy the link to send it to a friend.</p><button class="button button-primary button-wide" data-close="share-dialog">Done</button></dialog>
     <div class="toast" id="toast" role="status" hidden></div>
