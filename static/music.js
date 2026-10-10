@@ -19,6 +19,10 @@
         { title: 'The Dance', src: 'static/music/the-dance.mp3' },
         { title: 'The Drop (Extended Version)', src: 'static/music/the-drop-extended.mp3' },
         { title: 'In The Act', src: 'static/music/in-the-act.mp3' },
+        { title: 'Through The Smoke', src: 'static/music/through-the-smoke.mp3' },
+        { title: 'Before The Day’s End', src: 'static/music/before-the-days-end.mp3' },
+        { title: 'Steps', src: 'static/music/steps.mp3' },
+        { title: 'No Words', src: 'static/music/no-words.mp3' },
     ];
 
     function shuffled(items) {
