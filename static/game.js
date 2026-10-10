@@ -39,8 +39,10 @@
     const deviceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let pageHidden = false;
     const music = new window.TableMusic(status => {
+        $('music-skip').hidden = !music.songs;
+        if (!status) return;
         const messages = {
-            off: 'Music is off.', playing: 'Now playing · A Little Company',
+            off: 'Music is off.', playing: `Now playing · ${music.title}`,
             paused: 'Music is paused while you’re away.', muted: 'Music volume is muted.',
             ready: 'Tap or click to start music. Your browser may require a gesture.',
             unavailable: 'Music is unavailable in this browser. You can still play.',
@@ -1102,6 +1104,7 @@
         if (key === 'sound') { unlockAudio(); playNote(true, false); }
         if (key === 'music') unlockAudio();
     });
+    $('music-skip').addEventListener('click', () => { unlockAudio(); music.next(); });
     $('pref-music-volume').addEventListener('input', event => {
         preferences.musicVolume = Number(event.target.value);
         applyPreferences();

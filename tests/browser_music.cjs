@@ -10,6 +10,7 @@ const key = 'twenty-dots.preferences.v1';
     const errors = [];
     async function page(options = {}) {
         const context = await browser.newContext({ viewport: { width: 320, height: 900 } });
+        if (options.noSongs) await context.route('**/*.mp3', route => route.abort());
         await context.addInitScript(({ options, key }) => {
             if (options.saved !== undefined) localStorage.setItem(key, JSON.stringify(options.saved));
             // Observe the real music engine without a production debug API.
@@ -95,6 +96,14 @@ const key = 'twenty-dots.preferences.v1';
             window.testAnalyser.getFloatTimeDomainData(samples);
             return samples.some(sample => Math.abs(sample) > .0001);
         });
+        // The playlist streams one song at a time and the skip button advances it.
+        assert(await tab.evaluate(() => window.testMusic.songs && !window.testMusic.element.paused));
+        assert.equal(await tab.evaluate(() => window.testMusic.element.preload), 'none');
+        const firstSong = await tab.evaluate(() => window.testMusic.title);
+        assert.equal(await tab.locator('#music-status').textContent(), `Now playing · ${firstSong}`);
+        await tab.locator('#music-skip').click();
+        await tab.waitForFunction(old => window.testMusic.title !== old && !window.testMusic.element.paused, firstSong);
+        assert.match(await tab.locator('#music-status').textContent(), /^Now playing · /);
         await audit(tab);
         // Native keyboard slider interaction updates the live gain and saved value.
         await tab.locator('#pref-music-volume').focus();
@@ -169,6 +178,15 @@ const key = 'twenty-dots.preferences.v1';
             assert.equal(await invalid.locator('#pref-music-volume').inputValue(), expected);
             await invalid.context().close();
         }
+        const noSongs = await page({ noSongs: true });
+        await noSongs.locator('#home-screen [data-preferences]').click();
+        await noSongs.locator('#pref-music').check();
+        await noSongs.waitForFunction(() => !window.testMusic.songs && window.testMusic.timer !== null);
+        await status(noSongs, 'playing');
+        assert.equal(await noSongs.locator('#music-status').textContent(), 'Now playing · A Little Company');
+        assert(await noSongs.locator('#music-skip').isHidden());
+        await noSongs.locator('#pref-music').uncheck();
+        await status(noSongs, 'off');
         const unsupported = await page({ unsupported: true });
         await unsupported.locator('#home-screen [data-preferences]').click();
         await unsupported.locator('#pref-music').check();
@@ -182,7 +200,7 @@ const key = 'twenty-dots.preferences.v1';
         await blocked.locator('#pref-music').uncheck();
         await status(blocked, 'off');
         assert.deepEqual(errors, []);
-        console.log(`PASS (${process.env.PLAYWRIGHT_BROWSER || 'chromium'}): actual synthesized audio, opt-in, independent effects, volume/mute, persistence/migration, lifecycle pause, loop cleanup, unsupported/blocked audio, 320px accessibility.`);
+        console.log(`PASS (${process.env.PLAYWRIGHT_BROWSER || 'chromium'}): actual playlist audio, skip, synthesized fallback, opt-in, independent effects, volume/mute, persistence/migration, lifecycle pause, loop cleanup, unsupported/blocked audio, 320px accessibility.`);
     } finally {
         await browser.close();
     }

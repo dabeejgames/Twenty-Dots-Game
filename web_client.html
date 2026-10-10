@@ -7,10 +7,10 @@
     <meta name="description" content="A small board. Endless possibilities. Play Twenty Dots with friends: match colors, collect dots, and make your next move count.">
     <title>Twenty Dots — Make your move.</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23222538'/%3E%3Ccircle cx='22' cy='22' r='9' fill='%23f27361'/%3E%3Ccircle cx='43' cy='22' r='9' fill='%238d79d6'/%3E%3Ccircle cx='22' cy='43' r='9' fill='%235ba98b'/%3E%3Ccircle cx='43' cy='43' r='9' fill='%23e5b846'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="static/game.css">
+    <link rel="stylesheet" href="static/game.css?v=2026-10-10">
     <script defer src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script defer src="static/music.js"></script>
-    <script defer src="static/game.js"></script>
+    <script defer src="static/music.js?v=2026-10-10"></script>
+    <script defer src="static/game.js?v=2026-10-10"></script>
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to game</a>
@@ -161,8 +161,8 @@
         <div class="modal-top"><span class="eyebrow">YOUR KIND OF GAME NIGHT</span><button class="icon-button" data-close="preferences-dialog" aria-label="Close preferences">×</button></div>
         <h2 id="preferences-title">Set the mood.</h2>
         <div class="preference-list">
-            <label><span><strong>Background music</strong><small>A mellow instrumental for your game night.</small></span><input id="pref-music" type="checkbox" aria-describedby="music-status"></label>
-            <div class="music-volume"><label for="pref-music-volume">Music volume <output id="music-volume-value" for="pref-music-volume">35%</output></label><input id="pref-music-volume" type="range" min="0" max="100" step="5" value="35"><p class="field-note" id="music-status" role="status">Music is off.</p></div>
+            <label><span><strong>Background music</strong><small>A shuffled playlist for your game night.</small></span><input id="pref-music" type="checkbox" aria-describedby="music-status"></label>
+            <div class="music-volume"><label for="pref-music-volume">Music volume <output id="music-volume-value" for="pref-music-volume">35%</output></label><input id="pref-music-volume" type="range" min="0" max="100" step="5" value="35"><div class="music-now"><p class="field-note" id="music-status" role="status">Music is off.</p><button type="button" class="text-button" id="music-skip">Next song ⏭</button></div></div>
             <label><span><strong>Game sounds</strong><small>Quiet notes for moves and collections.</small></span><input id="pref-sound" type="checkbox"></label>
             <label><span><strong>Light vibration</strong><small>On your scoring moves, where supported.</small></span><input id="pref-haptics" type="checkbox"></label>
             <label><span><strong>Reduce motion</strong><small>Also respects your device’s preference.</small></span><input id="pref-motion" type="checkbox"></label>

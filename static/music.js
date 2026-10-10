@@ -10,10 +10,34 @@
     ];
     const MELODY = [4, null, 2, 3, null, 1, 2, null];
     const STEP = 60 / 80 / 2; // Eight gently swung eighth notes per bar, 80 BPM.
+    const SYNTH_TITLE = 'A Little Company';
+    // Add a song: drop the MP3 in static/music/ and list it here.
+    const SONGS = [
+        { title: 'Still Movin’', src: 'static/music/still-movin.mp3' },
+        { title: 'Midnight Ride', src: 'static/music/midnight-ride.mp3' },
+        { title: 'Lost My Way', src: 'static/music/lost-my-way.mp3' },
+        { title: 'The Dance', src: 'static/music/the-dance.mp3' },
+        { title: 'The Drop (Extended Version)', src: 'static/music/the-drop-extended.mp3' },
+        { title: 'In The Act', src: 'static/music/in-the-act.mp3' },
+    ];
+
+    function shuffled(items) {
+        const order = items.map((_, index) => index);
+        for (let i = order.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [order[i], order[j]] = [order[j], order[i]];
+        }
+        return order;
+    }
 
     class TableMusic {
         constructor(onStatus) {
             this.onStatus = onStatus;
+            this.songs = SONGS.length > 0;
+            this.order = shuffled(SONGS);
+            this.position = 0;
+            this.broken = new Set();
+            this.element = null;
             this.context = null;
             this.enabled = false;
             this.volume = 35;
@@ -44,7 +68,53 @@
             this.delay.connect(this.feedback).connect(this.delay);
             this.delay.connect(this.wet).connect(this.master);
             this.master.connect(context.destination);
+            if (this.songs) {
+                // Only the current song is fetched; preload stays off until it plays.
+                this.element = new Audio();
+                this.element.preload = 'none';
+                this.element.addEventListener('ended', () => this.next());
+                this.element.addEventListener('error', () => this.skipBroken());
+                context.createMediaElementSource(this.element).connect(this.master);
+            }
             context.addEventListener('statechange', () => this.sync());
+        }
+
+        get title() {
+            return this.songs ? SONGS[this.order[this.position]].title : SYNTH_TITLE;
+        }
+
+        playSong() {
+            const song = SONGS[this.order[this.position]];
+            if (!this.element.src.endsWith(song.src)) this.element.src = song.src;
+            if (!this.element.paused) return;
+            this.element.play().catch(error => {
+                // A pause or skip interrupting play() is expected; a policy block is not.
+                if (error.name === 'NotAllowedError') this.report('ready');
+            });
+        }
+
+        next() {
+            if (!this.songs) return;
+            do {
+                this.position = (this.position + 1) % SONGS.length;
+                if (this.position === 0) this.order = shuffled(SONGS);
+            } while (this.broken.has(this.order[this.position]));
+            this.element.pause();
+            this.element.removeAttribute('src');
+            if (this.status === 'playing') this.playSong();
+            this.onStatus(this.status);
+        }
+
+        skipBroken() {
+            if (!this.songs || !this.element.getAttribute('src')) return;
+            this.broken.add(this.order[this.position]);
+            if (this.broken.size < SONGS.length) return this.next();
+            // Every song failed to load: fall back to the synthesized track.
+            this.songs = false;
+            this.element.pause();
+            this.element.removeAttribute('src');
+            this.status = '';
+            this.sync();
         }
 
         update(enabled, volume, hidden) {
@@ -70,6 +140,11 @@
                 return;
             }
             this.master.gain.setTargetAtTime(this.volume / 100 * .7, this.context.currentTime, .08);
+            if (this.songs) {
+                this.report('playing');
+                this.playSong();
+                return;
+            }
             if (this.timer !== null) return;
             this.nextTime = this.context.currentTime + .05;
             this.timer = setInterval(() => this.tick(), 80);
@@ -80,9 +155,11 @@
         stop() {
             clearInterval(this.timer);
             this.timer = null;
+            this.element?.pause();
             if (this.master) {
-                this.master.gain.cancelScheduledValues(this.context.currentTime);
-                this.master.gain.setValueAtTime(0, this.context.currentTime);
+                // Cancel from 0 so a fade already in progress cannot keep the gain up.
+                this.master.gain.cancelScheduledValues(0);
+                this.master.gain.value = 0;
             }
             for (const voice of this.voices) {
                 voice.oscillator.stop();

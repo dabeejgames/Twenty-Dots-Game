@@ -385,6 +385,8 @@ legend { font-size: 12px; font-weight: 600; padding: 0; margin-bottom: 10px; }
 .music-volume { padding: 14px; border-radius: 12px; background: #eeebf4; }
 .music-volume label { font-size: 12px; font-weight: 600; }
 .music-volume output { color: #51425f; }
+.music-now { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.music-now .text-button { flex: none; min-height: 44px; }
 .music-volume input[type="range"] { appearance: auto; accent-color: #65547b; padding: 0; border: 0; min-height: 44px; background: transparent; cursor: pointer; }
 .home-footer { align-items: center; }
 .home-footer .text-button { font-size: 10px; text-align: left; }
