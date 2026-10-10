@@ -9,6 +9,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23222538'/%3E%3Ccircle cx='22' cy='22' r='9' fill='%23f27361'/%3E%3Ccircle cx='43' cy='22' r='9' fill='%238d79d6'/%3E%3Ccircle cx='22' cy='43' r='9' fill='%235ba98b'/%3E%3Ccircle cx='43' cy='43' r='9' fill='%23e5b846'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="static/game.css">
     <script defer src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script defer src="static/music.js"></script>
     <script defer src="static/game.js"></script>
 </head>
 <body>
@@ -83,11 +84,11 @@
                     <button type="button" class="text-button cancel-connect" id="cancel-connect" hidden>Cancel connection</button>
                 </form>
             </div>
-            <footer class="home-footer"><span>A colorful kind of competition.</span><span>Made for your next game night <span aria-hidden="true">✳</span></span></footer>
+            <footer class="home-footer"><button class="text-button" data-preferences>Music &amp; preferences ♫</button><span>Made for your next game night <span aria-hidden="true">✳</span></span></footer>
         </section>
 
         <section class="lobby-screen screen" id="lobby-screen" aria-labelledby="lobby-title" hidden>
-            <div class="room-topline"><button class="text-button leave-button">← Leave room</button><span class="eyebrow">THE TABLE IS YOURS</span></div>
+            <div class="room-topline"><button class="text-button leave-button">← Leave room</button><button class="text-button" data-preferences>Music &amp; preferences ♫</button></div>
             <div class="lobby-layout">
                 <div class="lobby-main"><p class="eyebrow"><span class="tiny-dot"></span> A LITTLE COMPANY GOES A LONG WAY</p><h1 id="lobby-title">Good games start<br>with <span class="serif-accent">good company.</span></h1><p class="muted" id="lobby-subtitle">Invite your friends. We’ll start when the table is full.</p><div class="lobby-seats" id="lobby-seats"></div><div class="lobby-status" role="status"><span class="waiting-dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="lobby-status">Waiting for friends</span></div></div>
                 <aside class="invite-panel panel"><span class="eyebrow">SAVE THEM A SEAT</span><h2>You’re invited.</h2><p class="muted">Send a little friendly competition their way.</p><div class="room-code-card"><span>YOUR ROOM CODE</span><strong id="lobby-code"></strong><button class="text-button" id="copy-code">Copy code <span aria-hidden="true">⧉</span></button></div><button class="button button-primary button-wide" id="share-lobby">Invite friends <span aria-hidden="true">↗</span></button><p class="invite-note">One link. Straight to your table.</p><div class="room-settings"><span>THE GAME PLAN</span><strong id="lobby-goal"></strong><span id="lobby-count"></span></div></aside>
@@ -96,7 +97,7 @@
 
         <section class="game-screen screen" id="game-screen" aria-labelledby="game-title" hidden>
             <div class="game-topline"><div><span class="eyebrow" id="game-title">THE CLASSIC</span><h2 id="game-goal">First to 20 dots.</h2></div><div class="table-tools"><button class="button button-quiet" id="share-game" aria-label="Share room invite"><span aria-hidden="true">↗</span> <span id="game-room-code">Room</span></button><button class="button button-quiet leave-button">Leave</button></div></div>
-            <div class="series-strip"><span id="series-label">Game night · First to 2 wins</span><button class="text-button" id="preferences-button">Sound &amp; preferences</button></div>
+            <div class="series-strip"><span id="series-label">Game night · First to 2 wins</span><button class="text-button" id="preferences-button" data-preferences>Music &amp; preferences</button></div>
             <div class="game-layout">
                 <aside class="score-panel" aria-label="Players and scores"><div class="section-heading"><h3>At the table</h3><span id="player-total"></span></div><div class="score-list" id="score-list"></div><div class="table-tip"><span aria-hidden="true">✳</span><p>Look for the connection.<br>Three in a row is all it takes.</p></div></aside>
                 <div class="table-center">
@@ -138,6 +139,7 @@
             <p class="reaction-message" role="status" aria-live="polite"></p>
         </section>
         <button class="text-button winner-back" data-close="winner-dialog">Take one last look at the board</button>
+        <button class="text-button winner-back" data-preferences>Music &amp; preferences ♫</button>
         <button class="text-button winner-back" id="new-game">Leave &amp; create a different table</button>
     </dialog>
 
@@ -145,11 +147,13 @@
         <div class="modal-top"><span class="eyebrow">YOUR KIND OF GAME NIGHT</span><button class="icon-button" data-close="preferences-dialog" aria-label="Close preferences">×</button></div>
         <h2 id="preferences-title">Set the mood.</h2>
         <div class="preference-list">
+            <label><span><strong>Background music</strong><small>A mellow instrumental for your game night.</small></span><input id="pref-music" type="checkbox" aria-describedby="music-status"></label>
+            <div class="music-volume"><label for="pref-music-volume">Music volume <output id="music-volume-value" for="pref-music-volume">35%</output></label><input id="pref-music-volume" type="range" min="0" max="100" step="5" value="35"><p class="field-note" id="music-status" role="status">Music is off.</p></div>
             <label><span><strong>Game sounds</strong><small>Quiet notes for moves and collections.</small></span><input id="pref-sound" type="checkbox"></label>
             <label><span><strong>Light vibration</strong><small>On your scoring moves, where supported.</small></span><input id="pref-haptics" type="checkbox"></label>
             <label><span><strong>Reduce motion</strong><small>Also respects your device’s preference.</small></span><input id="pref-motion" type="checkbox"></label>
         </div>
-        <p class="field-note">Sound and vibration are off until you choose them. Preferences stay on this device.</p>
+        <p class="field-note">Music, game sounds, and vibration start off. Music pauses when you switch away. Preferences stay on this device.</p>
         <button class="button button-primary button-wide" data-close="preferences-dialog">That feels right.</button>
     </dialog>
 

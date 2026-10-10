@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test": "node browser_smoke.cjs",
-    "test:replay": "node browser_replay.cjs"
+    "test:replay": "node browser_replay.cjs",
+    "test:music": "node browser_music.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

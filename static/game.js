@@ -23,12 +23,25 @@
     };
     let toastTimer;
     let reactionTimer, reactionMessageTimer, audio;
-    let preferences = { sound: false, haptics: false, motion: false, muted: false };
+    let preferences = { sound: false, haptics: false, motion: false, muted: false, music: false, musicVolume: 35 };
     try {
         const saved = JSON.parse(storageGet(PREF_KEY));
-        for (const key of Object.keys(preferences)) preferences[key] = saved?.[key] === true;
+        for (const key of ['sound', 'haptics', 'motion', 'muted', 'music']) preferences[key] = saved?.[key] === true;
+        if (typeof saved?.musicVolume === 'number' && Number.isFinite(saved.musicVolume)) {
+            preferences.musicVolume = Math.round(Math.max(0, Math.min(100, saved.musicVolume)) / 5) * 5;
+        }
     } catch { /* Invalid preferences fall back to quiet defaults. */ }
     const deviceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let pageHidden = false;
+    const music = new window.TableMusic(status => {
+        const messages = {
+            off: 'Music is off.', playing: 'Now playing · A Little Company',
+            paused: 'Music is paused while you’re away.', muted: 'Music volume is muted.',
+            ready: 'Tap or click to start music. Your browser may require a gesture.',
+            unavailable: 'Music is unavailable in this browser. You can still play.',
+        };
+        $('music-status').textContent = messages[status];
+    });
 
     function node(tag, className, text) {
         const element = document.createElement(tag);
@@ -781,20 +794,37 @@
     function applyPreferences() {
         storageSet(PREF_KEY, JSON.stringify(preferences));
         document.body.classList.toggle('reduce-motion', reducedMotion());
-        for (const key of ['sound', 'haptics', 'motion']) $(`pref-${key}`).checked = preferences[key];
+        for (const key of ['sound', 'haptics', 'motion', 'music']) $(`pref-${key}`).checked = preferences[key];
+        $('pref-music-volume').value = preferences.musicVolume;
+        $('pref-music-volume').setAttribute('aria-valuetext', `${preferences.musicVolume}%`);
+        $('music-volume-value').value = `${preferences.musicVolume}%`;
+        updateMusic();
         if (reducedMotion()) document.querySelectorAll('.collection-particle').forEach(el => el.remove());
         if (preferences.muted) clearReactionMessage();
         renderReactions();
     }
 
     function unlockAudio() {
-        if (!preferences.sound) return;
+        if ((!preferences.sound && !preferences.music) || document.hidden || pageHidden) return;
         try {
             const Audio = window.AudioContext || window.webkitAudioContext;
-            if (!Audio) return;
+            if (!Audio) {
+                music.failed = true;
+                updateMusic();
+                return;
+            }
             audio ||= new Audio();
-            if (audio.state === 'suspended') audio.resume().catch(() => {});
-        } catch { /* Audio is optional, including in embedded browsers. */ }
+            music.attach(audio);
+            if (audio.state !== 'running') audio.resume().then(updateMusic).catch(updateMusic);
+            updateMusic();
+        } catch {
+            music.failed = true;
+            updateMusic();
+        }
+    }
+
+    function updateMusic() {
+        music.update(preferences.music, preferences.musicVolume, document.hidden || pageHidden);
     }
 
     function playNote(scored, champion) {
@@ -927,13 +957,22 @@
     $('rematch-mode').addEventListener('change', event => sendRematch('rematch_options', { game_mode: event.target.value }));
     document.querySelectorAll('[data-reaction]').forEach(button => button.addEventListener('click', () => sendReaction(button.dataset.reaction)));
     document.querySelectorAll('[data-mute-reactions]').forEach(button => button.addEventListener('click', () => { preferences.muted = !preferences.muted; applyPreferences(); }));
-    $('preferences-button').addEventListener('click', () => $('preferences-dialog').showModal());
-    for (const key of ['sound', 'haptics', 'motion']) $(`pref-${key}`).addEventListener('change', event => {
+    document.querySelectorAll('[data-preferences]').forEach(button => button.addEventListener('click', () => $('preferences-dialog').showModal()));
+    for (const key of ['sound', 'haptics', 'motion', 'music']) $(`pref-${key}`).addEventListener('change', event => {
         preferences[key] = event.target.checked;
         applyPreferences();
         if (key === 'sound') { unlockAudio(); playNote(true, false); }
+        if (key === 'music') unlockAudio();
     });
-    document.addEventListener('click', unlockAudio);
+    $('pref-music-volume').addEventListener('input', event => {
+        preferences.musicVolume = Number(event.target.value);
+        applyPreferences();
+        unlockAudio();
+    });
+    document.addEventListener('click', event => { if (event.isTrusted) unlockAudio(); });
+    document.addEventListener('keydown', event => { if (event.isTrusted) unlockAudio(); });
+    window.addEventListener('pagehide', () => { pageHidden = true; updateMusic(); });
+    window.addEventListener('pageshow', () => { pageHidden = false; updateMusic(); });
     deviceMotion.addEventListener('change', applyPreferences);
     applyPreferences();
     $('primary-action').addEventListener('click', primaryAction);
@@ -976,6 +1015,7 @@
         if (app.seat || app.connecting) banner('You’re offline. We’ll reconnect when your connection returns.');
     });
     document.addEventListener('visibilitychange', () => {
+        updateMusic();
         if (!document.hidden && app.seat && !app.socket?.connected) reconnect();
     });
 

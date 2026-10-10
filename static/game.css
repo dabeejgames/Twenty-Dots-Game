@@ -364,6 +364,12 @@ legend { font-size: 12px; font-weight: 600; padding: 0; margin-bottom: 10px; }
 .preference-list label { display: flex; align-items: center; gap: 16px; justify-content: space-between; cursor: pointer; }
 .preference-list strong { display: block; font-size: 13px; }.preference-list small { display: block; font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.6; }
 .preference-list input[type="checkbox"] { appearance: auto; width: 24px; height: 24px; min-height: 24px; flex: 0 0 auto; accent-color: #65547b; }
+.music-volume { padding: 14px; border-radius: 12px; background: #eeebf4; }
+.music-volume label { font-size: 12px; font-weight: 600; }
+.music-volume output { color: #51425f; }
+.music-volume input[type="range"] { appearance: auto; accent-color: #65547b; padding: 0; border: 0; min-height: 44px; background: transparent; cursor: pointer; }
+.home-footer { align-items: center; }
+.home-footer .text-button { font-size: 10px; text-align: left; }
 #preferences-dialog > .button { margin-top: 22px; }
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 @media (max-width: 760px) {
