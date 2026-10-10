@@ -7,10 +7,10 @@
     <meta name="description" content="A small board. Endless possibilities. Play Twenty Dots with friends: match colors, collect dots, and make your next move count.">
     <title>Twenty Dots — Make your move.</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23222538'/%3E%3Ccircle cx='22' cy='22' r='9' fill='%23f27361'/%3E%3Ccircle cx='43' cy='22' r='9' fill='%238d79d6'/%3E%3Ccircle cx='22' cy='43' r='9' fill='%235ba98b'/%3E%3Ccircle cx='43' cy='43' r='9' fill='%23e5b846'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="static/game.css?v=2026-10-10">
+    <link rel="stylesheet" href="static/game.css?v=2026-10-10b">
     <script defer src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script defer src="static/music.js?v=2026-10-10"></script>
-    <script defer src="static/game.js?v=2026-10-10"></script>
+    <script defer src="static/music.js?v=2026-10-10b"></script>
+    <script defer src="static/game.js?v=2026-10-10b"></script>
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to game</a>
@@ -76,7 +76,7 @@
                             <option value="five_colors">Color collector · 5 of each color</option>
                             <option value="five_with_yellow">Wild ambition · 5 of every color + yellow</option>
                         </select>
-                        <label class="power-option" for="power-cards"><input id="power-cards" type="checkbox"><span><strong>Power Play</strong><small>Paint a new possibility. Shift a dot. Refresh your hand.</small></span></label>
+                        <label class="power-option" for="power-cards"><input id="power-cards" type="checkbox"><span><strong>Power Play</strong><small>Paint a new possibility. Shift your color. Swap two dots.</small></span></label>
                         <p class="field-note">Optional · 12 tactical cards. Each power uses your whole turn.</p>
                         <button class="text-button" type="button" data-power-help>Meet the power cards ↗</button>
                     </div>
@@ -126,9 +126,9 @@
     <dialog id="power-rules-dialog" class="modal modal-small" aria-labelledby="power-rules-title">
         <div class="modal-top"><span class="eyebrow">A LITTLE TACTICAL TWIST</span><button class="icon-button" data-close="power-rules-dialog" aria-label="Close power rules">×</button></div>
         <h2 id="power-rules-title">Make a power move.</h2>
-        <p class="muted">Power Play adds 12 cards to the regular deck: four Paint, four Shift, and four Refresh.</p>
-        <ul class="power-rule-list"><li><strong>✦ Paint:</strong> Place the card’s color on any empty square.</li><li><strong>↗ Shift:</strong> Move a regular colored dot one square up, down, left, or right into an empty space. No diagonal moves. The dot keeps its color; the card’s color does not matter. Yellow cannot be moved.</li><li><strong>↻ Refresh:</strong> Discard the power and the rest of your hand, then draw up to five cards. Your discarded cards may return after a reshuffle.</li></ul>
-        <p class="muted">Roll first if required. Play one power <strong>instead of</strong> your two regular cards, before playing anything else. Target, preview, then confirm. Paint and Shift score completed lines normally—not for moving or placing alone. Collecting yellow still requires a roll unless you win.</p>
+        <p class="muted">Power Play adds 12 cards to the regular deck: four Paint, four Shift, and four Swap.</p>
+        <ul class="power-rule-list"><li><strong>✦ Paint:</strong> Place the card’s color on any empty square.</li><li><strong>↗ Shift:</strong> Move a dot matching the card’s color one square up, down, left, or right into an empty space. No diagonal moves. Yellow cannot be moved.</li><li><strong>⇄ Swap:</strong> Exchange any two regular dots anywhere on the board. Both squares must contain dots; neither can be yellow. The card’s color does not matter, and the two dots may be the same or different colors.</li></ul>
+        <p class="muted">Roll first if required. Play one power <strong>instead of</strong> your two regular cards, before playing anything else. Target, preview, then confirm. All powers score completed lines normally—not for moving or placing alone. Swap checks both spots and collects each dot only once. Collecting yellow still requires a roll unless you win.</p>
         <button class="button button-primary button-wide" data-close="power-rules-dialog">Got it. Make it count.</button>
     </dialog>
 

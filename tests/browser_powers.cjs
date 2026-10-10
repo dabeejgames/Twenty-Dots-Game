@@ -80,6 +80,11 @@ module.exports = async function testPowers(browser, base, request, audit, errors
 
         id = await prepare('shift');
         await choose('shift');
+        assert.match(await host.locator('#power-description').textContent(), /Move a blue dot/);
+        assert.match(await host.locator('.power-card[data-power="shift"] .card-color').textContent(), /BLUE/);
+        await host.locator('#cell-E6').click();
+        assert.equal(await host.locator('.power-source').count(), 0, 'Wrong-color dot cannot shift');
+        assert(!await host.locator('#cell-E6').evaluate(cell => cell.classList.contains('power-legal')));
         await host.locator('#cell-F1').click();
         assert.equal(await host.locator('.power-source').count(), 0, 'Yellow cannot shift');
         await host.locator('#cell-B3').click();
@@ -112,19 +117,91 @@ module.exports = async function testPowers(browser, base, request, audit, errors
         await host.locator('#cell-A1').click();
         assert.equal(await host.locator('.power-source').count(), 0);
         assert(await host.locator('#primary-action').isDisabled());
-        assert.match(await host.locator('#power-target-status').textContent(), /No regular dot has an empty neighboring square/);
+        assert.match(await host.locator('#power-target-status').textContent(), /No blue dot has an empty neighboring square/);
 
-        id = await prepare('refresh', { exhaust: true });
+        await prepare('shift', { wrong_color: true });
+        await choose('shift');
+        assert.equal(await host.locator('.power-legal').count(), 0);
+        assert.match(await host.locator('#power-target-status').textContent(), /No blue dots to shift/);
+
+        id = await prepare('swap', { exhaust: true });
         const before = await host.evaluate(() => window.lastState.board);
         const reshuffles = await host.evaluate(() => window.lastState.deck_reshuffles);
-        await choose('refresh');
-        assert.match(await host.locator('#power-target-status').textContent(), /discard your 4 remaining cards/);
-        assert.equal(await host.locator('.power-legal').count(), 0);
-        await host.locator('#primary-action').click();
-        await changed(id, 'refresh');
+        const kept = await host.evaluate(() => window.privateHand.filter(card => card.power !== 'swap'));
+        const guestHand = await pages[1].evaluate(() => window.privateHand);
+        assert.equal(await host.locator('.power-card[data-power="refresh"]').count(), 0);
+        await choose('swap');
+        assert.equal(await host.locator('.power-legal').count(), 2);
+        assert(await host.locator('#primary-action').isDisabled());
+        for (const invalid of ['F1', 'B2']) {
+            await host.locator(`#cell-${invalid}`).click();
+            assert.equal(await host.locator('.power-source').count(), 0, 'Neither wild nor empty cells can swap');
+        }
+        await host.locator('#cell-A1').click();
+        for (const invalid of ['A1', 'F1', 'B2']) {
+            await host.locator(`#cell-${invalid}`).click();
+            assert.equal(await host.locator('.cell.preview').count(), 0);
+            assert(await host.locator('#primary-action').isDisabled());
+        }
+        await host.locator('#cell-F6').focus();
+        await host.keyboard.press('Enter');
+        assert.equal(await host.locator('.cell.preview').count(), 2);
+        assert.match(await host.locator('#cell-A1').getAttribute('aria-label'), /preview green/);
+        assert.match(await host.locator('#cell-F6').getAttribute('aria-label'), /preview blue/);
+        assert.equal(await host.locator('#cell-A1').getAttribute('aria-pressed'), 'true');
+        assert.equal(await host.locator('#cell-F6').getAttribute('aria-pressed'), 'true');
+        assert.deepEqual(await host.evaluate(() => window.lastState.board), before, 'Swap preview does not mutate board');
+        assert.match(await host.locator('#power-target-status').textContent(), /A1 ⇄ F6/);
+        await audit(host, 'Swap both-dot preview at 320px');
+        await host.locator('#reset-power-targets').click();
+        assert.equal(await host.locator('.cell.preview').count(), 0);
+        await host.locator('#cell-A1').click();
+        await host.locator('#cell-F6').click();
+        await host.locator('#cancel-power').click();
+        assert.equal(await host.locator('.cell.preview').count(), 0);
         assert.deepEqual(await host.evaluate(() => window.lastState.board), before);
+        await choose('swap');
+        await host.locator('#cell-A1').click();
+        await host.locator('#cell-F6').click();
+        await host.locator('#primary-action').click();
+        await changed(id, 'swap');
+        for (const page of pages) {
+            await page.waitForFunction(() => window.lastState.board[0][0]?.color === 'green'
+                && window.lastState.board[5][5]?.color === 'blue');
+        }
+        assert.equal(await host.evaluate(() => window.lastState.board[5][0].color), 'yellow');
+        assert.equal(await host.evaluate(() => window.lastState.last_move.points), 0);
+        assert.equal(await host.evaluate(() => window.lastState.current_turn), 'Power guest');
+        assert.match(await host.locator('#move-summary').textContent(), /used Swap · swapped A1 ⇄ F6/);
         assert.equal(await host.evaluate(() => window.lastState.deck_reshuffles), reshuffles + 1);
         assert.equal(await host.locator('.playing-card').count(), 5);
+        assert.deepEqual(await host.evaluate(() => window.privateHand.slice(0, 4)), kept);
+        assert.deepEqual(await pages[1].evaluate(() => window.privateHand), guestHand);
+
+        id = await prepare('swap', { matching: true });
+        await choose('swap');
+        await host.locator('#cell-A1').click();
+        await host.locator('#cell-F6').click();
+        await host.locator('#primary-action').click();
+        await changed(id, 'swap');
+        assert.equal(await host.evaluate(() => window.lastState.last_move.lines), 2);
+        assert.equal(await host.evaluate(() => window.lastState.last_move.points), 6);
+        assert.equal(await host.evaluate(() => window.lastState.players['Power host'].score.blue), 3);
+        assert.equal(await host.evaluate(() => window.lastState.players['Power host'].score.green), 3);
+
+        await prepare('swap', { blocked: true });
+        await choose('swap');
+        assert.equal(await host.locator('.power-legal').count(), 0);
+        assert(await host.locator('#primary-action').isDisabled());
+        assert.match(await host.locator('#power-target-status').textContent(), /Swap needs two regular dots/);
+
+        await prepare('swap', { full: true });
+        await choose('swap');
+        assert.equal(await host.locator('.power-legal').count(), 36, 'Swap works without empty squares');
+        await host.locator('#cell-A1').click();
+        await host.locator('#cell-F6').click();
+        assert(!await host.locator('#primary-action').isDisabled());
+        await host.locator('#cancel-power').click();
 
         await prepare('paint');
         await choose('paint');

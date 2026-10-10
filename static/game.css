@@ -186,7 +186,7 @@ legend { font-size: 12px; font-weight: 600; padding: 0; margin-bottom: 10px; }
 .cell { position: relative; aspect-ratio: 1; border: 0; padding: 0; border-radius: 9px; background: #f0efe9; display: flex; align-items: center; justify-content: center; min-width: 0; transition: background .15s, box-shadow .15s; }
 .cell:hover { background: #e8e6de; }
 .cell .dot { width: 66%; height: 66%; font-size: clamp(10px, 1.1vw, 14px); }
-.cell-coordinate { position: absolute; top: 4px; left: 5px; font-size: 7px; color: #6e6477; opacity: 0; }
+.cell-coordinate { position: absolute; top: 4px; left: 5px; font-size: 7px; color: #62586b; opacity: 0; }
 .cell:hover .cell-coordinate, .cell:focus-visible .cell-coordinate, .cell.preview .cell-coordinate { opacity: 1; }
 .cell.preview { box-shadow: inset 0 0 0 2px #76608f; background: #eae4f3; }
 .cell.preview .dot { opacity: .8; outline: 2px dashed #4a3b5b; outline-offset: 2px; }

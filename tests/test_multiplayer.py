@@ -967,7 +967,7 @@ class MultiplayerTests(unittest.TestCase):
                     powers = [c for c in cards if c.power is not None]
                     self.assertEqual({(c.location, c.color, c.power) for c in powers},
                                      {('PWR', color, p) for color in session.game.colors
-                                      for p in ('paint', 'shift', 'refresh')} if enabled else set())
+                                      for p in ('paint', 'shift', 'swap')} if enabled else set())
                     self.assertFalse(session.game.power_cards_enabled)
                     for state in (session.get_lobby_state(), session.get_game_state()):
                         self.assertIs(state['power_cards'], enabled)
@@ -1109,7 +1109,7 @@ class MultiplayerTests(unittest.TestCase):
         for matching in (False, True):
             clients, session = self.table(room=f'shift{matching}', power_cards=True)
             session.game.can_roll_dice = False
-            card = self.own_power(session, 'shift', 'red')
+            card = self.own_power(session, 'shift', 'blue')
             source = Dot('blue')
             session.game.grid[1][2] = source
             if matching:
@@ -1129,8 +1129,129 @@ class MultiplayerTests(unittest.TestCase):
             self.assertEqual(session.game.turn_cards_played['P0'], 2)
             self.assertEqual(session.game.get_current_player(), 'P1')
 
+    def test_power_shift_requires_matching_card_color(self):
+        for card_color in ('red', 'blue', 'green', 'purple'):
+            for dot_color in ('red', 'blue', 'green', 'purple'):
+                with self.subTest(card=card_color, dot=dot_color):
+                    clients, session = self.table(room=card_color + dot_color, power_cards=True)
+                    session.game.can_roll_dice = False
+                    card = self.own_power(session, 'shift', card_color)
+                    dot = Dot(dot_color)
+                    session.game.grid[0][0] = dot
+                    before = self.power_snapshot(session)
+                    events = self.power_play(clients[0], session, card, ['A1', 'A2'])
+                    if card_color == dot_color:
+                        self.payload(events, 'game_updated')
+                        self.assertIs(session.game.grid[0][1], dot)
+                        self.assertIsNone(session.game.grid[0][0])
+                    else:
+                        self.assertIn('matching the card color', self.payload(events, 'error')['message'])
+                        self.assertEqual(self.power_snapshot(session), before)
+
+    def test_power_swap_accepts_any_card_color_and_same_or_different_dots(self):
+        for color in ('red', 'blue', 'green', 'purple'):
+            for other in ('blue', 'green'):
+                with self.subTest(card=color, second_dot=other):
+                    clients, session = self.table(room=color + other, power_cards=True)
+                    session.game.can_roll_dice = False
+                    card = self.own_power(session, 'swap', color)
+                    first, second = Dot('blue'), Dot(other)
+                    session.game.grid[0][0], session.game.grid[5][5] = first, second
+                    state = self.payload(self.power_play(clients[0], session, card,
+                                                         ['A1', 'F6']), 'game_updated')
+                    self.assertIs(session.game.grid[0][0], second)
+                    self.assertIs(session.game.grid[5][5], first)
+                    self.assertEqual(state['last_move']['points'], 0)
+                    self.assertEqual(state['last_move']['lines'], 0)
+                    self.assertEqual(session.game.get_current_player(), 'P1')
+
+    def test_power_swap_scores_both_endpoints(self):
+        clients, session = self.table(power_cards=True)
+        session.game.can_roll_dice = False
+        card = self.own_power(session, 'swap', 'purple')
+        for row, col, color in ((0, 0, 'blue'), (5, 5, 'green'), (0, 1, 'green'),
+                                (0, 2, 'green'), (5, 3, 'blue'), (5, 4, 'blue')):
+            session.game.grid[row][col] = Dot(color)
+        state = self.payload(self.power_play(clients[0], session, card, ['A1', 'F6']), 'game_updated')
+        self.assertEqual(state['last_move']['points'], 6)
+        self.assertEqual(state['last_move']['lines'], 2)
+        self.assertEqual(len(state['last_move']['collected']), 6)
+        self.assertEqual(session.game.players['P0']['score']['green'], 3)
+        self.assertEqual(session.game.players['P0']['score']['blue'], 3)
+        self.assertTrue(all(dot is None for row in session.game.grid for dot in row))
+
+    def test_power_swap_shared_wild_scores_both_lines_once_in_either_order(self):
+        for reverse in (False, True):
+            for winning in (False, True):
+                with self.subTest(reverse=reverse, winning=winning):
+                    clients, session = self.table(room=f'overlap{reverse}{winning}', power_cards=True)
+                    session.game.can_roll_dice = False
+                    card = self.own_power(session, 'swap', 'green')
+                    for row, col, color in ((2, 0, 'red'), (0, 2, 'blue'),
+                                            (2, 1, 'blue'), (1, 2, 'red'), (2, 2, 'yellow')):
+                        session.game.grid[row][col] = Dot(color)
+                    session.game.yellow_dot_position = (2, 2)
+                    session.game.players['P0']['total_dots'] = 18 if winning else 0
+                    targets = ['A3', 'C1'] if reverse else ['C1', 'A3']
+                    events = self.power_play(clients[0], session, card, targets)
+                    state = self.payload(events, 'game_updated')
+                    move = state['last_move']
+                    self.assertEqual(move['points'], 4)
+                    self.assertEqual(move['lines'], 2)
+                    self.assertEqual(len(move['collected']), 5)
+                    self.assertEqual(len({d['location'] for d in move['collected']}), 5)
+                    self.assertEqual(session.game.players['P0']['score']['blue'], 2)
+                    self.assertEqual(session.game.players['P0']['score']['red'], 2)
+                    self.assertEqual(session.game.players['P0']['yellow_dots'], 1)
+                    self.assertIsNone(session.game.yellow_dot_position)
+                    self.assertIs(session.game.can_roll_dice, not winning)
+                    self.assertEqual(session.game.get_current_player(), 'P0')
+                    self.assertIs(session.game.must_advance_after_roll['P0'], not winning)
+                    if winning:
+                        self.assertEqual(self.payload(events, 'game_over')['winner'], 'P0')
+                        self.assertEqual(state['series']['wins']['P0'], 1)
+
+    def test_power_swap_shared_line_is_counted_and_collected_once(self):
+        clients, session = self.table(power_cards=True)
+        session.game.can_roll_dice = False
+        card = self.own_power(session, 'swap')
+        for col in range(4):
+            session.game.grid[0][col] = Dot('blue')
+        move = self.payload(self.power_play(clients[0], session, card,
+                                            ['A1', 'A4']), 'game_updated')['last_move']
+        self.assertEqual(move['points'], 4)
+        self.assertEqual(move['lines'], 1)
+        self.assertEqual(len(move['collected']), 4)
+
+    def test_power_swap_works_on_full_board_and_rejects_turn_restrictions(self):
+        clients, session = self.table(power_cards=True)
+        card = self.own_power(session, 'swap')
+        session.game.grid = [[Dot('blue') for _ in range(6)] for _ in range(6)]
+        for condition in ('roll', 'partial', 'full', 'disabled', 'wrong_player'):
+            session.game.can_roll_dice = condition == 'roll'
+            session.game.turn_cards_played['P0'] = {'partial': 1, 'full': 2}.get(condition, 0)
+            session.power_cards = condition != 'disabled'
+            before = self.power_snapshot(session)
+            client = clients[1] if condition == 'wrong_player' else clients[0]
+            self.payload(self.power_play(client, session, card, ['A1', 'F6']), 'error')
+            self.assertEqual(self.power_snapshot(session), before)
+        self.payload(self.power_play(clients[0], session, card, ['A1', 'F6']), 'game_updated')
+
+    def test_ai_swap_needs_two_regular_dots(self):
+        clients, session = self.table(power_cards=True)
+        session.game.can_roll_dice = False
+        session.ai_players['P0'] = server.AIPlayer('hard')
+        session.game.players['P0']['hand'] = [Card('PWR', 'purple', 'swap')]
+        session.game.grid[0][0] = Dot('yellow')
+        session.game.grid[5][5] = Dot('green')
+        self.assertIsNone(session.choose_ai_power('P0'))
+        session.execute_ai_move()
+        self.assertIsNone(session.last_move)
+        self.assertEqual(session.game.get_current_player(), 'P1')
+        self.assertEqual(session.game.players['P0']['hand'][0].power, 'swap')
+
     def test_power_yellow_collection_forced_roll_and_terminal_winner(self):
-        for power in ('paint', 'shift'):
+        for power in ('paint', 'shift', 'swap'):
             for winning in (False, True):
                 with self.subTest(power=power, winning=winning):
                     clients, session = self.table(room=f'{power}{winning}', power_cards=True)
@@ -1143,6 +1264,10 @@ class MultiplayerTests(unittest.TestCase):
                     if power == 'shift':
                         session.game.grid[1][2] = Dot('red')
                         targets = ['B3', 'A3']
+                    elif power == 'swap':
+                        session.game.grid[0][2] = Dot('blue')
+                        session.game.grid[5][5] = Dot('red')
+                        targets = ['A3', 'F6']
                     session.game.players['P0']['total_dots'] = 18 if winning else 0
                     events = self.power_play(clients[0], session, card, targets)
                     state = self.payload(events, 'game_updated')
@@ -1169,53 +1294,60 @@ class MultiplayerTests(unittest.TestCase):
                         self.assertEqual(session.game.get_current_player(), 'P1')
                         self.assertFalse(session.game.can_roll_dice)
 
-    def test_power_refresh_draws_deck_first_then_recycles_actual_cards(self):
+    def test_power_swap_keeps_hand_and_draws_deck_first_or_recycles(self):
         for depleted in (False, True):
-            clients, session = self.table(room=f'refresh{depleted}', power_cards=True)
+            clients, session = self.table(room=f'swap{depleted}', power_cards=True)
             session.game.can_roll_dice = False
-            card = self.own_power(session, 'refresh')
+            card = self.own_power(session, 'swap')
             self.own_power(session, 'paint', 'blue')
             originals = {id(c) for c in self.all_cards(session)}
             hand = list(session.game.players['P0']['hand'])
+            played = next(c for c in hand if c.power == 'swap' and c.color == 'red')
+            kept = [c for c in hand if c is not played]
             opponent = list(session.game.players['P1']['hand'])
             session.game.grid[2][2] = Dot('yellow')
             session.game.yellow_dot_position = (2, 2)
+            first, second = Dot('blue'), Dot('green')
+            session.game.grid[0][0], session.game.grid[5][5] = first, second
             if depleted:
-                # Previously played pool, retaining two unplayed cards on deck.
-                session.recycle_pool.extend(session.game.deck[2:])
-                del session.game.deck[2:]
-            deck_first = list(session.game.deck[:5])
-            board = copy.deepcopy(session.get_game_state()['board'])
+                session.recycle_pool.extend(session.game.deck)
+                session.game.deck.clear()
+            next_card = (session.recycle_pool if depleted else session.game.deck)[0]
             with patch.object(session.game, 'shuffle_deck') as shuffle:
-                events = self.power_play(clients[0], session, card, [])
+                events = self.power_play(clients[0], session, card, ['A1', 'F6'])
             state = self.payload(events, 'game_updated')
             self.assertEqual(shuffle.call_count, int(depleted))
             self.assertEqual(state['deck_reshuffles'], int(depleted))
-            self.assertEqual(session.game.players['P0']['hand'][:len(deck_first)], deck_first)
+            self.assertEqual(session.game.players['P0']['hand'], kept + [next_card])
             if not depleted:
-                self.assertEqual({id(c) for c in session.recycle_pool}, {id(c) for c in hand})
+                self.assertEqual(session.recycle_pool, [played])
             self.assertEqual(session.game.players['P1']['hand'], opponent)
-            self.assertEqual(session.get_game_state()['board'], board)
+            self.assertIs(session.game.grid[0][0], second)
+            self.assertIs(session.game.grid[5][5], first)
+            self.assertEqual(session.game.yellow_dot_position, (2, 2))
             self.assertEqual(state['last_move']['points'], 0)
-            self.assertEqual(state['last_move']['placements'], [])
+            self.assertEqual(state['last_move']['placements'], [
+                {'location': 'A1', 'color': 'green'}, {'location': 'F6', 'color': 'blue'}])
             self.assertEqual(state['last_move']['collected'], [])
-            self.assertEqual(state['last_move']['power'], 'refresh')
+            self.assertNotIn('removed', state['last_move'])
+            self.assertEqual(state['last_move']['power'], 'swap')
             self.assertEqual(session.game.turn_cards_played['P0'], 2)
             self.assertEqual(state['current_turn'], 'P1')
             self.assertEqual(len(self.payload(events, 'your_hand')['hand']), 5)
             self.assert_card_partition(session, originals)
 
-    def test_power_refresh_can_redeal_itself_without_ghosts_or_opponent_access(self):
+    def test_power_swap_can_redeal_itself_without_ghosts_or_opponent_access(self):
         clients, session = self.table(power_cards=True)
         session.game.can_roll_dice = False
-        card = self.own_power(session, 'refresh')
+        card = self.own_power(session, 'swap')
+        session.game.grid[0][0], session.game.grid[5][5] = Dot('blue'), Dot('green')
         hand = list(session.game.players['P0']['hand'])
         session.game.players['P1']['hand'].extend(session.game.deck)
         session.game.deck.clear()
         originals = {id(c) for c in self.all_cards(session)}
         opponent = list(session.game.players['P1']['hand'])
         for _ in range(4):
-            events = self.power_play(clients[0], session, card, [])
+            events = self.power_play(clients[0], session, card, ['A1', 'F6'])
             self.payload(events, 'game_updated')
             self.assertEqual({id(c) for c in session.game.players['P0']['hand']}, {id(c) for c in hand})
             self.assertEqual(session.game.players['P1']['hand'], opponent)
@@ -1278,7 +1410,7 @@ class MultiplayerTests(unittest.TestCase):
             with self.subTest(source=source, destination=destination):
                 clients, session = self.table(room=source + destination, power_cards=True)
                 session.game.can_roll_dice = False
-                card = self.own_power(session, 'shift')
+                card = self.own_power(session, 'shift', 'blue')
                 dot = Dot('blue')
                 row, col = ord(source[0]) - ord('A'), int(source[1]) - 1
                 session.game.grid[row][col] = dot
@@ -1300,7 +1432,7 @@ class MultiplayerTests(unittest.TestCase):
             with self.subTest(source=source, destination=destination):
                 clients, session = self.table(room=source + destination, power_cards=True)
                 session.game.can_roll_dice = False
-                card = self.own_power(session, 'shift')
+                card = self.own_power(session, 'shift', 'blue')
                 session.game.grid[ord(source[0]) - ord('A')][int(source[1]) - 1] = Dot('blue')
                 before = self.power_snapshot(session)
                 error = self.payload(self.power_play(clients[0], session, card,
@@ -1308,7 +1440,7 @@ class MultiplayerTests(unittest.TestCase):
                 self.assertIn('neighbor', error['message'])
                 self.assertEqual(self.power_snapshot(session), before)
 
-    def test_power_shift_and_refresh_invalid_targets_are_nonmutating(self):
+    def test_power_shift_and_swap_invalid_targets_are_nonmutating(self):
         clients, session = self.table(power_cards=True)
         session.game.can_roll_dice = False
         card = self.own_power(session, 'shift')
@@ -1319,8 +1451,10 @@ class MultiplayerTests(unittest.TestCase):
             before = self.power_snapshot(session)
             self.payload(self.power_play(clients[0], session, card, targets), 'error')
             self.assertEqual(self.power_snapshot(session), before)
-        card = self.own_power(session, 'refresh')
-        for targets in (None, {}, ['A1']):
+        card = self.own_power(session, 'swap')
+        session.game.grid[5][5] = Dot('green')
+        for targets in (None, {}, [], ['A1'], ['A1', 'A1'], ['A1', 'B2'], ['B2', 'F6'],
+                ['A1', 'A2'], ['A2', 'F6'], ['A1', 'F6', 'C3'], ['A1', 'G1']):
             before = self.power_snapshot(session)
             self.payload(self.power_play(clients[0], session, card, targets), 'error')
             self.assertEqual(self.power_snapshot(session), before)
@@ -1349,7 +1483,7 @@ class MultiplayerTests(unittest.TestCase):
         self.assertEqual(self.power_snapshot(session), before)
 
     def test_ai_power_only_fallbacks_and_all_blocked_pass(self):
-        for power in ('paint', 'shift', 'refresh', 'blocked'):
+        for power in ('paint', 'shift', 'swap', 'blocked'):
             with self.subTest(power=power):
                 clients, session = self.table(room=power, power_cards=True)
                 session.game.can_roll_dice = False
@@ -1357,10 +1491,13 @@ class MultiplayerTests(unittest.TestCase):
                 session.game.players['P0']['hand'] = [Card('PWR', 'red',
                                                           'paint' if power == 'blocked' else power)]
                 if power == 'shift':
-                    session.game.grid[5][5] = Dot('blue')
+                    session.game.grid[5][5] = Dot('red')
+                if power == 'swap':
+                    session.game.grid[0][0], session.game.grid[5][5] = Dot('blue'), Dot('green')
                 if power == 'blocked':
                     session.game.grid = [[Dot('yellow') for _ in range(6)] for _ in range(6)]
                     session.game.players['P0']['hand'].append(Card('PWR', 'green', 'shift'))
+                    session.game.players['P0']['hand'].append(Card('PWR', 'blue', 'swap'))
                 with patch.object(session.ai_players['P0'], 'choose_cards') as choose:
                     session.execute_ai_move()
                 choose.assert_not_called()
@@ -1381,7 +1518,8 @@ class MultiplayerTests(unittest.TestCase):
         session.game.grid[0][0] = Dot('red')
         session.game.grid[0][1] = Dot('yellow')
         session.game.grid[1][0] = Dot('yellow')
-        session.game.grid[5][5] = Dot('blue')
+        session.game.grid[2][2] = Dot('blue')  # Open neighbors, but not the card's color.
+        session.game.grid[5][5] = Dot('red')
         before = self.power_snapshot(session)
         card, targets = session.choose_ai_power('P0')
         self.assertEqual(targets, ['F6', 'E6'])
@@ -1534,7 +1672,8 @@ class MultiplayerTests(unittest.TestCase):
     def test_concurrent_regular_and_power_requests_share_the_same_lock(self):
         clients, session = self.table(power_cards=True)
         session.game.can_roll_dice = False
-        card = self.own_power(session, 'refresh')
+        card = self.own_power(session, 'swap')
+        session.game.grid[0][0], session.game.grid[5][5] = Dot('blue'), Dot('green')
         # Ensure two distinct real regular cards irrespective of shuffled hand.
         hand = session.game.players['P0']['hand']
         regular = [c for c in hand if c.power is None]
@@ -1548,7 +1687,7 @@ class MultiplayerTests(unittest.TestCase):
         originals = {id(c) for c in self.all_cards(session)}
         clients[0].get_received()
         self.queued_actions(session, [
-            (clients[0], 'play_power', dict(game_id=session.game_id, round_id=1, card=card, targets=[])),
+            (clients[0], 'play_power', dict(game_id=session.game_id, round_id=1, card=card, targets=['A1', 'F6'])),
             (clients[0], 'play_cards', dict(game_id=session.game_id, round_id=1,
                                           cards=[{'location': c.location, 'color': c.color} for c in chosen])),
         ])
@@ -1561,8 +1700,8 @@ class MultiplayerTests(unittest.TestCase):
     def test_queued_gameplay_cannot_mutate_a_rematch_even_for_legacy_packets(self):
         for event in ('play_power', 'play_cards', 'roll_dice', 'end_turn', 'pass_turn'):
             clients, session = self.table(room=f'queued{event}', power_cards=True)
-            card = self.own_power(session, 'refresh', name='P1')
-            data = dict(game_id=session.game_id, card=card, targets=[],
+            card = self.own_power(session, 'swap', name='P1')
+            data = dict(game_id=session.game_id, card=card, targets=['A1', 'F6'],
                         cards=session.get_player_hand('P1')[:1])
             if event == 'play_power':
                 data['round_id'] = 1

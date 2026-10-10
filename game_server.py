@@ -23,7 +23,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Active games dictionary: game_id -> game_data
 games = {}
 
-ONLINE_POWERS = ('paint', 'shift', 'refresh')
+ONLINE_POWERS = ('paint', 'shift', 'swap')
 
 
 def make_round_lock():
@@ -302,19 +302,23 @@ class GameSession:
         move['points'] += self.game.players[move['player']]['total_dots']
         self.last_move = move
 
-    def collect_match(self, player_name, row, col, match, match_color, move):
+    def collect_match(self, player_name, row, col, match, match_color, move, seen_lines=None):
         """Snapshot actual dot colors before removal; count completed axes, not triples."""
         positions = set(match)
         x, y = self.game.columns.index(col), self.game.rows.index(row)
         for dx, dy in ((1, 0), (0, 1), (1, 1), (1, -1)):
-            length = 1
+            line = {(x, y)}
             for sign in (-1, 1):
                 step = 1
                 while (x + sign * step * dx, y + sign * step * dy) in positions:
-                    length += 1
+                    line.add((x + sign * step * dx, y + sign * step * dy))
                     step += 1
-            if length >= 3:
-                move['lines'] += 1
+            if len(line) >= 3:
+                key = frozenset(line)
+                if seen_lines is None or key not in seen_lines:
+                    move['lines'] += 1
+                if seen_lines is not None:
+                    seen_lines.add(key)
         for col_idx, row_idx in match:
             dot = self.game.grid[row_idx][col_idx]
             if dot:
@@ -379,7 +383,7 @@ class GameSession:
                      and c.power == card_data['power']), None)
         if card is None:
             raise ValueError('Power card is not in your hand')
-        count = {'paint': 1, 'shift': 2, 'refresh': 0}[card.power]
+        count = {'paint': 1, 'shift': 2, 'swap': 2}[card.power]
         if not isinstance(targets, list) or len(targets) != count:
             raise ValueError('Invalid power targets')
         for target in targets:
@@ -389,7 +393,12 @@ class GameSession:
         if len(set(targets)) != len(targets):
             raise ValueError('Power targets must be distinct')
         cells = [(self.game.rows.index(t[0]), self.game.columns.index(t[1])) for t in targets]
-        if cells:
+        if card.power == 'swap':
+            if any(self.game.grid[row][col] is None
+                   or self.game.grid[row][col].color not in self.game.colors
+                   for row, col in cells):
+                raise ValueError('Swap requires two regular colored dots; wild dots cannot swap')
+        else:
             row, col = cells[-1]
             if self.game.grid[row][col] is not None:
                 raise ValueError('Power destination must be empty')
@@ -398,6 +407,8 @@ class GameSession:
             dot = self.game.grid[row][col]
             if dot is None or dot.color not in self.game.colors:
                 raise ValueError('Shift source must contain a regular colored dot')
+            if dot.color != card.color:
+                raise ValueError(f'Shift requires a {card.color} dot matching the card color')
             dest_row, dest_col = cells[1]
             if abs(dest_row - row) + abs(dest_col - col) != 1:
                 raise ValueError('Shift destination must be an empty neighboring square '
@@ -416,9 +427,24 @@ class GameSession:
             {'location': 'PWR', 'color': card.color, 'power': card.power})
         self.game.turn_cards_played[player_name] = 2
         yellow_collected = False
-        if card.power == 'refresh':
-            self.recycle_pool.extend(hand)
-            hand.clear()
+        if card.power == 'swap':
+            (row_a, col_a), (row_b, col_b) = cells
+            self.game.grid[row_a][col_a], self.game.grid[row_b][col_b] = (
+                self.game.grid[row_b][col_b], self.game.grid[row_a][col_a])
+            # Find BOTH endpoints' matches on the swapped board before collecting.
+            # They may share a wild dot or even the same line (same-color swaps).
+            matches = []
+            for target, (row, col) in zip(targets, cells):
+                dot = self.game.grid[row][col]
+                move['placements'].append({'location': target, 'color': dot.color})
+                match, color = self.game.check_line_match(target[0], target[1], dot.color)
+                if match:
+                    yellow_collected |= any(self.game.grid[y][x].color == 'yellow' for x, y in match)
+                    matches.append((target, match, color))
+            seen_lines = set()
+            for target, match, color in matches:
+                # collect_dots and collect_match skip dots already collected.
+                self.collect_match(player_name, target[0], target[1], match, color, move, seen_lines)
         else:
             dot = Dot(card.color)
             if card.power == 'shift':
@@ -457,8 +483,8 @@ class GameSession:
                    and self.game.grid[y][x].color in self.game.colors]
         for card in self.get_player_hand(player_name):
             power = card['power']
-            if power == 'refresh':
-                candidates = [[]]
+            if power == 'swap' and len(sources) >= 2:
+                candidates = [sources[:2]]
             elif power == 'paint' and empty:
                 candidates = [empty[:1]]
             elif power == 'shift' and sources and empty:

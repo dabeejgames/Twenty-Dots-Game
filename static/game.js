@@ -7,8 +7,8 @@
     const SYMBOLS = { red: 'R', blue: 'B', green: 'G', purple: 'P', yellow: '✳' };
     const POWERS = {
         paint: { title: 'Paint', symbol: '✦', targets: 1, description: 'Place this card’s color on any empty square. Completed lines score normally.' },
-        shift: { title: 'Shift', symbol: '↗', targets: 2, description: 'Move a regular dot one square up, down, left, or right into an empty space—not diagonally. Yellow stays put. Completed lines score normally.' },
-        refresh: { title: 'Refresh', symbol: '↻', targets: 0, description: 'Trade all your remaining cards for a fresh draw, up to five. Discarded cards can return after a reshuffle.' },
+        shift: { title: 'Shift', symbol: '↗', targets: 2, description: 'Move a dot matching this card’s color one square up, down, left, or right into an empty space—not diagonally. Yellow stays put. Completed lines score normally.' },
+        swap: { title: 'Swap', symbol: '⇄', targets: 2, description: 'Swap any two regular dots anywhere on the board. The card’s color does not matter. Yellow cannot swap. Completed lines at both spots score normally.' },
     };
     const MODES = {
         twenty_dots: { title: 'The classic', goal: 'First to 20 dots.', short: 'First to 20 dots' },
@@ -429,7 +429,7 @@
     }
 
     function canShiftSource(location) {
-        return COLORS.includes(boardColor(location)) && shiftDestinations(location).length > 0;
+        return boardColor(location) === selectedPower()?.color && shiftDestinations(location).length > 0;
     }
 
     function validPowerTarget(location) {
@@ -440,13 +440,18 @@
         if (card.power === 'shift') {
             return count === 0 ? canShiftSource(location) : shiftDestinations(app.powerTargets[0]).includes(location);
         }
+        if (card.power === 'swap') {
+            return COLORS.includes(boardColor(location))
+                && app.game.board.flat().filter(dot => COLORS.includes(dot?.color)).length >= 2;
+        }
         return boardColor(location) === null;
     }
 
     function powerReady() {
         const card = selectedPower();
         if (!card || !canUsePower() || app.powerTargets.length !== POWERS[card.power].targets) return false;
-        if (card.power === 'refresh') return true;
+        if (new Set(app.powerTargets).size !== app.powerTargets.length) return false;
+        if (card.power === 'swap') return app.powerTargets.every(target => COLORS.includes(boardColor(target)));
         return boardColor(app.powerTargets.at(-1)) === null
             && (card.power !== 'shift' || (canShiftSource(app.powerTargets[0])
                 && shiftDestinations(app.powerTargets[0]).includes(app.powerTargets[1])));
@@ -458,17 +463,23 @@
         if (!myTurn()) return 'Plan ahead. Choose your power again when your turn begins.';
         if (app.game.can_roll_dice) return 'Roll the wild dice first. Then choose a power or regular cards.';
         if (app.game.cards_played_this_turn > 0) return 'Powers need a fresh turn. You have already played a card.';
-        if (card.power === 'refresh') return `Confirm to discard your ${Math.max(0, app.hand.length - 1)} remaining cards and end your turn.`;
         const cells = app.game.board.flat();
+        if (card.power === 'swap') {
+            if (cells.filter(dot => COLORS.includes(dot?.color)).length < 2) return 'Swap needs two regular dots. Cancel and choose another card, or pass.';
+            if (powerReady()) return `${app.powerTargets.join(' ⇄ ')} selected. Check both previews, then confirm below.`;
+            return !app.powerTargets.length
+                ? 'Step 1 of 2 · Tap any marked colored dot. Yellow cannot swap.'
+                : 'Step 2 of 2 · Tap a different colored dot anywhere on the board. Yellow cannot swap.';
+        }
         if (!cells.some(dot => !dot)) return 'No empty squares right now. Cancel and choose another card, or pass.';
-        if (card.power === 'shift' && !cells.some(dot => COLORS.includes(dot?.color))) return 'No regular dots to shift yet. Cancel and choose another card, or pass.';
+        if (card.power === 'shift' && !cells.some(dot => dot?.color === card.color)) return `No ${card.color} dots to shift yet. Cancel and choose another card, or pass.`;
         if (card.power === 'shift' && !app.game.board.some((row, r) => row.some((dot, c) =>
-            COLORS.includes(dot?.color) && canShiftSource(String.fromCharCode(65 + r) + (c + 1))))) {
-            return 'No regular dot has an empty neighboring square. Cancel and choose another card, or pass.';
+            dot?.color === card.color && canShiftSource(String.fromCharCode(65 + r) + (c + 1))))) {
+            return `No ${card.color} dot has an empty neighboring square. Cancel and choose another card, or pass.`;
         }
         if (powerReady()) return `${app.powerTargets.join(' → ')} selected. Check the preview, then confirm below.`;
         if (card.power === 'shift') return !app.powerTargets.length
-            ? 'Step 1 of 2 · Tap a marked colored dot with an empty neighboring square. Yellow cannot move.'
+            ? `Step 1 of 2 · Tap a marked ${card.color} dot with an empty neighboring square. Yellow cannot move.`
             : 'Step 2 of 2 · Tap an empty neighbor marked +: up, down, left, or right. No diagonals.';
         return 'Choose your spot · Tap an empty square marked +.';
     }
@@ -479,10 +490,12 @@
         if (!card) return;
         $('power-title').textContent = `${POWERS[card.power].symbol} ${POWERS[card.power].title} · Full turn`;
         $('power-description').textContent = card.power === 'paint'
-            ? `Place a ${card.color} dot on any empty square. Completed lines score normally.` : POWERS[card.power].description;
+            ? `Place a ${card.color} dot on any empty square. Completed lines score normally.`
+            : card.power === 'shift' ? `Move a ${card.color} dot one square up, down, left, or right into an empty space. No diagonals. Completed lines score normally.`
+                : POWERS[card.power].description;
         $('power-target-status').textContent = powerInstructions();
         $('cancel-power').disabled = Boolean(app.pending);
-        $('reset-power-targets').hidden = card.power === 'refresh';
+        $('reset-power-targets').hidden = false;
         $('reset-power-targets').disabled = !app.powerTargets.length || Boolean(app.pending);
     }
 
@@ -647,9 +660,12 @@
                 let previewCard = selectedIndex >= 0 ? app.hand[app.selected[selectedIndex]] : null;
                 const power = selectedPower();
                 const targetIndex = app.powerTargets.indexOf(location);
-                const source = power?.power === 'shift' && targetIndex === 0;
-                const destination = power && power.power !== 'refresh' && app.powerTargets.length === POWERS[power.power].targets && location === app.powerTargets.at(-1);
-                if (destination) previewCard = { color: power.power === 'paint' ? power.color : boardColor(app.powerTargets[0]) };
+                const swapping = power?.power === 'swap';
+                const complete = power && app.powerTargets.length === POWERS[power.power].targets;
+                const source = targetIndex === 0 && (power?.power === 'shift' || (swapping && !complete));
+                const destination = complete && (swapping ? targetIndex >= 0 : location === app.powerTargets.at(-1));
+                if (destination) previewCard = { color: swapping ? boardColor(app.powerTargets[1 - targetIndex])
+                    : power.power === 'paint' ? power.color : boardColor(app.powerTargets[0]) };
                 const legal = validPowerTarget(location);
                 cell.classList.toggle('power-legal', legal);
                 cell.classList.toggle('power-source', Boolean(source));
@@ -702,7 +718,7 @@
                 button.title = POWERS[card.power].description;
                 const badge = node('span', `power-symbol ${card.color}`, POWERS[card.power].symbol);
                 badge.setAttribute('aria-hidden', 'true');
-                button.replaceChildren(node('span', 'card-coordinate', POWERS[card.power].title), badge, node('span', 'card-color', card.power === 'paint' ? `${card.color.toUpperCase()} · POWER` : 'FULL TURN'));
+                button.replaceChildren(node('span', 'card-coordinate', POWERS[card.power].title), badge, node('span', 'card-color', card.power !== 'swap' ? `${card.color.toUpperCase()} · POWER` : 'FULL TURN'));
             }
             if (selected) button.append(node('span', 'card-check', '✓'));
             button.addEventListener('click', () => toggleCard(index));
@@ -813,7 +829,7 @@
             const power = selectedPower();
             title = `Your turn. ${POWERS[power.power].title} a possibility.`;
             subtitle = powerInstructions();
-            action = powerReady() ? (power.power === 'refresh' ? 'Trade hand & end turn ↻' : `Use ${POWERS[power.power].title} ↗`) : 'Choose power targets';
+            action = powerReady() ? `Use ${POWERS[power.power].title} ${POWERS[power.power].symbol}` : 'Choose power targets';
             note = 'Uses your whole turn. No card is spent until you confirm.';
             $('primary-action').disabled = !powerReady();
         }
@@ -1017,7 +1033,8 @@
         const positions = (move.placements || []).map(dot => dot.location).join(', ');
         $('move-summary').textContent = `${callout}${move.player} ${move.kind === 'roll' ? 'rolled wild' : 'played'}${positions ? ` at ${positions}` : ''}${move.points ? ` · +${move.points} dots` : ''}.`;
         if (move.kind === 'power' && Object.hasOwn(POWERS, move.power)) {
-            const detail = move.power === 'refresh' ? 'traded their hand' : move.power === 'shift' ? `moved ${move.removed?.[0]} → ${positions}` : `painted ${positions}`;
+            const detail = move.power === 'swap' ? `swapped ${(move.placements || []).map(dot => dot.location).join(' ⇄ ')}`
+                : move.power === 'shift' ? `moved ${move.removed?.[0]} → ${positions}` : `painted ${positions}`;
             $('move-summary').textContent = `${callout}${move.player} used ${POWERS[move.power].title} · ${detail}${move.points ? ` · +${move.points} dots` : ''}.`;
         }
         if (!animate || document.hidden) return;

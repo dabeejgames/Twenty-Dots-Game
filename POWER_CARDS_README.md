@@ -4,28 +4,29 @@
 
 Enable **Power Play** when creating a room or starting Practice. Regular-card play stays the default. The host can change this setting between rounds; changing it clears readiness. Everyone sees the selected rules in the lobby and at the table.
 
-Power Play uses **144 regular cards plus 12 powers**: one Paint, Shift, and Refresh in each of the four regular colors (156 total). Powers are visible in your private hand and occupy normal card slots. Both regular cards and powers recycle when the deck empties.
+Power Play uses **144 regular cards plus 12 powers**: one Paint, Shift, and Swap in each of the four regular colors (156 total). Swap replaces Refresh. Powers are visible in your private hand and occupy normal card slots. Both regular cards and powers recycle when the deck empties.
 
 | Card | Effect | Targets |
 | --- | --- | --- |
 | **✦ Paint** | Place a dot of the card’s color on any empty square. | One empty square |
-| **↗ Shift** | Move a regular colored dot one square up, down, left, or right into an empty space. No diagonal moves. It keeps its original color; the power card’s color does not matter. Yellow cannot move. | Source dot, then empty orthogonal neighbor |
-| **↻ Refresh** | Discard the power and your remaining hand, then draw up to five cards. No opponent’s hand is accessed. | None |
+| **↗ Shift** | Move a dot matching the card’s color one square up, down, left, or right into an empty space. No diagonal moves. Yellow cannot move. | Matching-color source dot, then empty orthogonal neighbor |
+| **⇄ Swap** | Exchange any two regular dots anywhere on the board. Neither may be yellow. The card’s color does not matter; the dots may have the same or different colors. | Two distinct occupied, non-wild squares |
 
 ### Turn rules
 
 - Roll first whenever the wild dice are required.
 - Play **one power instead of your two regular cards**. A power cannot follow a regular card or be combined with another power.
-- Tap a power to read its instructions. Paint and Shift mark legal targets on the board. Choose targets, inspect the preview, then confirm with the main action button.
+- Tap a power to read its instructions. All powers mark legal targets on the board. Choose targets, inspect the preview (both exchanged colors for Swap), then confirm with the main action button.
 - Cancel or choose targets again before confirming; nothing is spent until confirmation.
-- Paint and Shift score completed lines under the existing game rules. Placing or moving a dot alone does not score, and powers cannot replace occupied destinations.
+- All powers score completed lines under the existing game rules. Placing, moving, or swapping alone does not score. Paint and Shift need empty destinations; Swap exchanges two existing dots without replacement points.
+- Swap checks both positions on the exchanged board before collecting. Overlapping lines collect each dot only once, including a shared yellow wildcard. A shared line is counted only once.
 - If a power collects yellow, roll again before the next player starts. A winning power ends the round immediately instead.
-- Draw back to five after using a power. If the deck runs out, actual discarded cards are shuffled back in; Refresh can draw cards you just discarded. It does not guarantee five different cards.
+- Keep your other cards and draw back to five after using a power. If the deck runs out, actual discarded cards are shuffled back in; a played power may be drawn again.
 - If there is no valid target, keep the card and choose a regular card, another power, or pass.
 
 ### Why this set?
 
-Paint creates opportunities, Shift rewards reading the board, and Refresh helps with an awkward hand. Each trades away a full turn. Online play deliberately leaves out score multipliers, hidden traps, hand theft, and unrestricted wild placement to keep turns clear and targeting comfortable on phones.
+Paint creates opportunities, Shift makes a small adjustment with a matching color, and Swap rearranges two existing dots. Each trades away a full turn. Online play deliberately leaves out score multipliers, hidden traps, hand theft, and unrestricted wild placement to keep turns clear and targeting comfortable on phones.
 
 The computer understands the online card format and can use powers when it cannot select regular cards. Game goals, series scores, rotating starters, and saved seats work with either deck.
 
@@ -33,9 +34,9 @@ The computer understands the online card format and can use powers when it canno
 
 - Creation/practice accept a strict optional `power_cards` boolean. Public state includes `power_cards`; rematch state includes `next_power_cards`.
 - Private hands represent a power as `{ "location": "PWR", "color": "red", "power": "paint" }`. Regular card coordinates are unchanged.
-- `play_power` requires `game_id`, current integer `round_id`, the owned `card`, and `targets` (coordinate strings; an empty array for Refresh).
+- `play_power` requires `game_id`, current integer `round_id`, the owned `card`, and `targets` (one coordinate string for Paint, two for Shift or Swap). The retired `refresh` power is rejected.
 - The server validates membership, turn, round, ownership, full-turn availability, and every target before changing state. Regular `play_cards` requests cannot consume powers.
-- Public `last_move` uses `kind: "power"`, the power key, placements, collections, actual score delta, and an optional `removed` source list for Shift. Opponents never receive private hands.
+- Public `last_move` uses `kind: "power"`, the power key, placements, collections, actual score delta, and an optional `removed` source list for Shift. Swap records both positions and their exchanged colors in `placements`. Opponents never receive private hands.
 - Manual starts use the same supported deck as automatic starts. No network route silently enables desktop-only powers.
 - Rematches recreate the selected deck, preserving room credentials and series state. Deck recycling never duplicates card objects or includes cards held in other hands.
 

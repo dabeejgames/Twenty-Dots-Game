@@ -103,7 +103,8 @@ def prepare_power(session, data):
         raise AssertionError('Fixture card not found')
 
     for power in server.ONLINE_POWERS:
-        player['hand'].append(take(lambda card: card.power == power and card.color == 'red'))
+        color = 'blue' if power == 'shift' else 'red'
+        player['hand'].append(take(lambda card: card.power == power and card.color == color))
     for location in ('F5', 'F6'):
         player['hand'].append(take(lambda card: card.power is None
                                    and ''.join(card.location) == location and card.color == 'green'))
@@ -117,13 +118,34 @@ def prepare_power(session, data):
         game.grid[1][2] = Dot('blue')
         game.grid[2][0] = Dot('blue')
         game.grid[2][1] = Dot('blue')
+        game.grid[4][5] = Dot('green')
         game.grid[5][0] = Dot('yellow')
         game.yellow_dot_position = (5, 0)
         if data.get('blocked'):
             game.grid = [[None for _ in range(6)] for _ in range(6)]
             game.grid[0][0] = Dot('blue')
             game.grid[0][1] = Dot('yellow')
-            game.grid[1][0] = Dot('yellow')
+            game.grid[1][0] = Dot('red')
+            game.yellow_dot_position = (0, 1)
+        if data.get('wrong_color'):
+            game.grid = [[None for _ in range(6)] for _ in range(6)]
+            game.grid[0][0] = Dot('red')
+            game.yellow_dot_position = None
+    elif data['power'] == 'swap':
+        game.grid[0][0] = Dot('blue')
+        game.grid[5][5] = Dot('green')
+        game.grid[5][0] = Dot('yellow')
+        game.yellow_dot_position = (5, 0)
+        if data.get('matching'):
+            game.grid[0][1] = Dot('green')
+            game.grid[0][2] = Dot('green')
+            game.grid[5][3] = Dot('blue')
+            game.grid[5][4] = Dot('blue')
+        if data.get('blocked'):
+            game.grid[5][5] = None
+        if data.get('full'):
+            game.grid = [[Dot('blue') for _ in range(6)] for _ in range(6)]
+            game.grid[5][5] = Dot('green')
             game.yellow_dot_position = None
     else:
         game.grid[0][0] = Dot('red')

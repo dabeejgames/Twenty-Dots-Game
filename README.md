@@ -13,7 +13,7 @@ A strategic multiplayer board game where players compete to collect colored dots
 1. **Create a Room:**
    - Open the web client and enter your name.
    - Choose **Create room**, 2–4 players, and a game goal.
-   - Optionally enable **Power Play** for Paint, Shift, and Refresh cards. Leave it off for regular-card play.
+   - Optionally enable **Power Play** for Paint, color-matched one-step Shift, and Swap cards. Swap exchanges any two non-wild dots anywhere on the board. Leave Power Play off for regular-card play.
    - Send the **Invite friends** link, or copy the room code.
 
 2. **Join Friends:**
