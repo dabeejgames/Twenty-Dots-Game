@@ -51,8 +51,8 @@ A strategic multiplayer board game where players compete to collect colored dots
    - Send **Nice move!**, **Well played!**, **Close one!**, or **Rematch?** during play or from the results screen. Reactions have a three-second cooldown and can be muted.
    - **Music & preferences** is available from the home screen, lobby, table, and results. Turn on **Background music** for a shuffled playlist of original songs; **Next song** skips ahead. Only the song that is playing is downloaded. If no song can load, the game falls back to *A Little Company*, a mellow instrumental synthesized in your browser.
    - To add a song, put the MP3 in `static/music/` and add its title and path to the `SONGS` list at the top of `static/music.js`.
-   - Music has its own volume slider, separate from game sounds. It defaults to off, pauses when the page is hidden, and remembers your choice on this device. After a reload or a browser audio interruption, a tap or keypress may be required to resume.
-   - Preferences also offer optional game sounds, supported-device vibration, and reduced motion. Game sounds and vibration default to off.
+   - Music has its own volume slider, separate from game sounds. It defaults to on, pauses when the page is hidden, and remembers your choice on this device. After a reload or a browser audio interruption, a tap or keypress may be required to resume.
+   - Preferences also offer optional game sounds, supported-device vibration, and reduced motion. Music and game sounds default to on and start after your first tap or keypress (browsers block sound before then); vibration defaults to off.
    - Last-move highlights and collection summaries stay readable without animation. Motion also respects the operating system’s reduced-motion setting.
 
 ## 🚀 Features

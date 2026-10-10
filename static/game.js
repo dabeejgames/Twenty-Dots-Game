@@ -17,7 +17,8 @@
     };
     const SAVE_KEY = 'twenty-dots.seat.v1';
     const NAME_KEY = 'twenty-dots.name';
-    const PREF_KEY = 'twenty-dots.preferences.v1';
+    const PREF_KEY = 'twenty-dots.preferences.v2';
+    const LEGACY_PREF_KEY = 'twenty-dots.preferences.v1';
     const REACTIONS = { nice_move: 'Nice move!', well_played: 'Well played!', close_one: 'Close one!', rematch: 'Rematch?' };
     const app = {
         mode: 'create', socket: null, seat: null, lobby: null, game: null,
@@ -28,10 +29,13 @@
     };
     let toastTimer;
     let reactionTimer, reactionMessageTimer, audio;
-    let preferences = { sound: false, haptics: false, motion: false, muted: false, music: false, musicVolume: 35 };
+    let preferences = { sound: true, haptics: false, motion: false, muted: false, music: true, musicVolume: 35 };
     try {
-        const saved = JSON.parse(storageGet(PREF_KEY));
-        for (const key of ['sound', 'haptics', 'motion', 'muted', 'music']) preferences[key] = saved?.[key] === true;
+        const current = storageGet(PREF_KEY);
+        const saved = JSON.parse(current ?? storageGet(LEGACY_PREF_KEY));
+        // v1 stored the old quiet defaults on every visit, so it cannot opt out of sound or music.
+        const keys = current ? ['sound', 'haptics', 'motion', 'muted', 'music'] : ['haptics', 'motion', 'muted'];
+        for (const key of keys) if (typeof saved?.[key] === 'boolean') preferences[key] = saved[key];
         if (typeof saved?.musicVolume === 'number' && Number.isFinite(saved.musicVolume)) {
             preferences.musicVolume = Math.round(Math.max(0, Math.min(100, saved.musicVolume)) / 5) * 5;
         }

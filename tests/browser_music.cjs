@@ -57,8 +57,10 @@ const key = 'twenty-dots.preferences.v1';
     try {
         const tab = await page();
         assert.equal(await tab.evaluate(() => window.testMusic.context), null, 'No audio context/autoplay on load');
+        await status(tab, 'ready'); // On by default, waiting for the first gesture.
         await tab.locator('#home-screen [data-preferences]').click();
-        assert.equal(await tab.locator('#pref-music').isChecked(), false);
+        assert.equal(await tab.locator('#pref-music').isChecked(), true);
+        assert.equal(await tab.locator('#pref-sound').isChecked(), true);
         assert.equal(await tab.locator('#pref-music-volume').inputValue(), '35');
         await tab.locator('#pref-music').check();
         // Playwright's Windows WebKit build does not expose Web Audio. Verify the
@@ -85,7 +87,8 @@ const key = 'twenty-dots.preferences.v1';
             return;
         }
         await status(tab, 'playing');
-        assert.equal(await tab.locator('#pref-sound').isChecked(), false, 'Music is independent of effects');
+        await tab.locator('#pref-sound').uncheck();
+        await status(tab, 'playing'); // Music is independent of effects
         await tab.evaluate(() => {
             const music = window.testMusic;
             window.testAnalyser = music.context.createAnalyser();
@@ -167,11 +170,12 @@ const key = 'twenty-dots.preferences.v1';
         await tab.locator('#pref-music').uncheck();
         await status(tab, 'off');
 
-        const legacy = await page({ saved: { sound: true, haptics: true, motion: true, muted: true } });
+        const legacy = await page({ saved: { sound: false, music: false, haptics: true, motion: true, muted: true } });
         await legacy.locator('#home-screen [data-preferences]').click();
+        // v1 saved quiet defaults on every visit, so sound and music move to the new on default.
         assert(await legacy.locator('#pref-sound').isChecked());
         assert(await legacy.locator('#pref-haptics').isChecked());
-        assert.equal(await legacy.locator('#pref-music').isChecked(), false);
+        assert(await legacy.locator('#pref-music').isChecked());
         assert.equal(await legacy.locator('#pref-music-volume').inputValue(), '35');
         for (const [volume, expected] of [[1000, '100'], [-12, '0'], ['bad', '35']]) {
             const invalid = await page({ saved: { musicVolume: volume } });

@@ -126,11 +126,11 @@ async function audit(page, label) {
         }
 
         await host.locator('#preferences-button').click();
-        assert.equal(await host.locator('#pref-sound').isChecked(), false);
+        assert.equal(await host.locator('#pref-sound').isChecked(), true);
         assert.equal(await host.locator('#pref-haptics').isChecked(), false);
         await host.locator('#pref-motion').check();
-        await host.locator('#pref-sound').check();
         await host.locator('#pref-sound').uncheck();
+        await host.locator('#pref-sound').check();
         await audit(host, 'Preferences accessibility');
         await host.keyboard.press('Escape');
         await guest.emulateMedia({ reducedMotion: 'reduce' });
