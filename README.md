@@ -10,30 +10,41 @@ A strategic multiplayer board game where players compete to collect colored dots
 
 ## 🎯 How to Play
 
-1. **Start a Game:**
-   - First player opens the web client
-   - Leaves "Server IP Address" blank (uses same server)
-   - Enters a unique Game ID (e.g., "game_123")
-   - Enters their name and clicks "Join Game"
+1. **Create a Room:**
+   - Open the web client and enter your name.
+   - Choose **Create room**, 2–4 players, and a game goal.
+   - Send the **Invite friends** link, or copy the room code.
 
-2. **Join a Game:**
-   - Other players open the same URL
-   - Leave "Server IP Address" blank
-   - Enter the SAME Game ID
-   - Enter their name and click "Join Game"
+2. **Join Friends:**
+   - Open an invite link, enter your name, and take your seat.
+   - Or choose **Join friends** and enter the room code exactly as shared.
+   - The game starts when every seat is filled and connected.
+   - Prefer a warm-up? Choose **Practice** for computer opponents.
 
 3. **Game Rules:**
    - 2-4 players
    - Play up to 2 cards per turn
-   - Match 4+ dots in a line (horizontal, vertical, or diagonal) to score
-   - First to 20 dots wins (Easy mode)
+   - Tap a card to preview its position, then confirm your move.
+   - Match 3+ dots in a line (horizontal, vertical, or diagonal) to score.
+   - First to 20 dots wins in **The classic**.
+   - **Color collector** requires 5 of each regular color; **Wild ambition** also requires 5 yellow dots.
    - Yellow wild dots can complete any color match
+   - Roll at the start and whenever yellow is collected or replaced. A roll that makes a match requires another roll.
+   - Your hand stays visible between turns so you can plan ahead.
+
+4. **Stay at the Table:**
+   - Connection interruptions trigger automatic rejoining; moves stay disabled until the state is restored.
+   - After refreshing, choose **Rejoin** to recover your saved seat and private hand.
+   - A saved seat belongs to this browser/device and expires locally after 24 hours.
+   - Rooms are held in server memory, so a server restart ends existing games.
 
 ## 🚀 Features
 
 - **Multiplayer Support:** 2-4 players online
-- **Power Cards:** Special abilities like dot swaps, removals, and wildcards
-- **Landmines:** Strategic traps for opponents
+- **Mobile-first Table:** Responsive board, card previews, touch controls, and persistent private hands
+- **Room Invites:** Native mobile sharing, clipboard links, and a live waiting room
+- **Reconnect:** Token-protected saved seats and automatic connection recovery
+- **Desktop Power Cards:** Special abilities and landmines are available in the desktop game; browser play uses regular cards
 - **AI Opponents:** Play against computer players
 - **Real-time Updates:** Instant game state synchronization
 
@@ -77,8 +88,17 @@ To play with friends on the same WiFi:
    - Windows: `ipconfig` (look for IPv4)
    - Mac/Linux: `ifconfig` or `ip addr`
 3. Share your IP with friends
-4. Friends enter your IP in "Server IP Address" field
-5. Everyone uses the same Game ID
+4. Friends open `http://[YOUR_IP]:5000/web_client.html` in their browser.
+5. Create a room from that address and share its invite link or room code. A localhost invite only works on the host computer.
+
+### Validation
+
+- Server regression tests: `python -m unittest discover -s tests -p test_multiplayer.py -v`.
+- Browser test setup: `npm install --prefix tests`, then `npx --prefix tests playwright install chromium`.
+- With the game server running locally, run `npm test --prefix tests`.
+- Set `GAME_URL` to test another **local/test** server. Browser checks create real rooms and run four players through turns, refresh/rejoin, offline recovery, and AI practice.
+- Browser checks also audit accessibility and layouts from 320 px to desktop, and save screenshots under `test-results/` (ignored by git).
+- Browser code and styles are in `static/game.js` and `static/game.css`; no frontend build step is needed.
 
 ## 📁 Project Structure
 
