@@ -9,7 +9,7 @@ Power Play uses **144 regular cards plus 12 powers**: one Paint, Shift, and Refr
 | Card | Effect | Targets |
 | --- | --- | --- |
 | **✦ Paint** | Place a dot of the card’s color on any empty square. | One empty square |
-| **↗ Shift** | Move a regular colored dot to an empty square. It keeps its original color; the power card’s color does not matter. Yellow cannot move. | Source dot, then empty destination |
+| **↗ Shift** | Move a regular colored dot one square up, down, left, or right into an empty space. No diagonal moves. It keeps its original color; the power card’s color does not matter. Yellow cannot move. | Source dot, then empty orthogonal neighbor |
 | **↻ Refresh** | Discard the power and your remaining hand, then draw up to five cards. No opponent’s hand is accessed. | None |
 
 ### Turn rules

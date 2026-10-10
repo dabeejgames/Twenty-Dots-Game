@@ -7,7 +7,7 @@
     const SYMBOLS = { red: 'R', blue: 'B', green: 'G', purple: 'P', yellow: '✳' };
     const POWERS = {
         paint: { title: 'Paint', symbol: '✦', targets: 1, description: 'Place this card’s color on any empty square. Completed lines score normally.' },
-        shift: { title: 'Shift', symbol: '↗', targets: 2, description: 'Move any regular dot to an empty square. Yellow stays put. Completed lines score normally.' },
+        shift: { title: 'Shift', symbol: '↗', targets: 2, description: 'Move a regular dot one square up, down, left, or right into an empty space—not diagonally. Yellow stays put. Completed lines score normally.' },
         refresh: { title: 'Refresh', symbol: '↻', targets: 0, description: 'Trade all your remaining cards for a fresh draw, up to five. Discarded cards can return after a reshuffle.' },
     };
     const MODES = {
@@ -420,12 +420,27 @@
         return Boolean(canSelect() && myTurn() && app.game.power_cards && !app.game.can_roll_dice && app.game.cards_played_this_turn === 0);
     }
 
+    function shiftDestinations(location) {
+        const row = location.charCodeAt(0) - 65, col = Number(location[1]) - 1;
+        return [[row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]]
+            .filter(([r, c]) => r >= 0 && r < 6 && c >= 0 && c < 6)
+            .map(([r, c]) => String.fromCharCode(65 + r) + (c + 1))
+            .filter(target => boardColor(target) === null);
+    }
+
+    function canShiftSource(location) {
+        return COLORS.includes(boardColor(location)) && shiftDestinations(location).length > 0;
+    }
+
     function validPowerTarget(location) {
         const card = selectedPower();
         if (!card || !canUsePower()) return false;
         const count = app.powerTargets.length;
         if (count >= POWERS[card.power].targets || app.powerTargets.includes(location)) return false;
-        return card.power === 'shift' && count === 0 ? COLORS.includes(boardColor(location)) : boardColor(location) === null;
+        if (card.power === 'shift') {
+            return count === 0 ? canShiftSource(location) : shiftDestinations(app.powerTargets[0]).includes(location);
+        }
+        return boardColor(location) === null;
     }
 
     function powerReady() {
@@ -433,7 +448,8 @@
         if (!card || !canUsePower() || app.powerTargets.length !== POWERS[card.power].targets) return false;
         if (card.power === 'refresh') return true;
         return boardColor(app.powerTargets.at(-1)) === null
-            && (card.power !== 'shift' || COLORS.includes(boardColor(app.powerTargets[0])));
+            && (card.power !== 'shift' || (canShiftSource(app.powerTargets[0])
+                && shiftDestinations(app.powerTargets[0]).includes(app.powerTargets[1])));
     }
 
     function powerInstructions() {
@@ -446,9 +462,15 @@
         const cells = app.game.board.flat();
         if (!cells.some(dot => !dot)) return 'No empty squares right now. Cancel and choose another card, or pass.';
         if (card.power === 'shift' && !cells.some(dot => COLORS.includes(dot?.color))) return 'No regular dots to shift yet. Cancel and choose another card, or pass.';
+        if (card.power === 'shift' && !app.game.board.some((row, r) => row.some((dot, c) =>
+            COLORS.includes(dot?.color) && canShiftSource(String.fromCharCode(65 + r) + (c + 1))))) {
+            return 'No regular dot has an empty neighboring square. Cancel and choose another card, or pass.';
+        }
         if (powerReady()) return `${app.powerTargets.join(' → ')} selected. Check the preview, then confirm below.`;
-        if (card.power === 'shift' && !app.powerTargets.length) return 'Step 1 of 2 · Tap a colored dot to move. Yellow cannot move.';
-        return `${card.power === 'shift' ? 'Step 2 of 2' : 'Choose your spot'} · Tap an empty square marked +.`;
+        if (card.power === 'shift') return !app.powerTargets.length
+            ? 'Step 1 of 2 · Tap a marked colored dot with an empty neighboring square. Yellow cannot move.'
+            : 'Step 2 of 2 · Tap an empty neighbor marked +: up, down, left, or right. No diagonals.';
+        return 'Choose your spot · Tap an empty square marked +.';
     }
 
     function renderPowerGuide() {

@@ -1111,14 +1111,14 @@ class MultiplayerTests(unittest.TestCase):
             session.game.can_roll_dice = False
             card = self.own_power(session, 'shift', 'red')
             source = Dot('blue')
-            session.game.grid[5][5] = source
+            session.game.grid[1][2] = source
             if matching:
                 session.game.grid[0][0] = Dot('blue')
                 session.game.grid[0][1] = Dot('blue')
-            events = self.power_play(clients[0], session, card, ['F6', 'A3'])
+            events = self.power_play(clients[0], session, card, ['B3', 'A3'])
             move = self.payload(events, 'game_updated')['last_move']
-            self.assertIsNone(session.game.grid[5][5])
-            self.assertEqual(move['removed'], ['F6'])
+            self.assertIsNone(session.game.grid[1][2])
+            self.assertEqual(move['removed'], ['B3'])
             self.assertEqual(move['placements'], [{'location': 'A3', 'color': 'blue'}])
             self.assertEqual(move['points'], 3 if matching else 0)
             self.assertEqual(move['lines'], int(matching))
@@ -1141,8 +1141,8 @@ class MultiplayerTests(unittest.TestCase):
                     session.game.yellow_dot_position = (0, 1)
                     targets = ['A3']
                     if power == 'shift':
-                        session.game.grid[5][5] = Dot('red')
-                        targets = ['F6', 'A3']
+                        session.game.grid[1][2] = Dot('red')
+                        targets = ['B3', 'A3']
                     session.game.players['P0']['total_dots'] = 18 if winning else 0
                     events = self.power_play(clients[0], session, card, targets)
                     state = self.payload(events, 'game_updated')
@@ -1271,6 +1271,43 @@ class MultiplayerTests(unittest.TestCase):
             self.payload(self.power_play(clients[0], session, card, ['A1']), 'error')
             self.assertEqual(self.power_snapshot(session), before)
 
+    def test_power_shift_all_four_directions_and_corners(self):
+        for source, destination in (('C3', 'B3'), ('C3', 'D3'), ('C3', 'C2'),
+                                    ('C3', 'C4'), ('A1', 'A2'), ('A1', 'B1'),
+                                    ('F6', 'E6'), ('F6', 'F5')):
+            with self.subTest(source=source, destination=destination):
+                clients, session = self.table(room=source + destination, power_cards=True)
+                session.game.can_roll_dice = False
+                card = self.own_power(session, 'shift')
+                dot = Dot('blue')
+                row, col = ord(source[0]) - ord('A'), int(source[1]) - 1
+                session.game.grid[row][col] = dot
+                originals = {id(c) for c in self.all_cards(session)}
+                state = self.payload(self.power_play(clients[0], session, card,
+                                                     [source, destination]), 'game_updated')
+                self.assertIsNone(session.game.grid[row][col])
+                self.assertIs(session.game.grid[ord(destination[0]) - ord('A')]
+                                              [int(destination[1]) - 1], dot)
+                self.assertEqual(state['last_move']['points'], 0)
+                self.assertEqual(session.game.get_current_player(), 'P1')
+                self.assert_card_partition(session, originals)
+
+    def test_power_shift_rejects_distant_diagonal_and_wrapped_moves(self):
+        for source, destination in (('C3', 'A3'), ('C3', 'F3'), ('C3', 'C1'),
+                                    ('C3', 'C6'), ('C3', 'B2'), ('C3', 'B4'),
+                                    ('C3', 'D2'), ('C3', 'D4'), ('A1', 'F1'),
+                                    ('A1', 'A6'), ('A6', 'B1'), ('F6', 'A1')):
+            with self.subTest(source=source, destination=destination):
+                clients, session = self.table(room=source + destination, power_cards=True)
+                session.game.can_roll_dice = False
+                card = self.own_power(session, 'shift')
+                session.game.grid[ord(source[0]) - ord('A')][int(source[1]) - 1] = Dot('blue')
+                before = self.power_snapshot(session)
+                error = self.payload(self.power_play(clients[0], session, card,
+                                                     [source, destination]), 'error')
+                self.assertIn('neighbor', error['message'])
+                self.assertEqual(self.power_snapshot(session), before)
+
     def test_power_shift_and_refresh_invalid_targets_are_nonmutating(self):
         clients, session = self.table(power_cards=True)
         session.game.can_roll_dice = False
@@ -1335,6 +1372,31 @@ class MultiplayerTests(unittest.TestCase):
                 else:
                     self.assertEqual(session.last_move['power'], power)
                     self.assertEqual(session.game.turn_cards_played['P0'], 2)
+
+    def test_ai_shift_searches_past_blocked_source_and_passes_without_neighbors(self):
+        clients, session = self.table(power_cards=True)
+        session.game.can_roll_dice = False
+        session.ai_players['P0'] = server.AIPlayer('hard')
+        session.game.players['P0']['hand'] = [Card('PWR', 'red', 'shift')]
+        session.game.grid[0][0] = Dot('red')
+        session.game.grid[0][1] = Dot('yellow')
+        session.game.grid[1][0] = Dot('yellow')
+        session.game.grid[5][5] = Dot('blue')
+        before = self.power_snapshot(session)
+        card, targets = session.choose_ai_power('P0')
+        self.assertEqual(targets, ['F6', 'E6'])
+        session.resolve_power('P0', card, targets)
+        self.assertEqual(self.power_snapshot(session), before)
+        session.game.grid[5][5] = None
+        self.assertIsNone(session.choose_ai_power('P0'))
+        unplayed = session.game.players['P0']['hand'][0]
+        session.execute_ai_move()
+        self.assertIsNone(session.last_move)
+        self.assertEqual(session.game.get_current_player(), 'P1')
+        self.assertEqual(session.game.turn_cards_played['P0'], 0)
+        self.assertIn(unplayed, session.game.players['P0']['hand'])
+        self.assertNotIn(unplayed, session.recycle_pool)
+        self.assertEqual(len(session.game.players['P0']['hand']), 5)
 
     def test_ai_mixed_hand_filters_and_preserves_actual_index_mapping(self):
         clients, session = self.table(power_cards=True)

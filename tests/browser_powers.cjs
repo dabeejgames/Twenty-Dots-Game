@@ -82,19 +82,37 @@ module.exports = async function testPowers(browser, base, request, audit, errors
         await choose('shift');
         await host.locator('#cell-F1').click();
         assert.equal(await host.locator('.power-source').count(), 0, 'Yellow cannot shift');
-        await host.locator('#cell-A1').click();
+        await host.locator('#cell-B3').click();
+        assert.deepEqual(await host.locator('.power-legal').evaluateAll(cells => cells.map(cell => cell.id).sort()),
+            ['cell-A3', 'cell-B2', 'cell-B4', 'cell-C3'], 'Only four empty orthogonal neighbors are highlighted');
+        for (const destination of ['A1', 'D3', 'A2', 'A4', 'C4']) {
+            await host.locator(`#cell-${destination}`).click();
+            assert.equal(await host.locator('.cell.preview').count(), 0, 'Distant and diagonal targets cannot be selected');
+            assert(await host.locator('#primary-action').isDisabled());
+        }
+        assert.equal(await host.evaluate(() => window.lastState.board[1][2]?.color), 'blue');
+        assert.equal(await host.locator('.playing-card').count(), 5, 'Invalid targets cost nothing');
         await host.locator('#cell-C3').click();
-        assert.match(await host.locator('#power-target-status').textContent(), /A1 → C3/);
+        assert.equal(await host.evaluate(() => window.lastState.board[2][2]), null, 'Shift remains only a preview');
+        assert.match(await host.locator('#power-target-status').textContent(), /B3 → C3/);
         await audit(host, 'Shift preview');
         await host.locator('#reset-power-targets').click();
         assert.equal(await host.locator('.power-source').count(), 0);
-        await host.locator('#cell-A1').click();
+        await host.locator('#cell-B3').click();
         await host.locator('#cell-C3').click();
         await host.locator('#primary-action').click();
         await changed(id, 'shift');
         assert.equal(await host.evaluate(() => window.lastState.players['Power host'].score.blue), 3);
-        assert.equal(await host.evaluate(() => window.lastState.board[0][0]), null);
-        assert.match(await host.locator('#move-summary').textContent(), /A1 → C3/);
+        assert.equal(await host.evaluate(() => window.lastState.board[1][2]), null);
+        assert.match(await host.locator('#move-summary').textContent(), /B3 → C3/);
+
+        await prepare('shift', { blocked: true });
+        await choose('shift');
+        assert.equal(await host.locator('.power-legal').count(), 0, 'Blocked dots are not selectable');
+        await host.locator('#cell-A1').click();
+        assert.equal(await host.locator('.power-source').count(), 0);
+        assert(await host.locator('#primary-action').isDisabled());
+        assert.match(await host.locator('#power-target-status').textContent(), /No regular dot has an empty neighboring square/);
 
         id = await prepare('refresh', { exhaust: true });
         const before = await host.evaluate(() => window.lastState.board);

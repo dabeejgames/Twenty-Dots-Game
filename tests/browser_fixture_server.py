@@ -114,11 +114,17 @@ def prepare_power(session, data):
     game.grid = [[None for _ in range(6)] for _ in range(6)]
     game.yellow_dot_position = None
     if data['power'] == 'shift':
-        game.grid[0][0] = Dot('blue')
+        game.grid[1][2] = Dot('blue')
         game.grid[2][0] = Dot('blue')
         game.grid[2][1] = Dot('blue')
         game.grid[5][0] = Dot('yellow')
         game.yellow_dot_position = (5, 0)
+        if data.get('blocked'):
+            game.grid = [[None for _ in range(6)] for _ in range(6)]
+            game.grid[0][0] = Dot('blue')
+            game.grid[0][1] = Dot('yellow')
+            game.grid[1][0] = Dot('yellow')
+            game.yellow_dot_position = None
     else:
         game.grid[0][0] = Dot('red')
         game.grid[0][1] = Dot('yellow' if data.get('yellow') else 'red')

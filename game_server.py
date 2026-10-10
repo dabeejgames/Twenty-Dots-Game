@@ -398,6 +398,10 @@ class GameSession:
             dot = self.game.grid[row][col]
             if dot is None or dot.color not in self.game.colors:
                 raise ValueError('Shift source must contain a regular colored dot')
+            dest_row, dest_col = cells[1]
+            if abs(dest_row - row) + abs(dest_col - col) != 1:
+                raise ValueError('Shift destination must be an empty neighboring square '
+                                 'up, down, left, or right (not diagonal)')
         return card, cells
 
     def apply_power(self, player_name, card_data, targets):
@@ -454,18 +458,19 @@ class GameSession:
         for card in self.get_player_hand(player_name):
             power = card['power']
             if power == 'refresh':
-                targets = []
+                candidates = [[]]
             elif power == 'paint' and empty:
-                targets = empty[:1]
+                candidates = [empty[:1]]
             elif power == 'shift' and sources and empty:
-                targets = [sources[0], empty[0]]
+                candidates = [[source, destination] for source in sources for destination in empty]
             else:
                 continue
-            try:
-                self.resolve_power(player_name, card, targets)
-            except ValueError:
-                continue
-            return card, targets
+            for targets in candidates:
+                try:
+                    self.resolve_power(player_name, card, targets)
+                except ValueError:
+                    continue
+                return card, targets
         return None
 
     def broadcast_action(self):
