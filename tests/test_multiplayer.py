@@ -361,6 +361,22 @@ class MultiplayerTests(unittest.TestCase):
         self.assertFalse(session.ai_move_in_progress)
         self.schedule.assert_not_called()
 
+    def test_ai_roll_completes_wild_match(self):
+        first, second, session = self.started()
+        session.game.grid[4][3] = Dot('blue')
+        session.game.grid[4][4] = Dot('blue')
+        session.ai_players['Alice'] = server.AIPlayer('medium')
+        with patch.object(session.game, 'roll_dice', side_effect=[('E', '6'), ('A', '1')]), \
+                patch.object(session.ai_players['Alice'], 'choose_cards', return_value=[]):
+            session.execute_ai_move()
+        alice = session.game.players['Alice']
+        self.assertEqual(alice['score']['blue'], 2)
+        self.assertEqual(alice['yellow_dots'], 1)
+        self.assertIsNone(session.game.grid[4][3])
+        self.assertIsNone(session.game.grid[4][4])
+        self.assertEqual(session.game.grid[4][5], None)
+        self.assertEqual(session.game.grid[0][0].color, 'yellow')
+
     def test_resume_token_field_alone_opts_in_and_started_resume_is_private(self):
         first, second = self.client(), self.client()
         events = self.join(first, 'Alice', resume_token=None)

@@ -242,6 +242,24 @@ class GameSession:
         print(f"Sending hand to {player_name}: colors = {[c.color for c in hand]}")
         return cards_data
     
+    def roll_wild(self, player_name):
+        """Roll the wild dice, place yellow, and collect any match it completes. Returns the match."""
+        from twenty_dots import Dot
+        row, col = self.game.roll_dice()
+        row_idx = self.game.rows.index(row)
+        col_idx = self.game.columns.index(col)
+        old_dot = self.game.grid[row_idx][col_idx]
+        self.game.grid[row_idx][col_idx] = Dot('yellow')
+        self.game.yellow_dot_position = (row_idx, col_idx)
+        print(f"[ROLL_DICE] {player_name} rolled {row}{col} (replaced: {old_dot.color if old_dot else 'empty'})")
+
+        match, match_color = self.game.check_line_match(row, col, 'yellow')
+        if match:
+            print(f"[ROLL_DICE] MATCH FOUND! Collecting {len(match)} positions for color {match_color}")
+            self.game.collect_dots(match, player_name, match_color)
+            self.game.yellow_dot_position = None
+        return match
+
     def execute_ai_move(self):
         """Execute AI move if current player is AI"""
         if not self.started or self.check_winner() or self.ai_move_in_progress:
@@ -268,21 +286,20 @@ class GameSession:
             # AI must roll first if can_roll_dice is True
             if self.game.can_roll_dice:
                 print(f"[AI_MOVE] {current_player} must roll first (hand has {len(hand)} cards)")
-                # Simulate roll_dice (same as human player)
-                self.game.can_roll_dice = False
-                row, col = self.game.roll_dice()
-                row_idx = self.game.rows.index(row)
-                col_idx = self.game.columns.index(col)
-                
-                # Place yellow dot
-                from twenty_dots import Dot
-                old_dot = self.game.grid[row_idx][col_idx]
-                self.game.grid[row_idx][col_idx] = Dot('yellow')
-                self.game.yellow_dot_position = (row_idx, col_idx)
-                print(f"[AI_MOVE] {current_player} rolled {row}{col}, placed yellow dot")
-                
-                # Broadcast updated game state
+                match = self.roll_wild(current_player)
                 socketio.emit('game_updated', self.get_game_state(), room=self.game_id)
+                if self.check_winner():
+                    socketio.emit('game_over', self.winner_payload(), room=self.game_id)
+                    return
+                if match:
+                    # A matching roll collects the wild, so the AI must roll again
+                    self.game.can_roll_dice = True
+                    import time
+                    time.sleep(0.5)
+                    self.ai_move_in_progress = False
+                    self.execute_ai_move()
+                    return
+                self.game.can_roll_dice = False
                 # After rolling, AI needs to play cards
                 print(f"[AI_MOVE] {current_player} rolled, now choosing cards to play")
             
@@ -1145,48 +1162,12 @@ def handle_roll_dice(data):
     if must_advance:
         print(f"[ROLL_DICE] {player_name} must advance turn after this roll")
     
-    # Roll for yellow dot position (returns row, col as strings like 'A', '1')
-    row, col = game_session.game.roll_dice()
-    row_idx = game_session.game.rows.index(row)
-    col_idx = game_session.game.columns.index(col)
-    
-    print(f"[ROLL_DICE] Rolled {row}{col} (indices: {row_idx}, {col_idx})")
-    
-    # Place yellow dot
-    from twenty_dots import Dot
-    old_dot = game_session.game.grid[row_idx][col_idx]
-    game_session.game.grid[row_idx][col_idx] = Dot('yellow')
-    game_session.game.yellow_dot_position = (row_idx, col_idx)
-    print(f"[ROLL_DICE] Placed yellow dot at grid[{row_idx}][{col_idx}] (replaced: {old_dot.color if old_dot else 'empty'})")
-    
-    # Log surrounding grid state for debugging
-    print(f"[ROLL_DICE] Grid around {row}{col}:")
-    for check_row in range(max(0, row_idx-2), min(6, row_idx+3)):
-        for check_col in range(max(0, col_idx-2), min(6, col_idx+3)):
-            dot = game_session.game.grid[check_row][check_col]
-            dot_str = f"{dot.color[0].upper()}" if dot else "."
-            if check_row == row_idx and check_col == col_idx:
-                dot_str = f"[{dot_str}]"  # Mark placed dot
-            print(dot_str, end=" ")
-        print()
-    
-    # Check for matches created by yellow dot
-    print(f"[ROLL_DICE] About to call check_line_match for {row}{col} (indices {row_idx},{col_idx})")
-    match_result = game_session.game.check_line_match(row, col, 'yellow')
-    match, match_color = match_result
-    
-    if match:  # Check if match list has items
-        print(f"[ROLL_DICE] check_line_match returned match of {len(match)} positions: {match} (color={match_color})")
-        # Collect the match with the detected color (not 'yellow')
-        print(f"[ROLL_DICE] MATCH FOUND! Collecting {len(match)} positions for color {match_color}")
-        game_session.game.collect_dots(match, player_name, match_color)
-        print(f"[ROLL_DICE] After collect_dots, checking player stats...")
-        print(f"[ROLL_DICE] {player_name}'s score: {game_session.game.players[player_name]['score']}")
-        print(f"[ROLL_DICE] {player_name}'s total_dots: {game_session.game.players[player_name]['total_dots']}")
+    match = game_session.roll_wild(player_name)
+
+    if match:
         # Can roll again if matched
         game_session.game.can_roll_dice = True
     else:
-        print(f"[ROLL_DICE] NO MATCH detected at {row}{col}")
         # No match - if player must advance after roll, do it now
         if must_advance:
             print(f"[ROLL_DICE] Advancing {player_name}'s turn after rolling")
@@ -1197,7 +1178,7 @@ def handle_roll_dice(data):
             # Normal case - player can now play cards
             game_session.game.can_roll_dice = False
     
-    print(f"[ROLL_DICE] {player_name} rolled at {row}{col}. Match: {bool(match)}. can_roll_dice={game_session.game.can_roll_dice}")
+    print(f"[ROLL_DICE] {player_name} Match: {bool(match)}. can_roll_dice={game_session.game.can_roll_dice}")
     
     # Broadcast updated game state
     game_state = game_session.get_game_state()
@@ -1220,7 +1201,7 @@ def handle_roll_dice(data):
             socketio.emit('your_hand', {'hand': player_hand}, room=sid)
     
     game_session.schedule_ai()
-    print(f"{player_name} rolled dice, placed yellow at {row}{col}")
+    print(f"{player_name} rolled dice")
 
 @socketio.on('pass_turn')
 def handle_pass_turn(data):
