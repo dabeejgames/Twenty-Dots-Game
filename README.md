@@ -38,7 +38,7 @@ A strategic multiplayer board game where players compete to collect colored dots
    - Connection interruptions trigger automatic rejoining; moves stay disabled until the state is restored.
    - After refreshing, choose **Rejoin** to recover your saved seat and private hand.
    - A saved seat belongs to this browser/device and expires locally after 24 hours.
-   - Rooms are held in server memory, so a server restart ends existing games.
+   - Rooms are saved after every move, so a server restart or redeploy doesn't end the game. Everyone rejoins their seat automatically, and computer opponents pick up where they left off. Saved rooms expire after 24 hours without a move.
 
 5. **Play Another:**
    - Choose **Play again** on the results screen. The next round starts when every human player is connected and ready; computer opponents are ready automatically.
@@ -63,7 +63,7 @@ A strategic multiplayer board game where players compete to collect colored dots
 - **Reconnect:** Token-protected saved seats and automatic connection recovery
 - **Optional Power Play:** Three tactical online powers with target previews, full-turn costs, and server-validated effects; [power rules](POWER_CARDS_README.md)
 - **Desktop Variant:** The existing desktop powers and landmines remain separate from the focused online set
-- **AI Opponents:** Play against computer players
+- **AI Opponents:** Computer players read the board and play toward the round's goal. Easy plays loosely, Medium takes the best move available now, and Hard also weighs what each move leaves open for the next player, holds back a card rather than set up a line, and plays Power Play cards
 - **Real-time Updates:** Instant game state synchronization
 - **Game Nights:** Same-room rematches, rotating starters, and first-to-two series scores
 - **Fresh Decks:** Played cards recycle when the draw pile empties, including in four-player games
@@ -102,6 +102,14 @@ python game_server.py
 
 Visit `http://localhost:5000/web_client.html` in your browser.
 
+### Saved Rooms
+
+The server saves each room after every move and reloads saved rooms when it starts.
+
+- By default rooms go in `rooms.db` (SQLite) next to `game_server.py`. Set `ROOM_DB_PATH` to use another file.
+- Set `REDIS_URL` to save rooms in Redis instead. Use this on hosts whose disk is wiped on restart, such as Render's free tier; see [README_DEPLOYMENT.md](README_DEPLOYMENT.md).
+- Set `ROOM_STORE=off` to keep rooms in memory only.
+
 ### Local Network Play
 
 To play with friends on the same WiFi:
@@ -116,7 +124,8 @@ To play with friends on the same WiFi:
 
 ### Validation
 
-- Server regression tests: `python -m unittest discover -s tests -p test_multiplayer.py -v`.
+- Server regression tests: `python -m unittest discover -s tests -v` (protocol, saved rooms, and AI decisions, including a check that the AI's board simulator matches the server's rules on random boards).
+- AI strength check: `python tests/ai_selfplay.py [games] [mode] [--powers]` plays the difficulty levels against each other and reports win rates and the slowest AI turn.
 - Browser test setup: `npm install --prefix tests`, then `npx --prefix tests playwright install chromium`.
 - With the game server running locally, run `npm test --prefix tests`.
 - Set `GAME_URL` to test another **local/test** server. Browser checks create real rooms and run four players through turns, refresh/rejoin, offline recovery, and AI practice.
@@ -132,7 +141,8 @@ To play with friends on the same WiFi:
 - `game_server.py` - Flask-SocketIO game server
 - `web_client.html` - Browser-based game client
 - `twenty_dots.py` - Core game logic
-- `ai_player.py` - AI opponent logic
+- `ai_player.py` - AI opponent logic and board simulator
+- `room_store.py` - Saves rooms to SQLite or Redis so games survive restarts
 - `gui_game.py` - Desktop GUI version (PyQt6)
 - `launcher.py` - Game launcher with network options
 

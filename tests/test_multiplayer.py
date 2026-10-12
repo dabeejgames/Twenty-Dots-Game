@@ -1,7 +1,11 @@
 """Socket.IO protocol regressions; run with unittest discover -s tests -v."""
+import os
+os.environ.setdefault('ROOM_STORE', 'off')  # Tests never touch the saved-room store.
 import contextlib
 import io
 import copy
+import json
+import tempfile
 import threading
 import unittest
 from unittest.mock import patch
@@ -15,6 +19,7 @@ with patch('flask_socketio.SocketIO', side_effect=lambda *a, **kw: _socketio(
         *a, **dict(kw, async_mode='threading'))):
     import game_server as server
 
+import room_store
 from twenty_dots import Card, Dot
 
 
@@ -1545,7 +1550,11 @@ class MultiplayerTests(unittest.TestCase):
         session.game.players['P0']['hand'] = [power, regular[0], Card('PWR', 'blue', 'shift'), regular[1]]
         with patch.object(session.ai_players['P0'], 'choose_cards', return_value=[1, 0]) as choose:
             session.execute_ai_move()
-        choose.assert_called_once_with(regular)
+        choose.assert_called_once()
+        hand, context = choose.call_args.args
+        self.assertEqual(hand, regular)
+        self.assertEqual(context['regular_hand'], regular)
+        self.assertEqual({option[1] for option in context['power_options']}, {'paint'})
         self.assertEqual(session.recycle_pool, regular[::-1])
         self.assertIn(power, session.game.players['P0']['hand'])
         self.assertEqual(session.game.grid[1][1].color, 'blue')
@@ -1737,6 +1746,125 @@ class MultiplayerTests(unittest.TestCase):
         self.assertEqual(roll.call_count, 64)
         self.assertFalse(session.ai_move_in_progress)
         self.schedule.assert_called_once_with(session.execute_ai_move)
+
+    # --- Saved rooms ----------------------------------------------------------
+
+    def sqlite_store(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        store = room_store.SQLiteStore(os.path.join(directory.name, 'rooms.db'))
+        self.addCleanup(store.db.close)
+        swap = patch.object(server, 'room_store', store)
+        swap.start()
+        self.addCleanup(swap.stop)
+        return store
+
+    def comparable(self, session):
+        snapshot = json.loads(json.dumps(session.snapshot()))
+        for player in snapshot['players'].values():
+            player['connected'] = None
+        return snapshot
+
+    def test_snapshot_round_trips_mid_game_with_powers_and_ai(self):
+        clients, session = self.table(2, power_cards=True)
+        session.ai_players['P1'] = server.AIPlayer('hard')
+        self.emit(clients[0], 'roll_dice', game_id='room', round_id=1)
+        hand = session.get_player_hand('P0')
+        regular = [card for card in hand if card['power'] is None][:1]
+        self.emit(clients[0], 'play_cards', game_id='room', round_id=1, cards=regular)
+        restored = server.GameSession.restore(json.loads(json.dumps(session.snapshot())))
+        self.assertEqual(self.comparable(restored), self.comparable(session))
+        self.assertEqual(restored.get_game_state()['board'], session.get_game_state()['board'])
+        for name in session.player_order:
+            self.assertEqual(restored.get_player_hand(name), session.get_player_hand(name))
+        self.assertFalse(any(p['connected'] for p in restored.players.values() if not p['is_ai']))
+        self.assertEqual(restored.ai_players['P1'].difficulty, 'hard')
+
+    def test_restart_restores_rooms_and_token_rejoin_resumes_play(self):
+        store = self.sqlite_store()
+        clients, session = self.table()
+        tokens = {p['name']: p['resume_token'] for p in session.players.values()}
+        self.emit(clients[0], 'roll_dice', game_id='room', round_id=1)
+        card = session.get_player_hand('P0')[0]
+        self.emit(clients[0], 'play_cards', game_id='room', round_id=1, cards=[card])
+        board, hands = json.loads(json.dumps(session.get_game_state()['board'])), {
+            name: session.get_player_hand(name) for name in session.player_order}
+
+        server.games.clear()  # The process restarts; only the store remembers.
+        server.restore_rooms()
+        restored = server.games['room']
+        self.assertEqual(json.loads(json.dumps(restored.get_game_state()['board'])), board)
+        self.assertEqual(restored.get_game_state()['current_turn'], 'P0')
+
+        self.payload(self.join(self.client(), 'P0', intent='rejoin', resume_token='wrong'), 'error')
+        returning = self.client()
+        events = self.join(returning, 'P0', intent='rejoin', resume_token=tokens['P0'])
+        self.assertEqual(self.payload(events, 'join_success')['resume_token'], tokens['P0'])
+        self.assertEqual(self.payload(events, 'game_started')['board'], board)
+        self.assertEqual(self.payload(events, 'your_hand')['hand'], hands['P0'])
+        card = restored.get_player_hand('P0')[0]
+        events = self.emit(returning, 'play_cards', game_id='room', round_id=1, cards=[card])
+        self.payload(events, 'game_updated')
+        self.assertEqual(restored.game.get_current_player(), 'P1')
+        self.assertEqual(json.loads(store.db.execute('SELECT snapshot FROM rooms').fetchone()[0])
+                         ['game']['current_player_idx'], 1)
+
+    def test_restored_ai_turn_resumes_and_leaving_lobby_forgets_room(self):
+        store = self.sqlite_store()
+        clients, session = self.table()
+        session.ai_players['P1'] = server.AIPlayer('medium')
+        session.game.current_player_idx = 1
+        server.persist('room')
+        server.games.clear()
+        self.schedule.reset_mock()
+        server.restore_rooms()
+        self.schedule.assert_called_once_with(server.games['room'].execute_ai_move)
+
+        host = self.client()
+        self.join(host, 'Solo', 'lobby', intent='create', player_count=3)
+        self.assertEqual(len(store.load_all()), 2)
+        self.emit(host, 'leave_game', game_id='lobby')
+        self.assertEqual(set(store.load_all()), {'room'})
+
+    def test_store_failures_never_interrupt_play(self):
+        clients, session = self.table()
+        with patch.object(server.room_store, 'save', side_effect=OSError('disk full')):
+            events = self.emit(clients[0], 'roll_dice', game_id='room', round_id=1)
+        self.payload(events, 'game_updated')
+
+    def test_sqlite_store_expires_day_old_rooms(self):
+        store = self.sqlite_store()
+        store.save('old', '{}')
+        store.save('new', '{}')
+        store.db.execute('UPDATE rooms SET updated_at = 0 WHERE game_id = ?', ('old',))
+        self.assertEqual(store.load_all(), {'new': {}})
+
+    def test_redis_store_round_trips_with_a_day_ttl(self):
+        class FakeRedis:
+            def __init__(self):
+                self.data, self.ttl = {}, {}
+
+            def set(self, key, value, ex):
+                self.data[key.encode()], self.ttl[key] = value.encode(), ex
+
+            def get(self, key):
+                return self.data.get(key)
+
+            def delete(self, key):
+                self.data.pop(key.encode(), None)
+
+            def scan_iter(self, pattern):
+                return [k for k in list(self.data) if k.decode().startswith(pattern[:-1])]
+
+        fake = FakeRedis()
+        with patch('redis.Redis.from_url', return_value=fake),                 patch.dict(os.environ, {'REDIS_URL': 'redis://example', 'ROOM_STORE': ''}):
+            store = room_store.open_store()
+        self.assertIsInstance(store, room_store.RedisStore)
+        store.save('room', '{"round_id": 2}')
+        store.save('gone', '{}')
+        store.delete('gone')
+        self.assertEqual(store.load_all(), {'room': {'round_id': 2}})
+        self.assertEqual(fake.ttl['twenty_dots:room:room'], 24 * 60 * 60)
 
 
 if __name__ == '__main__':

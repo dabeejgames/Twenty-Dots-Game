@@ -14,6 +14,7 @@ from functools import wraps
 from importlib import import_module
 from twenty_dots import TwentyDots, Card, Dot
 from ai_player import AIPlayer
+from room_store import open_store
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'twentydots_secret_key'
@@ -22,6 +23,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Active games dictionary: game_id -> game_data
 games = {}
+room_store = open_store()
 
 ONLINE_POWERS = ('paint', 'shift', 'swap')
 
@@ -52,6 +54,52 @@ def serialized_event(handler):
                 return
             return handler(data)
     return locked
+
+
+def persist(game_id):
+    """Save one room's latest state (or forget it once it is gone); never interrupts play."""
+    session = games.get(game_id)
+    try:
+        if session is None:
+            room_store.delete(game_id)
+            return
+        with session.round_lock:
+            snapshot = json.dumps(session.snapshot())
+        room_store.save(game_id, snapshot)
+    except Exception as exc:
+        print(f'[ROOM_STORE] Could not save {game_id}: {exc!r}')
+
+
+def persisted(handler):
+    """After a socket event, save every room it could have touched."""
+    @wraps(handler)
+    def saving(*args):
+        before = set(games)
+        try:
+            return handler(*args)
+        finally:
+            data = args[0] if args and isinstance(args[0], dict) else {}
+            touched = before ^ set(games)
+            if isinstance(data.get('game_id'), str):
+                touched.add(data['game_id'])
+            touched.update(game_id for game_id, session in list(games.items())
+                           if request.sid in session.players)
+            for game_id in touched:
+                persist(game_id)
+    return saving
+
+
+def restore_rooms():
+    """Reload saved rooms at startup and resume any computer opponent mid-turn."""
+    for game_id, data in room_store.load_all().items():
+        try:
+            games[game_id] = GameSession.restore(data)
+        except Exception as exc:
+            print(f'[ROOM_STORE] Skipping unreadable room {game_id}: {exc!r}')
+            room_store.delete(game_id)
+    for session in games.values():
+        session.schedule_ai()
+    print(f'[ROOM_STORE] Restored {len(games)} room(s) from {room_store.name}')
 
 
 class GameSession:
@@ -125,6 +173,79 @@ class GameSession:
                 del self.ai_players[player_name]
             del self.players[sid]
     
+    def snapshot(self):
+        """JSON-safe copy of everything needed to resume this room after a restart."""
+        def card(c):
+            return {'location': c.location, 'color': c.color, 'power': c.power}
+        game = self.game
+        return {
+            'version': 1,
+            'game_id': self.game_id, 'game_mode': self.game_mode,
+            'required_players': self.required_players, 'host_sid': self.host_sid,
+            'players': self.players, 'player_order': self.player_order,
+            'ai_players': {name: ai.difficulty for name, ai in self.ai_players.items()},
+            'started': self.started, 'discard_piles': self.discard_piles,
+            'winner': self.winner, 'round_id': self.round_id,
+            'series_number': self.series_number, 'series_round': self.series_round,
+            'series_wins': self.series_wins, 'series_winner': self.series_winner,
+            'awarded_round': self.awarded_round,
+            'next_game_mode': self.next_game_mode, 'power_cards': self.power_cards,
+            'next_power_cards': self.next_power_cards,
+            'recycle_pool': [card(c) for c in self.recycle_pool],
+            'deck_reshuffles': self.deck_reshuffles, 'last_move': self.last_move,
+            'move_id': self.move_id,
+            'game': {
+                'num_players': game.num_players,
+                'grid': [[dot.color if dot else None for dot in row] for row in game.grid],
+                'deck': [card(c) for c in game.deck],
+                'players': {name: {**p, 'hand': [card(c) for c in p['hand']]}
+                            for name, p in game.players.items()},
+                'current_player_idx': game.current_player_idx,
+                'yellow_dot_position': game.yellow_dot_position,
+                'landmines': game.landmines,
+                'can_roll_dice': getattr(game, 'can_roll_dice', False),
+                'turn_cards_played': getattr(game, 'turn_cards_played', {}),
+                'must_advance_after_roll': getattr(game, 'must_advance_after_roll', {}),
+            },
+        }
+
+    @classmethod
+    def restore(cls, data):
+        """Rebuild a room from snapshot(); every human seat waits for its owner to rejoin."""
+        def card(c):
+            return Card(c['location'], c['color'], c['power'])
+        session = cls(data['game_id'], data['host_sid'], data['game_mode'],
+                      data['required_players'], data['power_cards'])
+        session.players = data['players']
+        for player in session.players.values():
+            player['connected'] = player['is_ai']
+        session.player_order = data['player_order']
+        session.ai_players = {name: AIPlayer(difficulty)
+                              for name, difficulty in data['ai_players'].items()}
+        for key in ('started', 'discard_piles', 'winner', 'round_id', 'series_number',
+                    'series_round', 'series_wins', 'series_winner', 'awarded_round',
+                    'next_game_mode', 'next_power_cards', 'deck_reshuffles',
+                    'last_move', 'move_id'):
+            setattr(session, key, data[key])
+        session.recycle_pool = [card(c) for c in data['recycle_pool']]
+
+        saved = data['game']
+        game = TwentyDots(num_players=saved['num_players'], difficulty='easy',
+                          ai_opponents={}, power_cards=False)
+        game.grid = [[Dot(color) if color else None for color in row] for row in saved['grid']]
+        game.deck = [card(c) for c in saved['deck']]
+        game.players = {name: {**p, 'hand': [card(c) for c in p['hand']]}
+                        for name, p in saved['players'].items()}
+        game.current_player_idx = saved['current_player_idx']
+        position = saved['yellow_dot_position']
+        game.yellow_dot_position = tuple(position) if position else None
+        game.landmines = saved['landmines']
+        game.can_roll_dice = saved['can_roll_dice']
+        game.turn_cards_played = saved['turn_cards_played']
+        game.must_advance_after_roll = saved['must_advance_after_roll']
+        session.game = game
+        return session
+
     def get_player_name(self, sid):
         """Get player name from session ID"""
         player = self.players.get(sid, {})
@@ -473,31 +594,65 @@ class GameSession:
         else:
             self.advance_turn()
 
-    def choose_ai_power(self, player_name):
-        """Deterministic safe fallback, with exactly the same validation as human plays."""
+    def ai_power_options(self, player_name):
+        """Every legal (card, targets) power play, validated exactly like human plays."""
         empty = [r + c for y, r in enumerate(self.game.rows)
                  for x, c in enumerate(self.game.columns) if self.game.grid[y][x] is None]
         sources = [r + c for y, r in enumerate(self.game.rows)
                    for x, c in enumerate(self.game.columns)
                    if self.game.grid[y][x] is not None
                    and self.game.grid[y][x].color in self.game.colors]
+        color_at = {r + c: self.game.grid[y][x].color for y, r in enumerate(self.game.rows)
+                    for x, c in enumerate(self.game.columns) if r + c in sources}
+        options, seen = [], set()
         for card in self.get_player_hand(player_name):
             power = card['power']
-            if power == 'swap' and len(sources) >= 2:
-                candidates = [sources[:2]]
-            elif power == 'paint' and empty:
-                candidates = [empty[:1]]
-            elif power == 'shift' and sources and empty:
-                candidates = [[source, destination] for source in sources for destination in empty]
-            else:
+            if power is None or (power, card['color']) in seen:
                 continue
+            seen.add((power, card['color']))
+            if power == 'swap':
+                # Swapping two dots of one color changes nothing.
+                candidates = [[a, b] for i, a in enumerate(sources) for b in sources[i + 1:]
+                              if color_at[a] != color_at[b]]
+            elif power == 'paint':
+                candidates = [[cell] for cell in empty]
+            else:
+                candidates = [[source, destination] for source in sources for destination in empty]
             for targets in candidates:
                 try:
-                    self.resolve_power(player_name, card, targets)
+                    _, cells = self.resolve_power(player_name, card, targets)
                 except ValueError:
                     continue
-                return card, targets
-        return None
+                options.append((card, targets, cells))
+        return options
+
+    def ai_context(self, player_name, power_options=None):
+        """What a seated player can see: the board, every score, and their own hand."""
+        hand = self.game.players[player_name]['hand']
+        return {
+            'board': [[dot.color if dot else None for dot in row] for row in self.game.grid],
+            'me': player_name,
+            'order': list(self.player_order),
+            'mode': self.game_mode,
+            'players': {name: {'score': dict(p['score']), 'total_dots': p['total_dots'],
+                               'yellow_dots': p.get('yellow_dots', 0)}
+                        for name, p in self.game.players.items()},
+            'cards_left': 2 - self.game.turn_cards_played.get(player_name, 0),
+            'regular_hand': [c for c in hand if c.power is None and c.location != 'PWR'],
+            'power_options': [(card, card['power'], card['color'], cells)
+                              for card, _, cells in power_options or []],
+        }
+
+    def choose_ai_power(self, player_name):
+        """The seat's AI picks among all legal powers; humans' seats get the first legal one."""
+        options = self.ai_power_options(player_name)
+        if not options:
+            return None
+        ai = self.ai_players.get(player_name)
+        context = self.ai_context(player_name, options)
+        index = ai.choose_power(context['power_options'], context) if ai else 0
+        card, targets, _ = options[index]
+        return card, targets
 
     def broadcast_action(self):
         """Public board/recycling notice and one private hand per connected human."""
@@ -656,7 +811,9 @@ class GameSession:
                     if not hand:
                         self.refill_hand(name)
                     regular = [c for c in hand if c.power is None and c.location != 'PWR']
-                    indices = self.ai_players[name].choose_cards(regular) if regular else []
+                    powers = self.ai_power_options(name) if used == 0 and self.power_cards else []
+                    indices = (self.ai_players[name].choose_cards(
+                        regular, self.ai_context(name, powers)) if regular else [])
                     selected = []
                     locations = set()
                     for index in indices:
@@ -691,6 +848,7 @@ class GameSession:
                     self.broadcast_action()
             finally:
                 self.ai_move_in_progress = False
+        persist(self.game_id)
         self.schedule_ai()
     
     def check_winner(self):
@@ -750,6 +908,7 @@ def handle_connect():
     emit('connected', {'sid': request.sid})
 
 @socketio.on('disconnect')
+@persisted
 def handle_disconnect():
     print(f"Client disconnected: {request.sid}")
     # Find and update player's connection status
@@ -791,6 +950,7 @@ def rematch_allowed(session, data):
 
 
 @socketio.on('rematch_ready')
+@persisted
 def handle_rematch_ready(data):
     session = event_session(data)
     if session is None:
@@ -811,6 +971,7 @@ def handle_rematch_ready(data):
 
 
 @socketio.on('rematch_options')
+@persisted
 def handle_rematch_options(data):
     session = event_session(data)
     if session is None:
@@ -891,6 +1052,7 @@ def validate_join_data(data):
 
 
 @socketio.on('leave_game')
+@persisted
 def handle_leave_game(data):
     """Leave a lobby, or mark a started seat disconnected without deleting its game data."""
     game_id = data.get('game_id')
@@ -920,6 +1082,7 @@ def handle_leave_game(data):
         del games[game_id]
 
 @socketio.on('create_game')
+@persisted
 def handle_create_game(data):
     """Host creates a new game"""
     if not isinstance(data, dict):
@@ -959,6 +1122,7 @@ def handle_create_game(data):
     print(f"Game created: {game_id} by {player_name}")
 
 @socketio.on('join_game')
+@persisted
 def handle_join_game(data):
     """Explicit create/join/rejoin, with auto-create retained for legacy clients.
 
@@ -1041,6 +1205,7 @@ def handle_join_game(data):
         game_session.schedule_ai()
 
 @socketio.on('add_ai_player')
+@persisted
 @serialized_event
 def handle_add_ai(data):
     """Host adds an AI player"""
@@ -1084,6 +1249,7 @@ def handle_add_ai(data):
     print(f"AI player {ai_name} added to game {game_id}")
 
 @socketio.on('start_single_player')
+@persisted
 def handle_start_single_player(data):
     """Start a single-player game with AI opponents"""
     if not isinstance(data, dict):
@@ -1148,6 +1314,7 @@ def handle_start_single_player(data):
     print(f"Single-player game {game_id} started with {player_name} vs {num_players - 1} AI opponents")
 
 @socketio.on('start_game')
+@persisted
 @serialized_event
 def handle_start_game(data):
     """Host starts the game"""
@@ -1187,6 +1354,7 @@ def handle_start_game(data):
     print(f"Game {game_id} started with players: {game_session.player_order}")
 
 @socketio.on('play_power')
+@persisted
 @serialized_event
 def handle_play_power(data):
     session = event_session(data)
@@ -1204,6 +1372,7 @@ def handle_play_power(data):
 
 
 @socketio.on('play_cards')
+@persisted
 @serialized_event
 def handle_play_cards(data):
     """Player plays one or more cards"""
@@ -1384,6 +1553,7 @@ def handle_play_cards(data):
 
 
 @socketio.on('end_turn')
+@persisted
 @serialized_event
 def handle_end_turn(data):
     """Player ends their turn"""
@@ -1455,6 +1625,7 @@ def handle_end_turn(data):
 
 
 @socketio.on('roll_dice')
+@persisted
 @serialized_event
 def handle_roll_dice(data):
     """Player rolls dice for yellow wild dot"""
@@ -1531,6 +1702,7 @@ def handle_roll_dice(data):
     print(f"{player_name} rolled dice")
 
 @socketio.on('pass_turn')
+@persisted
 @serialized_event
 def handle_pass_turn(data):
     """Player passes their turn without playing cards"""
@@ -1634,4 +1806,5 @@ if __name__ == '__main__':
     print(f"Web client at: http://0.0.0.0:{port}/web_client.html")
     print("Deck shuffle: ENABLED")
     print("=" * 60)
+    restore_rooms()
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)

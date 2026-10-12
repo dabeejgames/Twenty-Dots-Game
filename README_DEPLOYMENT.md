@@ -39,6 +39,15 @@ Render automatically assigns a PORT environment variable. The game server needs 
 - Takes ~30 seconds to wake up when someone connects
 - Perfect for casual gaming with friends!
 
+### Keep Games Alive Across Restarts (Recommended)
+The server saves every room after each move. Render's free tier wipes the disk whenever the service sleeps or redeploys, so on Render the saved rooms need to live in Redis:
+
+1. Create a free Redis database. Render Key Value and Upstash both have free plans.
+2. In your Render service, open **Environment** and add `REDIS_URL` with the connection URL (it starts with `redis://` or `rediss://`).
+3. Redeploy. The startup log shows `[ROOM_STORE] Restored N room(s) from Redis`.
+
+Without `REDIS_URL` the server saves to a local SQLite file. That works on your own computer or on hosts with a persistent disk, but on Render's free tier games still end when the server restarts.
+
 ## Alternative: Play on Local Network
 
 ### For Local Network Play (Free, No Deploy Needed):
