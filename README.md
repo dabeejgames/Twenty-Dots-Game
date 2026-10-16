@@ -122,6 +122,14 @@ To play with friends on the same WiFi:
 4. Friends open `http://[YOUR_IP]:5000/web_client.html` in their browser.
 5. Create a room from that address and share its invite link or room code. A localhost invite only works on the host computer.
 
+### Learn, celebrate, and keep your best moments
+
+- **Learn by playing:** a free-standing, three-move lesson on the home screen teaches card coordinates, line collection, yellow wilds, and Paint. It needs no room or account, supports keyboard controls, and never sends moves to a live game. Finish it to unlock **First Connection**, then jump to easy practice or replay the lesson anytime.
+- **Clearer scoring:** the latest scorer gets a `+N` chip, collected squares and the score card briefly highlight, and multi-line moves and winning moves have distinct sounds. Existing dot-flight effects remain. Motion respects both the device setting and the in-game Reduce motion preference; sounds respect Game sounds.
+- **Your stats & badges:** view finished rounds, wins, win rate, current/best win streak, dots collected in finished rounds, best round, and best observed move from the home screen or results dialog. Seven cosmetic badges reward learning, wins, multi-line moves, and playing all modes. No gameplay advantages or accounts.
+- Progress is **local to this browser**, shared by player names and including AI practice. It does not sync across devices and is not a competitive ranking. Best-move records only include snapshots received on this device; abandoned rounds are not recorded as losses. Duplicate results and terminal rejoining do not count a round twice. Supported browsers serialize updates across tabs with Web Locks; older/restricted browsers should use one tab for reliable stats.
+- Clearing site storage clears progress. If storage is unavailable or full, play still works and new progress is kept for the current page when possible. No analytics requests or additional server endpoints are used.
+
 ### Validation
 
 - Server regression tests: `python -m unittest discover -s tests -v` (protocol, saved rooms, and AI decisions, including a check that the AI's board simulator matches the server's rules on random boards).
@@ -134,7 +142,9 @@ To play with friends on the same WiFi:
 - Set `PLAYWRIGHT_BROWSER=webkit` to run either browser suite in WebKit (install it with `npx --prefix tests playwright install webkit`). Browser emulation does not replace testing sound/haptics on physical devices.
 - With a local game server running, `npm run test:music --prefix tests` checks actual synthesized audio output, opt-in playback, volume, preference migration, lifecycle pause/resume, and mobile accessibility. It uses `GAME_URL` and `PLAYWRIGHT_BROWSER` like the smoke suite.
 - The replay suite also covers all three powers: target/cancel previews, full-turn costs, yellow rolls, winning moves, private hands, refresh/rejoin, and host Power Play changes at 320px.
-- Browser code and styles are in `static/game.js` and `static/game.css`; no frontend build step is needed.
+- The replay suite also checks the tutorial, keyboard targeting/focus, lesson and stats accessibility at 320px, storage denial, earned badges, and result deduplication after refresh/rejoin.
+- Run `npm run test:progress --prefix tests` for dependency-free unit tests of stats, streaks, mode milestones, storage corruption/quota failures, and cross-tab locking.
+- Browser code and styles are in `static/game.js`, `static/game.css`, `static/journey.js` (lesson and stats UI), and `static/progress.js` (local records); no frontend build step is needed.
 
 ## 📁 Project Structure
 

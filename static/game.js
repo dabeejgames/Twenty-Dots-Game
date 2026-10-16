@@ -53,6 +53,17 @@
         };
         $('music-status').textContent = messages[status];
     });
+    const journey = new window.DotsJourney(new window.DotsProgress({ get: storageGet, set: storageSet }), {
+        note: playNote,
+        isCurrent: state => app.game?.game_id === state.game_id && app.game?.round_id === state.round_id,
+        canPractice: () => app.screen === 'home' && !app.connecting,
+        practice: () => {
+            if (app.screen !== 'home' || app.connecting) return;
+            setMode('solo');
+            $('difficulty').value = 'easy';
+            $('player-name').focus();
+        },
+    });
 
     function node(tag, className, text) {
         const element = document.createElement(tag);
@@ -528,6 +539,7 @@
             clearSelection();
             app.activity = [];
             app.winnerShown = null;
+            $('personal-result').textContent = '';
             $('winner-dialog').close();
             document.querySelectorAll('.collection-particle').forEach(el => el.remove());
             clearReactionMessage();
@@ -547,6 +559,7 @@
             clearSelection();
         }
         app.game = state;
+        journey.observe(state, app.seat.player_name);
         // A pass does not change the hand. Other actions unlock on the private hand event.
         if (app.pending === 'pass_turn' || state.winner) setPending(null);
         const mode = MODES[state.game_mode] || MODES.twenty_dots;
@@ -592,6 +605,11 @@
             person.append(avatar, label);
             const main = node('div', 'score-main');
             main.append(node('b', '', player.total_dots), node('span', '', 'dots'));
+            if (app.game.last_move?.player === name && app.game.last_move.points > 0) {
+                const gain = node('em', 'score-gain', `+${app.game.last_move.points}`);
+                gain.setAttribute('aria-label', `${app.game.last_move.points} dots on the last move`);
+                main.append(gain);
+            }
             const progress = node('div', 'score-progress');
             const progressBar = node('i');
             let fraction = player.total_dots / 20;
@@ -1002,10 +1020,10 @@
         music.update(preferences.music, preferences.musicVolume, document.hidden || pageHidden);
     }
 
-    function playNote(scored, champion) {
+    function playNote(scored, champion, multiLine = false) {
         if (!preferences.sound || audio?.state !== 'running' || document.hidden) return;
         try {
-            const notes = champion ? [523, 659, 784, 1047] : scored ? [523, 659] : [392];
+            const notes = champion ? [523, 659, 784, 1047] : multiLine ? [523, 659, 784] : scored ? [523, 659] : [392];
             notes.forEach((frequency, index) => {
                 const oscillator = audio.createOscillator();
                 const gain = audio.createGain();
@@ -1038,11 +1056,20 @@
             $('move-summary').textContent = `${callout}${move.player} used ${POWERS[move.power].title} · ${detail}${move.points ? ` · +${move.points} dots` : ''}.`;
         }
         if (!animate || document.hidden) return;
-        playNote(move.points > 0, Boolean(app.game.series?.winner));
+        playNote(move.points > 0, Boolean(app.game.winner), move.lines >= 2);
         if (move.points > 0 && move.player === app.seat.player_name && preferences.haptics) {
             try { navigator.vibrate?.(app.game.winner ? [25, 40, 25] : 20); } catch { /* Unsupported device. */ }
         }
         if (reducedMotion()) return;
+        const pulse = (element, className) => {
+            if (!element) return;
+            element.classList.add(className);
+            element.addEventListener('animationend', () => element.classList.remove(className), { once: true });
+        };
+        if (move.points > 0) {
+            pulse(Array.from(document.querySelectorAll('.score-card')).find(el => el.dataset.player === move.player), 'score-pop');
+            for (const dot of move.collected || []) pulse($(`cell-${dot.location}`), 'line-pop');
+        }
         const destination = Array.from(document.querySelectorAll('.score-card')).find(el => el.dataset.player === move.player)?.getBoundingClientRect();
         if (!destination || destination.bottom < 0 || destination.top > innerHeight) return;
         for (const [index, dot] of (move.collected || []).slice(0, 36).entries()) {

@@ -7,10 +7,12 @@
     <meta name="description" content="A small board. Endless possibilities. Play Twenty Dots with friends: match colors, collect dots, and make your next move count.">
     <title>Twenty Dots — Make your move.</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23222538'/%3E%3Ccircle cx='22' cy='22' r='9' fill='%23f27361'/%3E%3Ccircle cx='43' cy='22' r='9' fill='%238d79d6'/%3E%3Ccircle cx='22' cy='43' r='9' fill='%235ba98b'/%3E%3Ccircle cx='43' cy='43' r='9' fill='%23e5b846'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="static/game.css?v=2026-10-10b">
+    <link rel="stylesheet" href="static/game.css?v=2026-10-16a">
     <script defer src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script defer src="static/music.js?v=2026-10-10b"></script>
-    <script defer src="static/game.js?v=2026-10-10b"></script>
+    <script defer src="static/progress.js?v=2026-10-16a"></script>
+    <script defer src="static/journey.js?v=2026-10-16a"></script>
+    <script defer src="static/game.js?v=2026-10-16a"></script>
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to game</a>
@@ -36,6 +38,7 @@
                 <p class="eyebrow"><span class="tiny-dot"></span> GOOD COMPANY. GREAT MOVES.</p>
                 <h1 id="home-title">Small dots.<br>Big <span class="serif-accent">possibilities.</span></h1>
                 <p class="home-description">A little luck. A little strategy. A reason to get everyone around the same board.</p>
+                <div class="journey-intro"><button class="button button-secondary" data-learn>Learn by playing ↗</button><button class="text-button" data-stats>Your stats &amp; badges</button><p class="field-note" id="learning-note">Three guided moves. No room or account needed.</p></div>
                 <div class="home-meta"><span><b>2–4</b> players</span><span><b>6 × 6</b> possibilities</span><span><b>One</b> more round</span></div>
                 <div class="demo-scene" aria-hidden="true">
                     <div class="scene-tag"><span class="tiny-dot"></span> Your next great move</div>
@@ -139,6 +142,8 @@
         <div class="winner-art" aria-hidden="true"><i class="dot red">R</i><span>✳</span><i class="dot purple">P</i></div>
         <h2 id="winner-title">Well played.</h2><p class="muted" id="winner-description"></p>
         <p class="series-result" id="series-result"></p><div id="final-scores" class="final-scores"></div>
+        <p class="personal-result" id="personal-result" role="status"></p>
+        <button class="text-button" data-stats>Your stats &amp; badges ↗</button>
         <section class="rematch-panel" aria-label="Next round">
             <div id="rematch-host-options"><label for="rematch-mode">Next round’s game plan</label><select id="rematch-mode"><option value="twenty_dots">The classic · First to 20 dots</option><option value="five_colors">Color collector · 5 of each color</option><option value="five_with_yellow">Wild ambition · Every color + yellow</option></select><label class="power-option" for="rematch-powers"><input id="rematch-powers" type="checkbox"><span><strong>Power Play next round</strong><small>Changing this resets everyone’s readiness.</small></span></label></div>
             <p id="rematch-goal" class="field-note"></p>
@@ -169,6 +174,32 @@
         </div>
         <p class="field-note">Music and game sounds start on; vibration starts off. Music pauses when you switch away. Preferences stay on this device.</p>
         <button class="button button-primary button-wide" data-close="preferences-dialog">That feels right.</button>
+    </dialog>
+
+    <dialog id="lesson-dialog" class="modal lesson-modal" aria-labelledby="lesson-title" aria-describedby="lesson-description">
+        <div class="modal-top"><span class="eyebrow" id="lesson-step">YOUR FIRST GOOD MOVES</span><button class="icon-button" data-close="lesson-dialog" aria-label="Close lesson">×</button></div>
+        <div class="lesson-progress" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h2 id="lesson-title" tabindex="-1">Find your first line.</h2>
+        <p class="muted" id="lesson-description"></p>
+        <div id="lesson-play-area">
+            <div class="board-wrap lesson-board-wrap"><div id="lesson-board" class="board" role="group" aria-label="Lesson board, rows A to F and columns 1 to 6"></div></div>
+            <div class="lesson-hand"><button class="lesson-card" id="lesson-card" aria-pressed="false"></button><p class="field-note" id="lesson-card-hint"></p></div>
+        </div>
+        <p class="lesson-feedback" id="lesson-feedback" role="status" aria-live="polite"></p>
+        <button class="button button-primary button-wide" id="lesson-action" disabled>Choose your card</button>
+        <button class="text-button" id="lesson-practice" hidden>Try a practice game ↗</button>
+        <p class="field-note">A guided example, not a live match. Lessons never change your game stats.</p>
+    </dialog>
+
+    <dialog id="stats-dialog" class="modal" aria-labelledby="stats-title">
+        <div class="modal-top"><span class="eyebrow">YOUR LITTLE HALL OF FAME</span><button class="icon-button" data-close="stats-dialog" aria-label="Close stats">×</button></div>
+        <h2 id="stats-title">Every move adds up.</h2>
+        <p class="muted">Your results on this browser, including practice games. No account, rankings, or tracking.</p>
+        <dl class="stats-grid" id="stats-grid"></dl>
+        <h3>Little milestones. Great memories.</h3>
+        <ul class="badge-list" id="badge-list"></ul>
+        <p class="field-note">Shared by all player names on this browser. Completed rounds count once, including after rejoining. Best move reflects moves seen on this device. Clearing browser storage clears your progress; storage must be available to save it.</p>
+        <button class="button button-primary button-wide" data-close="stats-dialog">Keep making moves ↗</button>
     </dialog>
 
     <dialog id="share-dialog" class="modal modal-small"><div class="modal-top"><span class="eyebrow">SAVE THEM A SEAT</span><button class="icon-button" data-close="share-dialog" aria-label="Close invite">×</button></div><h2>A little friendly competition.</h2><label for="invite-url">Copy this invite link</label><input id="invite-url" readonly><p class="field-note">Select and copy the link to send it to a friend.</p><button class="button button-primary button-wide" data-close="share-dialog">Done</button></dialog>

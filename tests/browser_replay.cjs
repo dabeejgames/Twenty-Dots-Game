@@ -58,6 +58,7 @@ async function audit(page, label) {
         assert(ready, `Fixture server did not start: ${output}`);
         browser = await engines[process.env.PLAYWRIGHT_BROWSER || 'chromium'].launch();
         const pages = [], exceptions = [];
+        await require('./browser_journey.cjs')(browser, base, audit, exceptions);
         for (const [index, name] of ['Alex', 'Maya', 'Jules', '<img onerror=alert(1)>'].entries()) {
             const context = await browser.newContext({ viewport: { width: index === 3 ? 1440 : 320, height: 900 } });
             await context.addInitScript(() => {
@@ -82,7 +83,7 @@ async function audit(page, label) {
                 } });
             });
             const page = await context.newPage();
-            page.on('pageerror', error => exceptions.push(error.message));
+            page.on('pageerror', error => { exceptions.push(error.message); console.error('Browser error:', error.message); });
             pages.push(page);
             const code = index ? await pages[0].locator('#lobby-code').textContent() : null;
             await page.goto(`${base}/web_client.html${code ? `?room=${code}` : ''}`);
@@ -93,7 +94,13 @@ async function audit(page, label) {
             await page.locator(index === 3 ? '#game-screen' : '#lobby-screen').waitFor({ state: 'visible' });
         }
         const [host, guest, third, fourth] = pages;
-        for (const page of pages) await page.waitForFunction(() => window.lastState && document.querySelectorAll('.playing-card').length === 5);
+        for (const page of pages) {
+            try { await page.waitForFunction(() => window.lastState && document.querySelectorAll('.playing-card').length === 5); }
+            catch (error) {
+                console.error('Initial deal:', await page.evaluate(() => ({ events: window.observed, state: window.lastState, cards: document.querySelectorAll('.playing-card').length })));
+                throw error;
+            }
+        }
         const code = await host.locator('#game-room-code').textContent();
         const token = await host.evaluate(() => JSON.parse(localStorage.getItem('twenty-dots.seat.v1')).resume_token);
         async function prepare(page, options = {}) {
@@ -163,6 +170,12 @@ async function audit(page, label) {
 
         await playPrepared(host, { winning: true });
         for (const page of pages) await page.locator('#winner-dialog').waitFor({ state: 'visible' });
+        await host.waitForFunction(() => JSON.parse(localStorage.getItem('twenty-dots.progress.v1'))?.wins === 1);
+        assert.match(await host.locator('#personal-result').textContent(), /New badges/);
+        await host.locator('#winner-dialog [data-stats]').click();
+        await audit(host, 'Stats over round results');
+        assert.match(await host.locator('#badge-list').textContent(), /A Win Well Earned · Earned/);
+        await host.keyboard.press('Escape');
         assert.match(await host.locator('#move-summary').textContent(), /Wild finish/);
         await audit(host, 'Round result at 320px');
         assert(await guest.locator('#rematch-host-options').isHidden());
@@ -171,6 +184,7 @@ async function audit(page, label) {
         await host.reload();
         await host.locator('#resume-button').click();
         await host.locator('#winner-dialog').waitFor({ state: 'visible' });
+        assert.equal(await host.evaluate(() => JSON.parse(localStorage.getItem('twenty-dots.progress.v1')).rounds), 1, 'Terminal resume does not double-count results');
         assert.equal(await host.evaluate(() => window.particleCount), 0, 'Terminal resume does not animate historic move');
         assert(await host.evaluate(() => document.body.classList.contains('reduce-motion')));
         assert.equal(await host.evaluate(() => JSON.parse(localStorage.getItem('twenty-dots.seat.v1')).resume_token), token);
@@ -204,7 +218,7 @@ async function audit(page, label) {
         for (const page of pages) assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await require('./browser_powers.cjs')(browser, base, request, audit, exceptions);
         assert.deepEqual(exceptions, []);
-        console.log(`PASS (${process.env.PLAYWRIGHT_BROWSER || 'chromium'}): real-backend deck recycling, double-line/wild feedback, motion preferences/dedup, reactions/cooldown/mute, terminal refresh, host goal/readiness reset, two rematches, rotating starters, fresh series, accessibility.`);
+        console.log(`PASS (${process.env.PLAYWRIGHT_BROWSER || 'chromium'}): tutorial, personal stats/badges, storage denial, real-backend deck recycling, double-line/wild feedback, motion preferences/dedup, reactions/cooldown/mute, terminal refresh, host goal/readiness reset, two rematches, rotating starters, fresh series, accessibility.`);
     } finally {
         if (browser) await browser.close();
         server.kill();
