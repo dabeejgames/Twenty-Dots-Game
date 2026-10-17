@@ -27,7 +27,7 @@ room_store = open_store()
 
 ONLINE_POWERS = ('paint', 'shift', 'swap', 'block', 'tax')
 POWER_TARGETS = {'paint': 1, 'shift': 2, 'swap': 2, 'block': 1, 'tax': 1}
-MARKET_SIZE = 3  # Face-up cards anyone may play under Strategy rules.
+MARKET_SIZE = 5  # Face-up cards anyone may play under Strategy rules (5 beat 3 in self-play).
 BLOCKED_MESSAGE = 'That square is blocked until its owner’s next turn'
 
 

@@ -1628,7 +1628,7 @@ class MultiplayerTests(unittest.TestCase):
                 self.assertIs(state['strategy_rules'], enabled)
                 self.assertIs(state['rematch']['next_strategy_rules'], enabled)
                 self.assertIs(session.get_lobby_state()['strategy_rules'], enabled)
-                self.assertEqual(len(state['market']), 3 if enabled else 0)
+                self.assertEqual(len(state['market']), server.MARKET_SIZE if enabled else 0)
                 self.assertTrue(all(c.power is None for c in session.market))
                 self.assertEqual((state['wild_options'], state['market_played']), ([], False))
                 cards = self.all_cards(session)
@@ -1649,7 +1649,8 @@ class MultiplayerTests(unittest.TestCase):
         self.assertEqual(session.ready_players, set())  # Changing the rules clears readiness.
         for client in clients:
             self.ready(client, session)
-        self.assertEqual((session.round_id, session.strategy_rules, len(session.market)), (2, True, 3))
+        self.assertEqual((session.round_id, session.strategy_rules, len(session.market)),
+                         (2, True, server.MARKET_SIZE))
 
     def test_market_card_plays_once_per_turn_and_refills(self):
         clients, session = self.table(strategy_rules=True)
@@ -1665,7 +1666,7 @@ class MultiplayerTests(unittest.TestCase):
         self.assertEqual(session.game.players['P0']['score']['red'], 3)
         self.assertNotIn(played, session.market)
         self.assertIn(played, session.recycle_pool)
-        self.assertEqual(len(state['market']), 3)
+        self.assertEqual(len(state['market']), server.MARKET_SIZE)
         self.assertTrue(state['market_played'])
         self.assertEqual(state['players']['P0']['discard_pile'][-1],
                          {'location': 'A3', 'color': 'red', 'market': True})
@@ -1715,7 +1716,7 @@ class MultiplayerTests(unittest.TestCase):
         session.game.deck = [c for c in session.game.deck if c.power is not None]
         self.payload(self.emit(clients[0], 'play_cards', game_id='room', round_id=1,
                                cards=[self.market_card(session.market[0])]), 'game_updated')
-        self.assertEqual(len(session.market), 3)
+        self.assertEqual(len(session.market), server.MARKET_SIZE)
         self.assertTrue(all(c.power is None for c in session.market))
         self.assertEqual(session.deck_reshuffles, 1)
         self.assert_card_partition(session, originals)
@@ -1777,7 +1778,7 @@ class MultiplayerTests(unittest.TestCase):
         self.assertIn(session.game.yellow_dot_position, ((3, 3), (4, 1), None))
         self.assertEqual(session.game.get_current_player(), 'P1')
         self.assertGreaterEqual(session.game.players['P0']['score']['red'], 3)  # Took A3 from the market.
-        self.assertEqual(len(session.market), 3)
+        self.assertEqual(len(session.market), server.MARKET_SIZE)
         self.assert_card_partition(session, originals)
 
     def test_regular_play_rejects_power_payload_and_disguised_actual_power(self):

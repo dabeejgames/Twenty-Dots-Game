@@ -69,9 +69,9 @@ module.exports = async function testStrategy(browser, base, request, audit, erro
         await prepare();
         for (const page of [host, guest]) {
             await page.locator('#market-panel').waitFor({ state: 'visible' });
-            assert.equal(await page.locator('.market-card').count(), 3);
+            assert.equal(await page.locator('.market-card').count(), 5);
         }
-        const a3 = host.locator('.market-card[aria-label*="A3"]');
+        const a3 = host.locator('.market-card[aria-label*="red, A3"]');
         await a3.click();
         assert.equal(await a3.getAttribute('aria-pressed'), 'true');
         assert(await host.locator('#cell-A3').evaluate(cell => cell.classList.contains('preview')));
@@ -81,7 +81,7 @@ module.exports = async function testStrategy(browser, base, request, audit, erro
         await host.locator('#primary-action').click();
         await host.waitForFunction(() => window.lastState.market_played);
         assert.equal(await host.evaluate(() => window.lastState.players.Planner.score.red), 3);
-        assert.equal(await host.evaluate(() => window.lastState.market.length), 3);
+        assert.equal(await host.evaluate(() => window.lastState.market.length), 5, 'The market refills');
         assert.equal(await host.evaluate(() => window.privateHand.length), 5, 'Market play keeps the hand');
         assert.match(await host.locator('#market-note').textContent(), /used the market/);
         assert.equal(await host.locator('.market-card:not([disabled])').count(), 0, 'One market card per turn');
@@ -91,7 +91,7 @@ module.exports = async function testStrategy(browser, base, request, audit, erro
         await host.locator('#primary-action').click();
         await host.waitForFunction(() => window.lastState.current_turn === 'Rival');
         await guest.waitForFunction(() => window.lastState.current_turn === 'Rival' && !window.lastState.market_played);
-        assert.equal(await guest.locator('.market-card:not([disabled])').count(), 3, 'The next player can use the market');
+        assert.equal(await guest.locator('.market-card:not([disabled])').count(), 5, 'The next player can use the market');
         for (const page of [host, guest]) assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         console.log('PASS: Strategy rules lobby option, two-square wild choice, face-up market play once per turn, hand kept, market refill, mobile accessibility.');
     } finally {

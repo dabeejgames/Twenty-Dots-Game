@@ -86,7 +86,7 @@ def prepare_position():
 
 
 def prepare_strategy(session, data):
-    """Strategy rules: a known market (red A3 finishes red A1-A2), optionally awaiting a roll."""
+    """Strategy rules: a full market led by red A3 (finishes red A1-A2), optionally awaiting a roll."""
     if not session.strategy_rules:
         abort(400)
     game = session.game
@@ -106,6 +106,7 @@ def prepare_strategy(session, data):
                     game.deck.remove(pool[index])
                 session.market.append(card)
                 break
+    session.refill_market()  # The known cards come first; the rest refill from the deck.
     game.grid = [[None for _ in range(6)] for _ in range(6)]
     game.yellow_dot_position = None
     if not data.get('roll'):

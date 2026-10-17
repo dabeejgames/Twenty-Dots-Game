@@ -14,7 +14,7 @@ A strategic multiplayer board game where players compete to collect colored dots
    - Open the web client and enter your name.
    - Choose **Create room**, 2–4 players, and a game goal.
    - Optionally enable **Power Play** for five power cards. Paint, color-matched one-step Shift, and Swap build lines. Block and Tax get in your opponents' way. Leave Power Play off for regular-card play.
-   - Optionally enable **Strategy rules** for less luck and more planning. Three face-up market cards sit beside your hand: anyone can play one per turn as one of their two plays, and the market refills right away, so whatever you leave is there for the next player. Each wild roll shows two squares, and the roller chooses where yellow lands.
+   - Optionally enable **Strategy rules** for less luck and more planning. Five face-up market cards sit beside your hand: anyone can play one per turn as one of their two plays, and the market refills right away, so whatever you leave is there for the next player. Each wild roll shows two squares, and the roller chooses where yellow lands.
    - Send the **Invite friends** link, or copy the room code.
 
 2. **Join Friends:**
