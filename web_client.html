@@ -82,6 +82,8 @@
                         <label class="power-option" for="power-cards"><input id="power-cards" type="checkbox"><span><strong>Power Play</strong><small>Paint, Shift, and Swap to build. Block and Tax to get in the way.</small></span></label>
                         <p class="field-note">Optional · 20 tactical cards. Each power uses your whole turn.</p>
                         <button class="text-button" type="button" data-power-help>Meet the power cards ↗</button>
+                        <label class="power-option" for="strategy-rules"><input id="strategy-rules" type="checkbox"><span><strong>Strategy rules</strong><small>Three face-up market cards anyone can play. Roll two wild squares and choose one.</small></span></label>
+                        <p class="field-note">Optional · Less luck, more planning.</p>
                     </div>
                     <div id="solo-options" hidden><label for="difficulty">Your opponent</label><select id="difficulty"><option value="easy">Easy · Find your rhythm</option><option value="medium" selected>Medium · A little competition</option><option value="hard">Hard · Make every move count</option></select></div>
                     <p class="form-error" id="form-error" role="alert" hidden></p>
@@ -111,6 +113,7 @@
                     <section class="power-guide" id="power-guide" aria-labelledby="power-title" hidden><div class="power-guide-heading"><strong id="power-title"></strong><button class="text-button" id="cancel-power">Cancel power</button></div><p id="power-description"></p><p id="power-target-status" role="status"></p><div class="power-players" id="power-players" hidden></div><button class="text-button" id="reset-power-targets">Choose targets again</button></section>
                     <div class="board-wrap"><div class="board-top"><span>MAKE YOUR MOVE</span><span><i class="tiny-dot yellow"></i> Yellow is wild</span></div><div id="board" class="board" role="group" aria-label="Game board, rows A to F and columns 1 to 6"></div><div class="board-bottom"><span id="board-hint">Tap a card to preview its position.</span><span id="deck-count">— in deck</span></div></div>
                     <p class="move-summary" id="move-summary" role="status">Every good game starts with a little luck.</p>
+                    <section class="market-dock" id="market-panel" aria-label="Face-up market" hidden><div class="hand-heading"><h3>Market <span id="market-note">Anyone can play one per turn</span></h3></div><div class="hand market-cards" id="market"></div></section>
                     <button class="text-button" id="power-help-button" data-power-help hidden>Power Play · How powers work ↗</button>
                     <section class="hand-dock" aria-label="Your cards and turn actions"><div class="hand-heading"><h3>Your hand <span id="hand-count"></span></h3><button class="text-button" id="clear-selection" disabled>Clear selection</button></div><div class="hand" id="hand"></div><div class="turn-actions"><button class="button button-primary" id="primary-action" disabled>Waiting for cards</button><button class="button button-secondary" id="end-turn" disabled>Pass turn</button></div><p class="action-note" id="action-note">Your hand is only visible to you.</p></section>
                     <section class="reaction-panel" aria-label="Quick reactions">
@@ -145,7 +148,7 @@
         <p class="personal-result" id="personal-result" role="status"></p>
         <button class="text-button" data-stats>Your stats &amp; badges ↗</button>
         <section class="rematch-panel" aria-label="Next round">
-            <div id="rematch-host-options"><label for="rematch-mode">Next round’s game plan</label><select id="rematch-mode"><option value="twenty_dots">The classic · First to 20 dots</option><option value="five_colors">Color collector · 5 of each color</option><option value="five_with_yellow">Wild ambition · Every color + yellow</option></select><label class="power-option" for="rematch-powers"><input id="rematch-powers" type="checkbox"><span><strong>Power Play next round</strong><small>Changing this resets everyone’s readiness.</small></span></label></div>
+            <div id="rematch-host-options"><label for="rematch-mode">Next round’s game plan</label><select id="rematch-mode"><option value="twenty_dots">The classic · First to 20 dots</option><option value="five_colors">Color collector · 5 of each color</option><option value="five_with_yellow">Wild ambition · Every color + yellow</option></select><label class="power-option" for="rematch-powers"><input id="rematch-powers" type="checkbox"><span><strong>Power Play next round</strong><small>Changing this resets everyone’s readiness.</small></span></label><label class="power-option" for="rematch-strategy"><input id="rematch-strategy" type="checkbox"><span><strong>Strategy rules next round</strong><small>Face-up market and a choice of wild squares.</small></span></label></div>
             <p id="rematch-goal" class="field-note"></p>
             <div id="ready-list" class="ready-list" aria-label="Player readiness"></div>
             <p id="rematch-status" class="field-note" role="status"></p>

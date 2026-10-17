@@ -429,11 +429,13 @@ class MultiplayerTests(unittest.TestCase):
             self.payload(self.emit(first, 'play_cards', game_id='room', cards=cards), 'error')
             self.assertEqual(session.get_game_state(), before)
 
-    def table(self, count=2, room='room', mode='twenty_dots', power_cards=False):
+    def table(self, count=2, room='room', mode='twenty_dots', power_cards=False,
+              strategy_rules=False):
         clients = [self.client() for _ in range(count)]
         for index, client in enumerate(clients):
             self.join(client, f'P{index}', room, player_count=count, game_mode=mode,
-                      intent='create' if index == 0 else 'join', power_cards=power_cards)
+                      intent='create' if index == 0 else 'join', power_cards=power_cards,
+                      strategy_rules=strategy_rules)
         return clients, server.games[room]
 
     def ready(self, client, session, ready=True, round_id=None):
@@ -445,7 +447,7 @@ class MultiplayerTests(unittest.TestCase):
         return session.get_game_state()
 
     def assert_card_partition(self, session, originals):
-        cards = list(session.game.deck) + list(session.recycle_pool)
+        cards = list(session.game.deck) + list(session.recycle_pool) + list(session.market)
         for player in session.game.players.values():
             cards.extend(player['hand'])
         self.assertEqual(len(cards), len(originals))
@@ -460,7 +462,8 @@ class MultiplayerTests(unittest.TestCase):
             self.assertEqual(state['round_id'], 1)
             self.assertEqual(state['series'], expected)
             self.assertEqual(state['rematch'], {'ready': [], 'next_game_mode': 'twenty_dots',
-                                                'next_power_cards': False})
+                                                'next_power_cards': False,
+                                                'next_strategy_rules': False})
         self.assertIsNone(session.get_game_state()['last_move'])
         self.assertEqual(session.get_game_state()['deck_reshuffles'], 0)
         state = self.win_round(session, 'P0')
@@ -577,7 +580,8 @@ class MultiplayerTests(unittest.TestCase):
                                 game_mode=mode)
             state = self.payload(changed, 'rematch_updated')
             self.assertEqual(state['rematch'], {'ready': [], 'next_game_mode': mode,
-                                                'next_power_cards': False})
+                                                'next_power_cards': False,
+                                                'next_strategy_rules': False})
             self.assertEqual(session.game_mode, 'twenty_dots')
             self.assertEqual(state['series']['wins']['P0'], 1)
             self.ready(clients[1], session)
@@ -926,7 +930,7 @@ class MultiplayerTests(unittest.TestCase):
 
 
     def all_cards(self, session):
-        return list(session.game.deck) + list(session.recycle_pool) + [
+        return list(session.game.deck) + list(session.recycle_pool) + list(session.market) + [
             c for p in session.game.players.values() for c in p['hand']]
 
     def own_power(self, session, power, color='red', name='P0'):
@@ -1584,6 +1588,197 @@ class MultiplayerTests(unittest.TestCase):
         scores({'red': 3}, {}, {'red': 3})
         self.assertEqual(session.tax_targets('P0', 'red'), ['P2'])
         self.assertEqual(session.tax_targets('P0', 'blue'), [])
+
+    def take_card(self, session, location, color):
+        """Move a real regular card out of wherever it is, refilling a hand it leaves."""
+        for pool in [session.game.deck, session.recycle_pool, session.market] + [
+                p['hand'] for p in session.game.players.values()]:
+            card = next((c for c in pool if c.power is None and c.location == location
+                         and c.color == color), None)
+            if card is not None:
+                index = pool.index(card)
+                if any(pool is p['hand'] for p in session.game.players.values()):
+                    pool[index] = session.game.deck.pop()
+                else:
+                    pool.pop(index)
+                return card
+        self.fail(f'Missing {color} {location}')
+
+    def set_market(self, session, *specs):
+        session.game.deck.extend(session.market)
+        session.market = []
+        session.market = [self.take_card(session, location, color) for location, color in specs]
+
+    def market_card(self, card):
+        return {'location': list(card.location), 'color': card.color, 'power': None, 'market': True}
+
+    def test_strategy_option_validation_schema_and_market_partition(self):
+        for event in ('join_game', 'create_game', 'start_single_player'):
+            for value in (None, 0, 1, 'true', []):
+                with self.subTest(event=event, value=value):
+                    events = self.emit(self.client(), event, game_id='invalid',
+                                       player_name='Host', strategy_rules=value)
+                    self.payload(events, 'error')
+                    self.assertFalse(server.games)
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                clients, session = self.table(3, f's{enabled}', power_cards=True,
+                                              strategy_rules=enabled)
+                state = session.get_game_state()
+                self.assertIs(state['strategy_rules'], enabled)
+                self.assertIs(state['rematch']['next_strategy_rules'], enabled)
+                self.assertIs(session.get_lobby_state()['strategy_rules'], enabled)
+                self.assertEqual(len(state['market']), 3 if enabled else 0)
+                self.assertTrue(all(c.power is None for c in session.market))
+                self.assertEqual((state['wild_options'], state['market_played']), ([], False))
+                cards = self.all_cards(session)
+                self.assertEqual(len(cards), 164)
+                self.assert_card_partition(session, {id(c) for c in cards})
+
+    def test_strategy_rematch_option_is_host_only_and_carries_over(self):
+        clients, session = self.table(strategy_rules=False)
+        self.win_round(session, 'P0')
+        self.payload(self.emit(clients[1], 'rematch_options', game_id='room', round_id=1,
+                               strategy_rules=True), 'error')
+        self.payload(self.emit(clients[0], 'rematch_options', game_id='room', round_id=1,
+                               strategy_rules='yes'), 'error')
+        self.ready(clients[1], session)
+        events = self.emit(clients[0], 'rematch_options', game_id='room', round_id=1,
+                           strategy_rules=True)
+        self.assertIs(self.payload(events, 'rematch_updated')['rematch']['next_strategy_rules'], True)
+        self.assertEqual(session.ready_players, set())  # Changing the rules clears readiness.
+        for client in clients:
+            self.ready(client, session)
+        self.assertEqual((session.round_id, session.strategy_rules, len(session.market)), (2, True, 3))
+
+    def test_market_card_plays_once_per_turn_and_refills(self):
+        clients, session = self.table(strategy_rules=True)
+        session.game.can_roll_dice = False
+        self.set_market(session, ('A3', 'red'), ('F6', 'blue'), ('F5', 'green'))
+        originals = {id(c) for c in self.all_cards(session)}
+        played = session.market[0]
+        session.game.grid[0][0] = Dot('red')
+        session.game.grid[0][1] = Dot('red')
+        state = self.payload(self.emit(clients[0], 'play_cards', game_id='room', round_id=1,
+                                       cards=[self.market_card(played)]), 'game_updated')
+        self.assertEqual(state['last_move']['placements'], [{'location': 'A3', 'color': 'red', 'market': True}])
+        self.assertEqual(session.game.players['P0']['score']['red'], 3)
+        self.assertNotIn(played, session.market)
+        self.assertIn(played, session.recycle_pool)
+        self.assertEqual(len(state['market']), 3)
+        self.assertTrue(state['market_played'])
+        self.assertEqual(state['players']['P0']['discard_pile'][-1],
+                         {'location': 'A3', 'color': 'red', 'market': True})
+        self.assertEqual(len(session.game.players['P0']['hand']), 5)  # Hand untouched.
+        self.assert_card_partition(session, originals)
+        # A second market card waits until next turn; the hand still plays.
+        before = self.power_snapshot(session)
+        events = self.emit(clients[0], 'play_cards', game_id='room', round_id=1,
+                           cards=[self.market_card(session.market[0])])
+        self.assertIn('market', self.payload(events, 'error')['message'])
+        self.assertEqual(self.power_snapshot(session), before)
+        hand = [c for c in session.get_player_hand('P0') if c['power'] is None][:1]
+        state = self.payload(self.emit(clients[0], 'play_cards', game_id='room', round_id=1,
+                                       cards=hand), 'game_updated')
+        self.assertEqual((state['current_turn'], state['market_played']), ('P1', False))
+        self.assert_card_partition(session, originals)
+
+    def test_market_requests_are_validated_without_mutation(self):
+        clients, session = self.table(strategy_rules=True)
+        session.game.can_roll_dice = False
+        self.set_market(session, ('A3', 'red'), ('F6', 'blue'), ('F5', 'green'))
+        a3, f6 = session.market[0], session.market[1]
+        session.blocks = [{'location': 'F5', 'player': 'P1'}]
+        for cards in ([self.market_card(a3), self.market_card(f6)],
+                      [self.market_card(session.market[2])],
+                      [{**self.market_card(a3), 'color': 'blue'}],
+                      [{**self.market_card(a3), 'market': 'yes'}],
+                      [{**self.market_card(a3), 'location': ['B', '3']}]):
+            before = self.power_snapshot(session)
+            self.payload(self.emit(clients[0], 'play_cards', game_id='room', round_id=1,
+                                   cards=cards), 'error')
+            self.assertEqual(self.power_snapshot(session), before)
+        with self.assertRaises(ValueError):
+            session.apply_cards('P0', [a3, f6], [a3, f6])
+        plain_clients, plain = self.table(room='plain')
+        plain.game.can_roll_dice = False
+        events = self.emit(plain_clients[0], 'play_cards', game_id='plain', round_id=1,
+                           cards=[self.market_card(a3)])
+        self.assertIn('market', self.payload(events, 'error')['message'])
+
+    def test_market_refills_from_recycled_cards_without_losing_any(self):
+        clients, session = self.table(power_cards=True, strategy_rules=True)
+        session.game.can_roll_dice = False
+        originals = {id(c) for c in self.all_cards(session)}
+        # Only powers remain in the deck; every other regular card waits to be recycled.
+        session.recycle_pool.extend(c for c in session.game.deck if c.power is None)
+        session.game.deck = [c for c in session.game.deck if c.power is not None]
+        self.payload(self.emit(clients[0], 'play_cards', game_id='room', round_id=1,
+                               cards=[self.market_card(session.market[0])]), 'game_updated')
+        self.assertEqual(len(session.market), 3)
+        self.assertTrue(all(c.power is None for c in session.market))
+        self.assertEqual(session.deck_reshuffles, 1)
+        self.assert_card_partition(session, originals)
+
+    def test_wild_roll_offers_two_squares_and_the_roller_chooses(self):
+        clients, session = self.table(strategy_rules=True)
+        session.blocks = [{'location': 'B2', 'player': 'P1'}]
+        rolls = [('B', '2'), ('C', '3'), ('C', '3'), ('E', '5')]  # Blocked and repeat squares re-roll.
+        with patch.object(session.game, 'roll_dice', side_effect=rolls):
+            state = self.payload(self.emit(clients[0], 'roll_dice', game_id='room', round_id=1),
+                                 'game_updated')
+        self.assertEqual(state['wild_options'], ['C3', 'E5'])
+        self.assertTrue(state['can_roll_dice'])
+        self.assertIsNone(state['last_move'])
+        self.assertTrue(all(cell is None for row in session.game.grid for cell in row))
+        before = self.power_snapshot(session)
+        for event, extra in (('roll_dice', {}), ('roll_dice', {'location': 'A1'}),
+                             ('roll_dice', {'location': ['C', '3']}), ('pass_turn', {}),
+                             ('end_turn', {}),
+                             ('play_cards', {'cards': session.get_player_hand('P0')[:1]})):
+            self.payload(self.emit(clients[0], event, game_id='room', round_id=1, **extra), 'error')
+            self.assertEqual(self.power_snapshot(session), before)
+        self.payload(self.emit(clients[1], 'roll_dice', game_id='room', round_id=1,
+                               location='E5'), 'error')
+        state = self.payload(self.emit(clients[0], 'roll_dice', game_id='room', round_id=1,
+                                       location='E5'), 'game_updated')
+        self.assertEqual(session.game.grid[4][4].color, 'yellow')
+        self.assertEqual((state['wild_options'], state['can_roll_dice']), ([], False))
+        self.assertEqual(state['last_move']['placements'], [{'location': 'E5', 'color': 'yellow'}])
+        self.assertEqual(state['current_turn'], 'P0')
+        plain_clients, plain = self.table(room='plain')
+        events = self.emit(plain_clients[0], 'roll_dice', game_id='plain', round_id=1, location='A1')
+        self.assertIn('Strategy rules', self.payload(events, 'error')['message'])
+
+    def test_strategy_state_survives_restart(self):
+        clients, session = self.table(strategy_rules=True)
+        with patch.object(session.game, 'roll_dice', side_effect=[('A', '1'), ('F', '6')]):
+            self.emit(clients[0], 'roll_dice', game_id='room', round_id=1)
+        restored = server.GameSession.restore(json.loads(json.dumps(session.snapshot())))
+        self.assertEqual(self.comparable(restored), self.comparable(session))
+        self.assertEqual(restored.get_game_state()['market'], session.get_game_state()['market'])
+        self.assertEqual(restored.wild_options, ['A1', 'F6'])
+        legacy = json.loads(json.dumps(session.snapshot()))
+        for key in ('strategy_rules', 'next_strategy_rules', 'market', 'market_played', 'wild_options'):
+            del legacy[key]
+        old = server.GameSession.restore(legacy)
+        self.assertEqual((old.strategy_rules, old.market, old.wild_options), (False, [], []))
+
+    def test_ai_strategy_turn_chooses_a_wild_and_may_use_the_market(self):
+        clients, session = self.table(strategy_rules=True)
+        session.ai_players['P0'] = server.AIPlayer('hard')
+        originals = {id(c) for c in self.all_cards(session)}
+        self.set_market(session, ('A3', 'red'), ('F6', 'blue'), ('F5', 'green'))
+        session.game.grid[0][0] = Dot('red')
+        session.game.grid[0][1] = Dot('red')
+        with patch.object(session.game, 'roll_dice', side_effect=[('D', '4'), ('E', '2')] * 8):
+            session.execute_ai_move()
+        self.assertEqual(session.wild_options, [])
+        self.assertIn(session.game.yellow_dot_position, ((3, 3), (4, 1), None))
+        self.assertEqual(session.game.get_current_player(), 'P1')
+        self.assertGreaterEqual(session.game.players['P0']['score']['red'], 3)  # Took A3 from the market.
+        self.assertEqual(len(session.market), 3)
+        self.assert_card_partition(session, originals)
 
     def test_regular_play_rejects_power_payload_and_disguised_actual_power(self):
         clients, session = self.table(power_cards=True)

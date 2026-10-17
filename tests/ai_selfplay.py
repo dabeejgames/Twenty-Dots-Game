@@ -1,4 +1,4 @@
-"""Head-to-head AI strength check: py -3 tests/ai_selfplay.py [games] [mode] [--powers].
+"""Head-to-head AI strength check: py -3 tests/ai_selfplay.py [games] [mode] [--powers] [--strategy].
 
 Plays two-seat games through the real GameSession turn loop, swapping seats each game,
 and reports win rates plus the slowest single AI decision.
@@ -21,9 +21,9 @@ with patch('flask_socketio.SocketIO', side_effect=lambda *a, **kw: _socketio(
 from ai_player import AIPlayer
 
 
-def play(first, second, mode, powers, seed):
+def play(first, second, mode, powers, strategy, seed):
     random.seed(seed)
-    session = server.GameSession(f'g{seed}', 's0', mode, 2, powers)
+    session = server.GameSession(f'g{seed}', 's0', mode, 2, powers, strategy)
     for i, difficulty in enumerate((first, second)):
         session.add_player(f's{i}', f'P{i}', is_ai=True)
         session.ai_players[f'P{i}'].difficulty = difficulty
@@ -44,6 +44,7 @@ def main():
     games = int(args[0]) if args else 40
     mode = args[1] if len(args) > 1 else 'twenty_dots'
     powers = '--powers' in sys.argv
+    strategy = '--strategy' in sys.argv
     pairings = [('hard', 'medium'), ('medium', 'easy'), ('hard', 'easy')]
     with patch.object(server.socketio, 'start_background_task'):
         for a, b in pairings:
@@ -52,10 +53,11 @@ def main():
             for g in range(games):
                 seats = (a, b) if g % 2 == 0 else (b, a)
                 with contextlib.redirect_stdout(io.StringIO()):
-                    winner, slow, _ = play(*seats, mode, powers, seed=g)
+                    winner, slow, _ = play(*seats, mode, powers, strategy, seed=g)
                 slowest = max(slowest, slow)
                 wins[seats[int(winner[1:])] if winner else None] += 1
-            print(f'{mode}{" +powers" if powers else ""}: {a} {wins[a]} - {wins[b]} {b}'
+            rules = (' +powers' if powers else '') + (' +strategy' if strategy else '')
+            print(f'{mode}{rules}: {a} {wins[a]} - {wins[b]} {b}'
                   f' ({wins[None]} unfinished), slowest turn {slowest:.2f}s', flush=True)
 
 

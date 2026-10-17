@@ -129,6 +129,16 @@ def offered_dots(board, cells):
     return total
 
 
+def simulate_roll(board, row, col):
+    """The wild placed at (row, col) on a copy. Returns (board, gains, collected_wild)."""
+    board = [line[:] for line in board]
+    board[row][col] = 'yellow'
+    gains = empty_gains()
+    match, _ = find_match(board, row, col, 'yellow')
+    wild = collect(board, match, gains) if match else False
+    return board, gains, wild
+
+
 def response_gains(board, row, col, color):
     """Gains from one card placed on `board`, without copying it."""
     replaced = board[row][col]
@@ -249,7 +259,9 @@ class AIPlayer:
         Without `context` (the desktop game) this uses card-only heuristics. With the
         board `context` from the online server, it returns the indices to play now:
         fewer than `context['cards_left']` ends the turn early, and an empty list on a
-        fresh turn asks the server to use the best power card instead.
+        fresh turn asks the server to use the best power card instead. Indices past the
+        hand pick `context['market']` cards (Strategy rules), at most one per turn, and only
+        while `context['market_playable']`.
         """
         if context is not None:
             return self._choose_with_board(hand, context)
@@ -259,6 +271,26 @@ class AIPlayer:
             return self._choose_cards_medium(hand)
         else:
             return self._choose_cards_hard(hand)
+
+    def choose_wild(self, options: List[str], context: dict) -> int:
+        """Index of the rolled square (e.g. 'C4') to place the wild on, under Strategy rules."""
+        if self.difficulty == 'easy':
+            return self.rng.randrange(len(options))
+        hand = [(''.join(c.location), c.color) for c in context.get('regular_hand', [])]
+        plans = []
+        for i, location in enumerate(options):
+            board, gains, wild = simulate_roll(
+                context['board'], ROWS.index(location[0]), COLUMNS.index(location[1]))
+            plans.append({'cards': (), 'power': None, 'wild_option': i, 'board': board,
+                          'gains': gains, 'wild': wild, 'played': 0, 'hand': hand,
+                          'market': self._market(context)})
+        return self._best(plans, context)['wild_option']
+
+    @staticmethod
+    def _market(context, skip=()):
+        """Face-up market cards as (location, color), minus any this plan plays."""
+        return [(''.join(c.location), c.color) for i, c in enumerate(context.get('market', []))
+                if i not in skip]
 
     def choose_power(self, options: List, context: dict):
         """Index of the power option to play, from (card, power, color, cells) options."""
@@ -272,10 +304,10 @@ class AIPlayer:
     # --- Board-aware play -----------------------------------------------------
 
     def _choose_with_board(self, hand, context):
-        cards = [(''.join(card.location), card.color) for card in hand]
-        if not cards:
+        cards = [(''.join(card.location), card.color) for card in hand] + self._market(context)
+        if not hand and not context.get('market_playable'):
             return []
-        if self.difficulty == 'easy' and self.rng.random() < 0.7:
+        if hand and self.difficulty == 'easy' and self.rng.random() < 0.7:
             # Mostly random play, but an obvious line still gets taken now and then.
             return self._choose_cards_easy(hand)[:context['cards_left']]
         plans = self._card_plans(cards, context)
@@ -286,12 +318,17 @@ class AIPlayer:
         return [] if best['power'] is not None else list(best['cards'])
 
     def _card_plans(self, cards, context):
-        """Every distinct-location ordering of up to cards_left cards."""
+        """Every distinct-location ordering of up to cards_left cards, one market card at most."""
         allowed = context['cards_left']
-        sequences = [(i,) for i in range(len(cards))]
+        own = len(cards) - len(context.get('market', []))  # Market cards follow the hand.
+        board = context['board']
+        usable = list(range(own)) + [
+            i for i in range(own, len(cards)) if context.get('market_playable')
+            and board[ROWS.index(cards[i][0][0])][COLUMNS.index(cards[i][0][1])] != BLOCK]
+        sequences = [(i,) for i in usable]
         if allowed >= 2:
-            sequences += [(i, j) for i in range(len(cards)) for j in range(len(cards))
-                          if i != j and cards[i][0] != cards[j][0]]
+            sequences += [(i, j) for i in usable for j in usable
+                          if i != j and cards[i][0] != cards[j][0] and (i < own or j < own)]
         if self.difficulty == 'hard' and self.STOP_EARLY and allowed < 2:
             sequences.append(())  # Stop after one card instead of feeding the board.
         elif self.difficulty != 'hard':
@@ -302,8 +339,9 @@ class AIPlayer:
         for sequence in sequences:
             board, gains, wild = simulate_cards(context['board'], [cards[i] for i in sequence])
             plans.append({'cards': sequence, 'power': None, 'board': board, 'gains': gains,
-                          'wild': wild, 'played': len(sequence),
-                          'hand': [card for i, card in enumerate(cards) if i not in sequence]})
+                          'wild': wild, 'played': sum(i < own for i in sequence),
+                          'hand': [card for i, card in enumerate(cards[:own]) if i not in sequence],
+                          'market': self._market(context, {i - own for i in sequence})})
         return plans
 
     def _power_plan(self, index, option, context):
@@ -311,7 +349,7 @@ class AIPlayer:
         board, gains, wild = simulate_power(context['board'], power, color, cells)
         hand = [(''.join(c.location), c.color) for c in context.get('regular_hand', [])]
         plan = {'cards': (), 'power': index, 'board': board, 'gains': gains,
-                'wild': wild, 'played': 1, 'hand': hand}
+                'wild': wild, 'played': 1, 'hand': hand, 'market': self._market(context)}
         if power == 'tax':
             plan['harm'], plan['players'] = self._tax_harm(cells[0], color, context)
         elif power == 'block':
@@ -379,8 +417,9 @@ class AIPlayer:
         players = plan.get('players', context['players'])
         rival = players[order[(order.index(context['me']) + 1) % len(order)]]
         total = 0.0
+        market = plan.get('market', [])
         for rival_hand, draws in samples:
-            threat, board = best_play(plan['board'], rival_hand, rival, mode)
+            threat, board = best_play(plan['board'], rival_hand + market, rival, mode)
             follow_up, _ = best_play(board, plan['hand'] + draws[:plan['played']], me, mode)
             total += follow_up - threat
         return total / len(samples)
@@ -423,6 +462,11 @@ class AIPlayer:
         unknown = SIZE * SIZE * len(COLORS) - len(plan['hand'])
         threat = sum((1.0 if k == 0 else 0.5) * expected_top_two(offered[name], unknown)
                      for k, name in enumerate(opponents))
+        market = [goal_value(response_gains(board, ROWS.index(loc[0]), COLUMNS.index(loc[1]), color),
+                             players[opponents[0]], mode)
+                  for loc, color in plan.get('market', [])
+                  if board[ROWS.index(loc[0])][COLUMNS.index(loc[1])] != BLOCK]
+        threat += max(market, default=0.0)
         mine.sort(reverse=True)
         value = self.FUTURE_WEIGHT * sum(mine[:2])
         value += self.DRAW_WEIGHT * plan['played'] * own_total / unknown

@@ -14,6 +14,7 @@ A strategic multiplayer board game where players compete to collect colored dots
    - Open the web client and enter your name.
    - Choose **Create room**, 2–4 players, and a game goal.
    - Optionally enable **Power Play** for five power cards. Paint, color-matched one-step Shift, and Swap build lines. Block and Tax get in your opponents' way. Leave Power Play off for regular-card play.
+   - Optionally enable **Strategy rules** for less luck and more planning. Three face-up market cards sit beside your hand: anyone can play one per turn as one of their two plays, and the market refills right away, so whatever you leave is there for the next player. Each wild roll shows two squares, and the roller chooses where yellow lands.
    - Send the **Invite friends** link, or copy the room code.
 
 2. **Join Friends:**
@@ -61,6 +62,7 @@ A strategic multiplayer board game where players compete to collect colored dots
 - **Mobile-first Table:** Responsive board, card previews, touch controls, and persistent private hands
 - **Room Invites:** Native mobile sharing, clipboard links, and a live waiting room
 - **Reconnect:** Token-protected saved seats and automatic connection recovery
+- **Optional Strategy rules:** A shared face-up market and a choice of wild squares, so planning ahead matters more than the draw. Compare with `python tests/ai_selfplay.py 100 twenty_dots --powers --strategy`
 - **Optional Power Play:** Five tactical online powers (three that build, two that get in the way) with target previews, full-turn costs, and server-validated effects; [power rules](POWER_CARDS_README.md)
 - **Desktop Variant:** The existing desktop powers and landmines remain separate from the focused online set
 - **AI Opponents:** Computer players read the board and play toward the round's goal. Easy plays loosely, Medium takes the best move available now, and Hard also weighs what each move leaves open for the next player, holds back a card rather than set up a line, and plays Power Play cards
@@ -110,6 +112,13 @@ The server saves each room after every move and reloads saved rooms when it star
 - Set `REDIS_URL` to save rooms in Redis instead. Use this on hosts whose disk is wiped on restart, such as Render's free tier; see [README_DEPLOYMENT.md](README_DEPLOYMENT.md).
 - Set `ROOM_STORE=off` to keep rooms in memory only.
 
+### Strategy Rules Contract
+
+- Creation and practice accept a strict optional `strategy_rules` boolean, and `rematch_options` accepts it for the next round. Public state includes `strategy_rules`, `market` (face-up `{location, color}` cards), `market_played`, `wild_options`, and `rematch.next_strategy_rules`.
+- `play_cards` accepts at most one card marked `"market": true` per turn. It counts toward the two plays, keeps the hand, and the market refills from regular deck cards (powers stay in the deck).
+- `roll_dice` without `location` rolls two distinct, unblocked squares into `wild_options`. Nothing else can happen until the roller sends `roll_dice` again with one of them as `location`. Without Strategy rules, `location` is rejected.
+- The market and pending wild options are saved with the room. Rooms saved before Strategy rules existed restore without them.
+
 ### Local Network Play
 
 To play with friends on the same WiFi:
@@ -133,7 +142,7 @@ To play with friends on the same WiFi:
 ### Validation
 
 - Server regression tests: `python -m unittest discover -s tests -v` (protocol, saved rooms, and AI decisions, including a check that the AI's board simulator matches the server's rules on random boards).
-- AI strength check: `python tests/ai_selfplay.py [games] [mode] [--powers]` plays the difficulty levels against each other and reports win rates and the slowest AI turn.
+- AI strength check: `python tests/ai_selfplay.py [games] [mode] [--powers] [--strategy]` plays the difficulty levels against each other and reports win rates and the slowest AI turn.
 - Browser test setup: `npm install --prefix tests`, then `npx --prefix tests playwright install chromium`.
 - With the game server running locally, run `npm test --prefix tests`.
 - Set `GAME_URL` to test another **local/test** server. Browser checks create real rooms and run four players through turns, refresh/rejoin, offline recovery, and AI practice.
@@ -141,6 +150,7 @@ To play with friends on the same WiFi:
 - Run `npm run test:replay --prefix tests` for deterministic real-backend rematch, series, reaction, preferences, and deck-recycling checks. It starts and stops its own loopback-only fixture server on port 5001. Set `TEST_PYTHON` to your Python interpreter path if needed, or `BROWSER_FIXTURE_PORT` to another unused port. Fixture setup is authenticated with an ephemeral key and exists only in the separate test entry point, never in the production server.
 - Set `PLAYWRIGHT_BROWSER=webkit` to run either browser suite in WebKit (install it with `npx --prefix tests playwright install webkit`). Browser emulation does not replace testing sound/haptics on physical devices.
 - With a local game server running, `npm run test:music --prefix tests` checks actual synthesized audio output, opt-in playback, volume, preference migration, lifecycle pause/resume, and mobile accessibility. It uses `GAME_URL` and `PLAYWRIGHT_BROWSER` like the smoke suite.
+- The replay suite also runs [tests/browser_strategy.cjs](tests/browser_strategy.cjs) for Strategy rules: the two-square wild choice, market play once per turn, and the refill.
 - The replay suite also covers all five powers: target/cancel previews, full-turn costs, yellow rolls, winning moves, private hands, refresh/rejoin, and host Power Play changes at 320px.
 - The replay suite also checks the tutorial, keyboard targeting/focus, lesson and stats accessibility at 320px, storage denial, earned badges, and result deduplication after refresh/rejoin.
 - Run `npm run test:progress --prefix tests` for dependency-free unit tests of stats, streaks, mode milestones, storage corruption/quota failures, and cross-tab locking.

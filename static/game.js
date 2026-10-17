@@ -24,7 +24,7 @@
     const REACTIONS = { nice_move: 'Nice move!', well_played: 'Well played!', close_one: 'Close one!', rematch: 'Rematch?' };
     const app = {
         mode: 'create', socket: null, seat: null, lobby: null, game: null,
-        hand: [], selected: [], powerTargets: [], joined: false, handReady: false,
+        hand: [], selected: [], powerTargets: [], marketSelected: null, wildChoice: null, joined: false, handReady: false,
         pending: null, pendingTimer: null, connecting: false,
         screen: 'home', winnerShown: null, activity: [],
         rematchPending: false, rematchTimer: null, reactionUntil: 0,
@@ -361,6 +361,7 @@
         const request = {
             player_name: name, player_count: count,
             power_cards: $('power-cards').checked,
+            strategy_rules: $('strategy-rules').checked,
             game_mode: $('game-mode').value, intent: app.mode === 'join' ? 'join' : 'create',
         };
         app.seat = null;
@@ -387,6 +388,7 @@
         $('lobby-goal').textContent = mode.short;
         $('lobby-count').textContent = `${lobby.required_players} players · Private room`;
         $('lobby-count').textContent += lobby.power_cards ? ' · Power Play' : ' · Regular cards';
+        if (lobby.strategy_rules) $('lobby-count').textContent += ' · Strategy rules';
         const fragment = document.createDocumentFragment();
         for (let i = 0; i < lobby.required_players; i++) {
             const player = lobby.players[i];
@@ -423,7 +425,15 @@
         return app.selected.length === 1 && isPower(card) ? card : null;
     }
 
-    function clearSelection() { app.selected = []; app.powerTargets = []; }
+    function clearSelection() { app.selected = []; app.powerTargets = []; app.marketSelected = null; app.wildChoice = null; }
+
+    function selectedMarketCard() {
+        return app.marketSelected === null ? null : app.game?.market?.[app.marketSelected] || null;
+    }
+
+    function selectionCount() { return app.selected.length + (selectedMarketCard() ? 1 : 0); }
+
+    function choosingWild() { return Boolean(myTurn() && app.game.wild_options?.length); }
 
     function boardColor(location) {
         return app.game?.board[location.charCodeAt(0) - 65]?.[Number(location[1]) - 1]?.color || null;
@@ -571,6 +581,11 @@
         const newRound = !app.game || app.game.round_id !== state.round_id;
         const previous = newRound ? null : app.game;
         if (previous && previous.last_move?.id !== state.last_move?.id) app.powerTargets = [];
+        if (JSON.stringify(previous?.market) !== JSON.stringify(state.market)) app.marketSelected = null;
+        if (JSON.stringify(previous?.wild_options) !== JSON.stringify(state.wild_options)) {
+            app.wildChoice = null;
+            if (previous && state.wild_options?.length) log(`${state.current_turn} rolled ${state.wild_options.join(' and ')} for the wild.`);
+        }
         if (newRound) {
             clearTimeout(app.pendingTimer);
             app.pending = null;
@@ -608,6 +623,7 @@
         $('game-title').textContent = mode.title.toUpperCase();
         $('game-goal').textContent = mode.goal;
         $('game-goal').textContent += state.power_cards ? ' · Power Play' : '';
+        $('game-goal').textContent += state.strategy_rules ? ' · Strategy' : '';
         $('power-help-button').hidden = !state.power_cards;
         $('game-room-code').textContent = app.seat.game_id;
         $('deck-count').textContent = `${state.deck_size} in deck`;
@@ -615,6 +631,7 @@
         renderScores();
         renderBoard(animate ? previous?.board : null);
         renderHand();
+        renderMarket();
         renderControls();
         renderMove(state.last_move, Boolean(previous && animate && state.last_move?.id !== previous.last_move?.id));
         if (previous && animate && state.deck_reshuffles > previous.deck_reshuffles) {
@@ -718,6 +735,12 @@
                 const color = app.game.board[row]?.[column]?.color;
                 const selectedIndex = app.selected.findIndex(index => locationOf(app.hand[index]) === location);
                 let previewCard = selectedIndex >= 0 ? app.hand[app.selected[selectedIndex]] : null;
+                const marketCard = selectedMarketCard();
+                const marketPreview = !previewCard && marketCard && locationOf(marketCard) === location;
+                if (marketPreview) previewCard = marketCard;
+                const wildOption = Boolean(app.game.wild_options?.includes(location));
+                if (wildOption && app.wildChoice === location) previewCard = { color: 'yellow' };
+                cell.classList.toggle('wild-option', wildOption);
                 const power = selectedPower();
                 const targetIndex = app.powerTargets.indexOf(location);
                 const swapping = power?.power === 'swap';
@@ -744,14 +767,16 @@
                 if (previewCard || color) content.push(coloredDot(previewCard ? previewCard.color : color));
                 if (blocked || blocking) content.push(node('span', 'block-mark', '⛔'));
                 if (legal && !color) content.push(node('span', 'target-plus', '+'));
-                if (previewCard || source) content.push(node('span', 'selection-number', power ? targetIndex + 1 : selectedIndex + 1));
+                const number = power ? targetIndex + 1 : marketPreview ? app.selected.length + 1 : selectedIndex + 1;
+                if ((previewCard || source) && number > 0) content.push(node('span', 'selection-number', number));
                 cell.replaceChildren(...content);
-                cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? `; blocked by ${blockOwner(location)}` : ''}${placed ? '; last move placed here' : ''}${collected ? '; last move collected here' : ''}${previewCard ? `; preview ${previewCard.color}, card ${selectedIndex + 1}` : ''}`);
+                cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? `; blocked by ${blockOwner(location)}` : ''}${placed ? '; last move placed here' : ''}${collected ? '; last move collected here' : ''}${wildOption ? '; rolled wild square' : ''}${previewCard ? `; preview ${previewCard.color}${marketPreview ? ', market card' : selectedIndex >= 0 ? `, card ${selectedIndex + 1}` : ''}` : ''}`);
                 if (power) cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? '; blocked' : ''}${source ? '; selected source' : destination ? `; preview ${previewCard.color} destination` : blocking ? '; preview block' : legal ? '; valid power target' : ''}`);
                 cell.setAttribute('aria-pressed', String(Boolean(previewCard || source || blocking)));
             }
         }
-        $('board-hint').textContent = selectedPower() ? 'Power targets are previews until you confirm.' : app.selected.length ? 'Outlined dots preview your selected cards.' : 'Tap a card to preview its position.';
+        $('board-hint').textContent = choosingWild() ? 'Tap one of the two rolled squares for yellow.'
+            : selectedPower() ? 'Power targets are previews until you confirm.' : app.selected.length ? 'Outlined dots preview your selected cards.' : 'Tap a card to preview its position.';
     }
 
     function boardKeyboard(event) {
@@ -796,6 +821,50 @@
         if (!app.hand.length) fragment.append(node('div', 'hand-empty', app.handReady ? 'No cards left. You can pass your turn.' : 'Dealing your next possibilities…'));
         $('hand').replaceChildren(fragment);
         if (focusIndex !== undefined) $('hand').querySelector(`[data-card-index="${focusIndex}"]`)?.focus({ preventScroll: true });
+        renderMarket();
+    }
+
+    function renderMarket() {
+        const strategy = Boolean(app.game?.strategy_rules);
+        $('market-panel').hidden = !strategy;
+        if (!strategy) return;
+        const used = app.game.market_played && myTurn();
+        $('market-note').textContent = used ? 'You used the market this turn' : 'Anyone can play one per turn';
+        const cards = (app.game.market || []).map((card, index) => {
+            const location = locationOf(card);
+            const selected = app.marketSelected === index;
+            const button = node('button', `playing-card market-card${selected ? ' selected' : ''}${isBlocked(location) ? ' blocked-card' : ''}`);
+            button.type = 'button';
+            button.dataset.marketIndex = String(index);
+            button.disabled = !canSelect() || used;
+            button.setAttribute('aria-pressed', String(selected));
+            button.setAttribute('aria-label', `Market card ${index + 1}: ${card.color}, ${location}${isBlocked(location) ? ', blocked' : ''}${selected ? ', selected' : ''}`);
+            button.append(node('span', 'card-coordinate', location), coloredDot(card.color), node('span', 'card-color', card.color.toUpperCase()));
+            if (selected) button.append(node('span', 'card-check', '✓'));
+            button.addEventListener('click', () => toggleMarket(index));
+            return button;
+        });
+        $('market').replaceChildren(...(cards.length ? cards : [node('div', 'market-empty', 'The market is empty until played cards are shuffled back in.')]));
+    }
+
+    function toggleMarket(index) {
+        if (!canSelect()) return;
+        const card = app.game.market?.[index];
+        if (!card) return;
+        if (selectedPower()) clearSelection();
+        if (app.marketSelected === index) app.marketSelected = null;
+        else {
+            const location = locationOf(card);
+            const max = myTurn() ? Math.max(0, 2 - app.game.cards_played_this_turn) : 2;
+            if (myTurn() && app.game.market_played) return toast('You already played a market card this turn.');
+            if (isBlocked(location)) return toast(`${location} is blocked until ${blockOwner(location)}’s next turn.`);
+            if (app.selected.some(i => locationOf(app.hand[i]) === location)) return toast('Choose two different positions when playing cards together.');
+            if (app.marketSelected === null && selectionCount() >= max) {
+                return toast(max ? `Choose up to ${max} ${max === 1 ? 'card' : 'cards'}. Clear a selection to choose another.` : 'Your cards are played. Roll the wild dice to finish your turn.');
+            }
+            app.marketSelected = index;
+        }
+        renderHand(); renderMarket(); renderBoard(); renderControls();
     }
 
     function toggleCard(index) {
@@ -821,23 +890,31 @@
         if (app.selected.includes(index)) app.selected = app.selected.filter(i => i !== index);
         else {
             const max = myTurn() ? Math.max(0, 2 - app.game.cards_played_this_turn) : 2;
-            if (app.selected.length >= max) {
+            if (selectionCount() >= max) {
                 toast(max ? `Choose up to ${max} ${max === 1 ? 'card' : 'cards'}. Clear a selection to choose another.` : 'Your cards are played. Roll the wild dice to finish your turn.');
                 return;
             }
-            if (app.selected.some(i => locationOf(app.hand[i]) === locationOf(app.hand[index]))) {
+            if (app.selected.some(i => locationOf(app.hand[i]) === locationOf(app.hand[index]))
+                || (selectedMarketCard() && locationOf(selectedMarketCard()) === locationOf(app.hand[index]))) {
                 toast('Choose two different positions when playing cards together.');
                 return;
             }
             app.selected.push(index);
         }
         renderHand();
+        renderMarket();
         renderBoard();
         renderControls();
     }
 
     function selectAt(location) {
         if (!canSelect()) return;
+        if (choosingWild()) {
+            if (!app.game.wild_options.includes(location)) return toast(`Choose ${app.game.wild_options.join(' or ')} for the wild.`);
+            app.wildChoice = location;
+            renderBoard(); renderControls();
+            return;
+        }
         if (selectedPower()) {
             if (!validPowerTarget(location)) {
                 toast(powerReady() ? 'Targets selected. Confirm your power or choose targets again.' : powerInstructions());
@@ -852,6 +929,11 @@
         const indices = app.hand.map((card, index) => locationOf(card) === location ? index : -1).filter(index => index >= 0);
         if (indices.length === 1) toggleCard(indices[0]);
         else if (indices.length > 1) toast(`${location} has more than one color in your hand. Tap the card you want.`);
+        else if (app.game.market?.some(card => locationOf(card) === location)) {
+            const market = app.game.market.map((card, index) => locationOf(card) === location ? index : -1).filter(index => index >= 0);
+            if (market.length === 1) toggleMarket(market[0]);
+            else toast(`${location} has more than one market card. Tap the card you want.`);
+        }
         else toast(`${location} · ${app.game.board[location.charCodeAt(0) - 65][Number(location[1]) - 1]?.color || 'empty'}. No card for this spot in your hand.`);
     }
 
@@ -864,7 +946,7 @@
         const mine = myTurn();
         const available = Boolean(app.joined && app.socket?.connected && app.handReady && !app.pending && !state.winner);
         const remaining = Math.max(0, 2 - state.cards_played_this_turn);
-        const selected = app.selected.length;
+        const selected = selectionCount();
         $('turn-banner').classList.toggle('is-mine', Boolean(mine));
         $('clear-selection').disabled = selected === 0 || Boolean(app.pending);
         $('end-turn').disabled = !available || !mine || state.can_roll_dice;
@@ -898,6 +980,13 @@
             subtitle = connected ? 'Look over your hand. Your next move is coming.' : 'They’re reconnecting. Their seat is saved.';
             action = 'Waiting for your turn'; note = selected ? 'Just a preview. Choose again when your turn begins.' : 'Your hand stays visible. Plan a little something.';
         }
+        if (mine && available && state.wild_options?.length) {
+            title = 'Your turn. Choose the wild.';
+            subtitle = `You rolled ${state.wild_options.join(' and ')}. Tap the square where yellow should land.`;
+            action = app.wildChoice ? `Place wild at ${app.wildChoice}  ✳` : 'Choose a rolled square';
+            note = 'Strategy rules: yellow goes where you choose.';
+            $('primary-action').disabled = !app.wildChoice;
+        }
         if (selectedPower() && mine && available && !state.can_roll_dice) {
             const power = selectedPower();
             title = { block: 'Your turn. Hold a square.', tax: 'Your turn. Slow the leader.' }[power.power]
@@ -925,11 +1014,18 @@
     function primaryAction() {
         if (app.game?.winner) return $('winner-dialog').showModal();
         if (!myTurn()) return;
-        if (app.game.can_roll_dice) sendAction('roll_dice');
+        if (app.game.wild_options?.length) {
+            if (app.wildChoice) sendAction('roll_dice', { location: app.wildChoice });
+        }
+        else if (app.game.can_roll_dice) sendAction('roll_dice');
         else if (selectedPower()) {
             if (powerReady()) sendAction('play_power', { card: selectedPower(), targets: [...app.powerTargets] });
         }
-        else if (app.selected.length) sendAction('play_cards', { cards: app.selected.map(index => app.hand[index]) });
+        else if (selectionCount()) {
+            const cards = app.selected.map(index => app.hand[index]);
+            if (selectedMarketCard()) cards.push({ ...selectedMarketCard(), power: null, market: true });
+            sendAction('play_cards', { cards });
+        }
     }
 
     function log(message) {
@@ -986,7 +1082,9 @@
         $('rematch-mode').disabled = !available;
         if (!app.rematchPending) $('rematch-powers').checked = Boolean(rematch?.next_power_cards ?? app.game.power_cards);
         $('rematch-powers').disabled = !available;
-        $('rematch-goal').textContent = `Next up: ${MODES[rematch?.next_game_mode || app.game.game_mode]?.short} · ${$('rematch-powers').checked ? 'Power Play' : 'Regular cards'}. ${host ? 'You set the game plan.' : 'The host sets the game plan.'}`;
+        if (!app.rematchPending) $('rematch-strategy').checked = Boolean(rematch?.next_strategy_rules ?? app.game.strategy_rules);
+        $('rematch-strategy').disabled = !available;
+        $('rematch-goal').textContent = `Next up: ${MODES[rematch?.next_game_mode || app.game.game_mode]?.short} · ${$('rematch-powers').checked ? 'Power Play' : 'Regular cards'}${$('rematch-strategy').checked ? ' · Strategy rules' : ''}. ${host ? 'You set the game plan.' : 'The host sets the game plan.'}`;
         $('ready-list').replaceChildren(...players.map(player => {
             const isReady = ready.includes(player.name) && player.connected;
             return node('span', `ready-player${isReady ? ' is-ready' : ''}`, `${player.name} · ${!player.connected ? 'Reconnecting' : isReady ? 'Ready ✓' : 'Not ready yet'}`);
@@ -1104,7 +1202,7 @@
         }
         const wildFinish = app.game.winner && move.collected?.some(dot => dot.color === 'yellow');
         const callout = wildFinish ? 'Wild finish! ' : move.lines >= 2 ? `${move.lines === 2 ? 'Double' : 'Multiple'} line! ` : move.lines ? 'A lovely line! ' : '';
-        const positions = (move.placements || []).map(dot => dot.location).join(', ');
+        const positions = (move.placements || []).map(dot => `${dot.location}${dot.market ? ' from the market' : ''}`).join(', ');
         $('move-summary').textContent = `${callout}${move.player} ${move.kind === 'roll' ? 'rolled wild' : 'played'}${positions ? ` at ${positions}` : ''}${move.points ? ` · +${move.points} dots` : ''}.`;
         if (move.kind === 'power' && Object.hasOwn(POWERS, move.power)) {
             const detail = move.power === 'swap' ? `swapped ${(move.placements || []).map(dot => dot.location).join(' ⇄ ')}`
@@ -1223,6 +1321,7 @@
     $('rematch-button').addEventListener('click', () => sendRematch('rematch_ready', { ready: !app.game.rematch?.ready?.includes(app.seat.player_name) }));
     $('rematch-mode').addEventListener('change', event => sendRematch('rematch_options', { game_mode: event.target.value }));
     $('rematch-powers').addEventListener('change', event => sendRematch('rematch_options', { power_cards: event.target.checked }));
+    $('rematch-strategy').addEventListener('change', event => sendRematch('rematch_options', { strategy_rules: event.target.checked }));
     document.querySelectorAll('[data-reaction]').forEach(button => button.addEventListener('click', () => sendReaction(button.dataset.reaction)));
     document.querySelectorAll('[data-mute-reactions]').forEach(button => button.addEventListener('click', () => { preferences.muted = !preferences.muted; applyPreferences(); }));
     document.querySelectorAll('[data-preferences]').forEach(button => button.addEventListener('click', () => $('preferences-dialog').showModal()));
@@ -1263,6 +1362,7 @@
         if (previous) {
             $('game-mode').value = previous.game_mode;
             $('power-cards').checked = Boolean(previous.power_cards);
+            $('strategy-rules').checked = Boolean(previous.strategy_rules);
             const count = document.querySelector(`input[name="player_count"][value="${previous.required_players}"]`);
             if (count) count.checked = true;
         }

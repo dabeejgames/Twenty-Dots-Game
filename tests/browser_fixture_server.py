@@ -34,6 +34,8 @@ def prepare_position():
             abort(409)
         if data.get('power'):
             return prepare_power(session, data)
+        if data.get('strategy'):
+            return prepare_strategy(session, data)
         name = data['player']
         game = session.game
         player = game.players[name]
@@ -81,6 +83,46 @@ def prepare_position():
         return {'location': ''.join(card.location), 'color': card.color,
             'round_id': session.round_id,
             'spare': {'location': ''.join(spare.location), 'color': spare.color}}
+
+
+def prepare_strategy(session, data):
+    """Strategy rules: a known market (red A3 finishes red A1-A2), optionally awaiting a roll."""
+    if not session.strategy_rules:
+        abort(400)
+    game = session.game
+    pools = [game.deck, session.recycle_pool] + [p['hand'] for p in game.players.values()]
+    game.deck.extend(session.market)
+    session.market = []
+    for location, color in (('A3', 'red'), ('F6', 'blue'), ('F5', 'green')):
+        for pool in pools:
+            card = next((c for c in pool if c.power is None and c.location == location
+                         and c.color == color), None)
+            if card is not None:
+                index = pool.index(card)
+                if pool is game.deck or pool is session.recycle_pool:
+                    pool.pop(index)
+                else:
+                    pool[index] = next(c for c in game.deck if c.location not in ('A3', 'F5', 'F6'))
+                    game.deck.remove(pool[index])
+                session.market.append(card)
+                break
+    game.grid = [[None for _ in range(6)] for _ in range(6)]
+    game.yellow_dot_position = None
+    if not data.get('roll'):
+        game.grid[0][0] = Dot('red')
+        game.grid[0][1] = Dot('red')
+    game.current_player_idx = session.player_order.index(data['player'])
+    game.can_roll_dice = bool(data.get('roll'))
+    game.turn_cards_played = dict.fromkeys(session.player_order, 0)
+    game.must_advance_after_roll = {}
+    session.market_played = False
+    session.wild_options = []
+    session.blocks = []
+    for participant in game.players.values():
+        participant['score'] = dict.fromkeys(game.colors, 0)
+        participant['yellow_dots'] = participant['total_dots'] = 0
+    session.send_started_game()
+    return {'round_id': session.round_id}
 
 
 def prepare_power(session, data):

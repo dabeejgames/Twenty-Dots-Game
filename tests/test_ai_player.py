@@ -243,6 +243,70 @@ class DecisionTests(AITestCase):
         self.assertIsNotNone(session.game.grid[0][0])  # The red pair was never collected.
         self.assertIn(hand[0], session.game.players['P0']['hand'])
 
+    def strategy_session(self, board, market):
+        session = self.session(board=board)
+        session.strategy_rules = True
+        session.market = [Card(loc, color) for loc, color in market]
+        return session
+
+    def test_strategy_ai_takes_a_market_line_with_a_dead_hand(self):
+        board = [[None] * 6 for _ in range(6)]
+        board[0][0] = board[0][1] = 'red'
+        session = self.strategy_session(board, [('F6', 'blue'), ('A3', 'red'), ('E1', 'green')])
+        hand = self.hand(session, ('F1', 'blue'), ('D6', 'purple'))
+        for difficulty in ('medium', 'hard'):
+            with self.subTest(difficulty=difficulty):
+                picks = AIPlayer(difficulty).choose_cards(hand, self.context(session))
+                self.assertIn(3, picks)  # Hand indices 0-1, then market 2-4: A3 is 3.
+                self.assertLessEqual(sum(i >= 2 for i in picks), 1)
+        session.market_played = True
+        context = self.context(session)
+        self.assertEqual(len(context['market']), 3)  # Still visible to weigh threats,
+        self.assertFalse(context['market_playable'])  # but not playable again this turn.
+        for difficulty in ('medium', 'hard'):
+            self.assertTrue(all(i < 2 for i in AIPlayer(difficulty).choose_cards(hand, context)))
+        self.assertEqual(AIPlayer('hard').choose_cards([], context), [])
+
+    def test_hard_counts_a_finishing_market_card_as_a_sure_threat(self):
+        # Red A1-B1 with red C1 face up: the next player is certain to finish the line.
+        board = [[None] * 6 for _ in range(6)]
+        board[0][0] = board[1][0] = 'red'
+        session = self.strategy_session(board, [])
+        ai, context = AIPlayer('hard'), self.context(session)
+        plan = {'board': board, 'gains': ai_player.empty_gains(), 'wild': False,
+                'played': 0, 'hand': [], 'market': [('F6', 'blue')]}
+        safe = ai._lookahead(plan, context)
+        exposed = ai._lookahead({**plan, 'market': [('C1', 'red')]}, context)
+        self.assertGreaterEqual(safe - exposed, 3 - 0.5)  # About the three dots handed over.
+
+    def test_strategy_ai_chooses_the_wild_square_that_scores(self):
+        board = [[None] * 6 for _ in range(6)]
+        board[2][0] = board[2][1] = 'blue'
+        session = self.strategy_session(board, [])
+        for difficulty in ('medium', 'hard'):
+            with self.subTest(difficulty=difficulty):
+                options = ['F6', 'C3']
+                self.assertEqual(AIPlayer(difficulty).choose_wild(options, self.context(session)), 1)
+        self.assertIn(AIPlayer('easy').choose_wild(['F6', 'C3'], self.context(session)), (0, 1))
+
+    def test_full_strategy_games_finish_for_every_difficulty(self):
+        for difficulty in ('easy', 'medium', 'hard'):
+            with self.subTest(difficulty=difficulty):
+                random.seed(4)
+                session = server.GameSession('ai', 'sid0', 'twenty_dots', 3, True, True)
+                for i in range(3):
+                    session.add_player(f'sid{i}', f'P{i}', is_ai=True)
+                session.initialize_game()
+                for ai in session.ai_players.values():
+                    ai.difficulty = difficulty
+                    ai.rng.seed(6)
+                for _ in range(600):
+                    if session.check_winner():
+                        break
+                    session.execute_ai_move()
+                self.assertTrue(session.check_winner())
+                self.assertEqual(session.wild_options, [])
+
     def test_full_ai_games_finish_for_every_difficulty_and_mode(self):
         for mode in ('twenty_dots', 'five_colors', 'five_with_yellow'):
             for difficulty in ('easy', 'medium', 'hard'):

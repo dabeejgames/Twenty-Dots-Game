@@ -27,6 +27,7 @@ room_store = open_store()
 
 ONLINE_POWERS = ('paint', 'shift', 'swap', 'block', 'tax')
 POWER_TARGETS = {'paint': 1, 'shift': 2, 'swap': 2, 'block': 1, 'tax': 1}
+MARKET_SIZE = 3  # Face-up cards anyone may play under Strategy rules.
 BLOCKED_MESSAGE = 'That square is blocked until its owner’s next turn'
 
 
@@ -105,7 +106,8 @@ def restore_rooms():
 
 
 class GameSession:
-    def __init__(self, game_id, host_sid, game_mode='twenty_dots', player_count=2, power_cards=False):
+    def __init__(self, game_id, host_sid, game_mode='twenty_dots', player_count=2, power_cards=False,
+                 strategy_rules=False):
         self.game_id = game_id
         self.game_mode = game_mode
         self.required_players = player_count  # Store the required player count
@@ -131,6 +133,12 @@ class GameSession:
         self.next_game_mode = game_mode
         self.power_cards = power_cards
         self.next_power_cards = power_cards
+        # Strategy rules: a face-up market, and the roller chooses between two wild squares.
+        self.strategy_rules = strategy_rules
+        self.next_strategy_rules = strategy_rules
+        self.market = []  # Face-up regular Card objects, never in a hand, deck, or recycle pool.
+        self.market_played = False  # Whether the current player has used the market this turn.
+        self.wild_options = []  # Two rolled squares awaiting the roller's choice.
         self.recycle_pool = []  # Actual played Card objects, never public discard metadata.
         self.deck_reshuffles = 0
         self.blocks = []  # [{'location': 'C4', 'player': name}] until that player's next turn.
@@ -194,6 +202,9 @@ class GameSession:
             'awarded_round': self.awarded_round,
             'next_game_mode': self.next_game_mode, 'power_cards': self.power_cards,
             'next_power_cards': self.next_power_cards,
+            'strategy_rules': self.strategy_rules, 'next_strategy_rules': self.next_strategy_rules,
+            'market': [card(c) for c in self.market], 'market_played': self.market_played,
+            'wild_options': self.wild_options,
             'recycle_pool': [card(c) for c in self.recycle_pool],
             'deck_reshuffles': self.deck_reshuffles, 'last_move': self.last_move,
             'move_id': self.move_id, 'blocks': self.blocks,
@@ -236,6 +247,12 @@ class GameSession:
             setattr(session, key, data[key])
         session.recycle_pool = cards(data['recycle_pool'])
         session.blocks = data.get('blocks', [])  # Rooms saved before Block existed.
+        # Rooms saved before Strategy rules existed play without them.
+        session.strategy_rules = data.get('strategy_rules', False)
+        session.next_strategy_rules = data.get('next_strategy_rules', False)
+        session.market = cards(data.get('market', []))
+        session.market_played = data.get('market_played', False)
+        session.wild_options = data.get('wild_options', [])
 
         saved = data['game']
         game = TwentyDots(num_players=saved['num_players'], difficulty='easy',
@@ -286,11 +303,17 @@ class GameSession:
             'resume_token': player.get('resume_token'),
         }, room=sid)
 
-    def initialize_game(self, power_cards=None):
+    def initialize_game(self, power_cards=None, strategy_rules=None):
         """Initialize every route identically, without overlapping-name pop collisions."""
         if power_cards is not None:
             self.power_cards = power_cards
+        if strategy_rules is not None:
+            self.strategy_rules = strategy_rules
         self.next_power_cards = self.power_cards
+        self.next_strategy_rules = self.strategy_rules
+        self.market = []
+        self.market_played = False
+        self.wild_options = []
         self.winner = None
         self.ready_players.clear()
         self.recycle_pool = []
@@ -307,6 +330,8 @@ class GameSession:
             player['is_ai'] = name in self.ai_players
         self.game.shuffle_deck()
         self.game.deal_cards(5)
+        if self.strategy_rules:
+            self.refill_market()
         self.game.turn_cards_played = dict.fromkeys(self.player_order, 0)
         self.game.must_advance_after_roll = {}
         self.game.current_player_idx = (self.round_id - 1) % len(self.player_order)
@@ -335,6 +360,7 @@ class GameSession:
     def advance_turn(self):
         self.game.next_player()
         new_player = self.game.get_current_player()
+        self.market_played = False
         # A Block lasts until its owner's next turn begins.
         self.blocks = [block for block in self.blocks if block['player'] != new_player]
         self.game.turn_cards_played[new_player] = 0
@@ -373,13 +399,15 @@ class GameSession:
             return {
                 'round_id': self.round_id,
                 'power_cards': self.power_cards,
+                'strategy_rules': self.strategy_rules,
                 'series': {'number': self.series_number, 'round': self.series_round,
                            'wins': dict(self.series_wins), 'target_wins': 2,
                            'winner': self.series_winner},
                 'rematch': {'ready': [name for name in self.player_order
                                       if name in self.ai_players or name in self.ready_players],
                             'next_game_mode': self.next_game_mode,
-                            'next_power_cards': self.next_power_cards},
+                            'next_power_cards': self.next_power_cards,
+                            'next_strategy_rules': self.next_strategy_rules},
             }
 
     def broadcast_rematch(self):
@@ -402,7 +430,8 @@ class GameSession:
             self.series_round += 1
         self.round_id += 1
         self.game_mode = self.next_game_mode
-        self.initialize_game(power_cards=self.next_power_cards)
+        self.initialize_game(power_cards=self.next_power_cards,
+                             strategy_rules=self.next_strategy_rules)
         self.broadcast_lobby()
         self.send_started_game()
         self.schedule_ai()
@@ -422,6 +451,26 @@ class GameSession:
             self.game.draw_card(player_name)
             drawn += 1
         return drawn
+
+    def refill_market(self):
+        """Top the market up with regular cards; powers stay in the deck for hands."""
+        while len(self.market) < MARKET_SIZE:
+            index = next((i for i, c in enumerate(self.game.deck) if c.power is None), None)
+            if index is None:
+                if not self.recycle_pool:
+                    break
+                self.game.deck.extend(self.recycle_pool)
+                self.recycle_pool = []
+                self.game.shuffle_deck()
+                self.deck_reshuffles += 1
+                continue
+            self.market.append(self.game.deck.pop(index))
+
+    def playable_market(self):
+        """Market cards the current player may still play this turn."""
+        if not self.strategy_rules or self.market_played:
+            return []
+        return [c for c in self.market if not self.is_blocked(''.join(c.location))]
 
     def begin_move(self, player_name, kind):
         self.move_id += 1
@@ -460,8 +509,12 @@ class GameSession:
                 })
         self.game.collect_dots(match, player_name, match_color)
 
-    def apply_cards(self, player_name, cards):
+    def apply_cards(self, player_name, cards, market_cards=()):
         """Shared human/AI placement, recycling, scoring and last-move recording."""
+        from_market = [c for c in cards if any(c is m for m in market_cards)]
+        if from_market and (len(from_market) > 1 or self.market_played
+                            or not all(any(c is m for m in self.market) for c in from_market)):
+            raise ValueError('Play at most one market card per turn')
         if any(card.power is not None or card.location == 'PWR' for card in cards):
             raise ValueError('Power cards require play_power')
         if any(self.is_blocked(''.join(card.location)) for card in cards):
@@ -471,11 +524,17 @@ class GameSession:
         move = self.begin_move(player_name, 'play')
         yellow_replaced = yellow_collected = False
         for card in cards:
-            if card not in hand:
+            if card in from_market:
+                self.market.remove(card)
+                self.market_played = True
+            elif card in hand:
+                hand.remove(card)
+            else:
                 continue
-            hand.remove(card)
             self.recycle_pool.append(card)
             info = {'location': ''.join(card.location), 'color': card.color}
+            if card in from_market:
+                info['market'] = True
             self.discard_piles.setdefault(player_name, []).append(info)
             self.game.turn_cards_played[player_name] += 1
             success, replaced_color = self.game.place_card_dot(card)
@@ -496,6 +555,8 @@ class GameSession:
             if match:
                 yellow_collected |= any(self.game.grid[y][x].color == 'yellow' for x, y in match)
                 self.collect_match(player_name, row, col, match, match_color, move)
+        if from_market:
+            self.refill_market()
         self.finish_move(move)
         return yellow_replaced, yellow_collected
 
@@ -688,6 +749,9 @@ class GameSession:
                         for name, p in self.game.players.items()},
             'cards_left': 2 - self.game.turn_cards_played.get(player_name, 0),
             'regular_hand': self.playable_regular(player_name),
+            # Every face-up card (opponents can reach them all); playable only if the flag says so.
+            'market': list(self.market) if self.strategy_rules else [],
+            'market_playable': self.strategy_rules and not self.market_played,
             'power_options': [(card, card['power'], card['color'], cells)
                               for card, _, cells in power_options or []],
         }
@@ -771,6 +835,9 @@ class GameSession:
             'yellow_dot_position': yellow_position,
             'landmines': landmines_data,
             'blocks': list(self.blocks),
+            'market': [{'location': list(c.location), 'color': c.color} for c in self.market],
+            'market_played': self.market_played,
+            'wild_options': list(self.wild_options),
             'can_roll_dice': getattr(self.game, 'can_roll_dice', False),
             'game_mode': self.game_mode,
             'required_players': self.required_players,
@@ -807,13 +874,26 @@ class GameSession:
         print(f"Sending hand to {player_name}: colors = {[c.color for c in hand]}")
         return cards_data
     
-    def roll_wild(self, player_name):
-        """Roll the wild dice, place yellow, and collect any match it completes. Returns the match."""
+    def roll_wild_options(self):
+        """Strategy rules: two distinct, unblocked squares for the roller to choose between."""
+        options = []
+        while len(options) < 2:
+            row, col = self.game.roll_dice()
+            if not self.is_blocked(row + col) and row + col not in options:
+                options.append(row + col)
+        return options
+
+    def roll_wild(self, player_name, location=None):
+        """Place yellow (rolled, or a chosen wild option) and collect any match. Returns the match."""
         from twenty_dots import Dot
         move = self.begin_move(player_name, 'roll')
-        row, col = self.game.roll_dice()
-        while self.is_blocked(row + col):  # The wild dice re-roll a blocked square.
+        if location is not None:
+            row, col = location[0], location[1]
+        else:
             row, col = self.game.roll_dice()
+            while self.is_blocked(row + col):  # The wild dice re-roll a blocked square.
+                row, col = self.game.roll_dice()
+        self.wild_options = []
         row_idx = self.game.rows.index(row)
         col_idx = self.game.columns.index(col)
         old_dot = self.game.grid[row_idx][col_idx]
@@ -846,7 +926,12 @@ class GameSession:
                         break
                     used = self.game.turn_cards_played.get(name, 0)
                     if self.game.can_roll_dice:
-                        match = self.roll_wild(name)
+                        choice = None
+                        if self.strategy_rules:
+                            options = self.wild_options or self.roll_wild_options()
+                            choice = options[self.ai_players[name].choose_wild(
+                                options, self.ai_context(name))]
+                        match = self.roll_wild(name, choice)
                         self.game.can_roll_dice = bool(match)
                         if not self.check_winner() and not match and (
                                 used >= 2 or self.game.must_advance_after_roll.get(name, False)):
@@ -863,16 +948,22 @@ class GameSession:
                     if not hand:
                         self.refill_hand(name)
                     regular = self.playable_regular(name)
+                    market = self.playable_market()
+                    # AI indices past the hand pick market cards, in the context's order.
+                    choices = regular + (list(self.market) if self.strategy_rules else [])
                     powers = self.ai_power_options(name) if used == 0 and self.power_cards else []
                     indices = (self.ai_players[name].choose_cards(
-                        regular, self.ai_context(name, powers)) if regular else [])
+                        regular, self.ai_context(name, powers)) if regular or market else [])
                     selected = []
                     locations = set()
                     for index in indices:
-                        if type(index) is not int or not 0 <= index < len(regular):
+                        if type(index) is not int or not 0 <= index < len(choices):
                             continue
-                        card = regular[index]
+                        card = choices[index]
                         location = ''.join(card.location)
+                        if index >= len(regular) and (card not in market
+                                                      or any(c in market for c in selected)):
+                            continue
                         if location not in locations:
                             selected.append(card)
                             locations.add(location)
@@ -887,7 +978,7 @@ class GameSession:
                             self.advance_turn()
                         self.broadcast_action()
                         continue
-                    replaced, collected = self.apply_cards(name, selected)
+                    replaced, collected = self.apply_cards(name, selected, market)
                     if replaced or collected:
                         self.game.yellow_dot_position = None
                         self.game.can_roll_dice = True
@@ -1042,9 +1133,15 @@ def handle_rematch_options(data):
         if type(powers) is not bool:
             emit('error', {'message': 'power_cards must be a boolean'})
             return
-        if mode != session.next_game_mode or powers != session.next_power_cards:
+        strategy = data.get('strategy_rules', session.next_strategy_rules)
+        if type(strategy) is not bool:
+            emit('error', {'message': 'strategy_rules must be a boolean'})
+            return
+        if (mode != session.next_game_mode or powers != session.next_power_cards
+                or strategy != session.next_strategy_rules):
             session.next_game_mode = mode
             session.next_power_cards = powers
+            session.next_strategy_rules = strategy
             session.ready_players.clear()
         session.broadcast_rematch()
 
@@ -1079,6 +1176,8 @@ def validate_join_data(data):
         raise ValueError('Expected an object')
     if type(data.get('power_cards', False)) is not bool:
         raise ValueError('power_cards must be a boolean')
+    if type(data.get('strategy_rules', False)) is not bool:
+        raise ValueError('strategy_rules must be a boolean')
     for field, limit in (('player_name', 24), ('game_id', 64)):
         value = data.get(field)
         if not isinstance(value, str) or not value.strip() or len(value) > limit:
@@ -1153,7 +1252,8 @@ def handle_create_game(data):
         return
     
     game_session = GameSession(game_id, request.sid, game_mode, player_count,
-                               power_cards=data.get('power_cards', False))
+                               power_cards=data.get('power_cards', False),
+                               strategy_rules=data.get('strategy_rules', False))
     success, message = game_session.add_player(
         request.sid, player_name, token_enabled='intent' in data or 'resume_token' in data)
     
@@ -1198,7 +1298,8 @@ def handle_join_game(data):
         return
     if game_session is None:
         game_session = GameSession(game_id, request.sid, game_mode, player_count,
-                                   power_cards=data.get('power_cards', False))
+                                   power_cards=data.get('power_cards', False),
+                                   strategy_rules=data.get('strategy_rules', False))
 
     existing_sid = next((sid for sid, p in game_session.players.items()
                          if p['name'] == player_name), None)
@@ -1328,7 +1429,8 @@ def handle_start_single_player(data):
     
     # Create game session
     game_session = GameSession(game_id, request.sid, game_mode, num_players,
-                               power_cards=data.get('power_cards', False))
+                               power_cards=data.get('power_cards', False),
+                               strategy_rules=data.get('strategy_rules', False))
     games[game_id] = game_session
     join_room(game_id)
     
@@ -1462,6 +1564,9 @@ def handle_play_cards(data):
         if card_data.get('power') is not None:
             emit('error', {'message': 'Power cards require play_power'})
             return
+        if type(card_data.get('market', False)) is not bool:
+            emit('error', {'message': 'Invalid cards selected'})
+            return
         location = card_data.get('location')
         if (not isinstance(location, (str, list, tuple)) or len(location) != 2
                 or location[0] not in game_session.game.rows
@@ -1477,6 +1582,14 @@ def handle_play_cards(data):
     
     cards_to_play = []
     
+    market_cards = []
+    if any(card_data.get('market') for card_data in cards_data) and not game_session.playable_market():
+        emit('error', {'message': 'The market is not available this turn'})
+        return
+    if sum(bool(card_data.get('market')) for card_data in cards_data) > 1:
+        emit('error', {'message': 'Play at most one market card per turn'})
+        return
+
     for card_data in cards_data:
         # Normalize card location to string format
         if isinstance(card_data['location'], list):
@@ -1484,6 +1597,13 @@ def handle_play_cards(data):
         else:
             req_loc = card_data['location']
         
+        if card_data.get('market'):
+            card = next((c for c in game_session.market if c.color == card_data['color']
+                         and ''.join(c.location) == req_loc), None)
+            if card is not None:
+                cards_to_play.append(card)
+                market_cards.append(card)
+            continue
         # Find matching card in hand
         for card in hand:
             # Normalize card location to string format
@@ -1536,7 +1656,8 @@ def handle_play_cards(data):
         print(f"[PLAY_CARDS] ERROR: {current_player} tried to play {len(cards_to_play)} cards but already played {cards_played_this_turn} this turn")
         return
     
-    yellow_replaced, yellow_collected = game_session.apply_cards(player_name, cards_to_play)
+    yellow_replaced, yellow_collected = game_session.apply_cards(
+        player_name, cards_to_play, market_cards)
     
     # If yellow was replaced or collected, allow player to roll again for new yellow
     if yellow_replaced or yellow_collected:
@@ -1715,7 +1836,24 @@ def handle_roll_dice(data):
     if must_advance:
         print(f"[ROLL_DICE] {player_name} must advance turn after this roll")
     
-    match = game_session.roll_wild(player_name)
+    location = data.get('location')
+    if not game_session.strategy_rules:
+        if location is not None:
+            emit('error', {'message': 'Choosing the wild square needs Strategy rules'})
+            return
+    elif location is None:
+        # Strategy rules: roll two squares, then wait for the roller to choose one.
+        if game_session.wild_options:
+            emit('error', {'message': 'Choose one of the rolled squares'})
+            return
+        game_session.wild_options = game_session.roll_wild_options()
+        game_session.broadcast_action()
+        return
+    elif location not in game_session.wild_options:
+        emit('error', {'message': 'Choose one of the rolled squares'})
+        return
+
+    match = game_session.roll_wild(player_name, location)
 
     if match:
         # Can roll again if matched
