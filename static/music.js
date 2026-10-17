@@ -23,6 +23,10 @@
         { title: 'Before The Day’s End', src: 'static/music/before-the-days-end.mp3' },
         { title: 'Steps', src: 'static/music/steps.mp3' },
         { title: 'No Words', src: 'static/music/no-words.mp3' },
+        { title: 'How It Is', src: 'static/music/how-it-is.mp3' },
+        { title: 'Chaparral', src: 'static/music/chaparral.mp3' },
+        { title: 'This Life', src: 'static/music/this-life.mp3' },
+        { title: 'Down Deep', src: 'static/music/down-deep.mp3' },
     ];
 
     function shuffled(items) {
