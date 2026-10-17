@@ -9,10 +9,13 @@ DIRECTIONS = ((1, 0), (0, 1), (1, 1), (1, -1))
 WIN_BONUS = 1000
 HAND_SIZE = 5
 DECK_SIZE = 144  # 36 locations x 4 regular colors; power cards never land as dots.
+BLOCK = 'block'  # An empty square no card may be played on (from a Block power).
+TAX_DOTS = 2  # Dots a Tax removes from the leader, when they have that many.
+TAX_WEIGHT = 0.75  # Each goal dot taken from the leader, relative to one we gain.
 
 
 # --- Board simulation -------------------------------------------------------
-# A board is a 6x6 list of color strings (or None), indexed board[row][col].
+# A board is a 6x6 list of color strings, BLOCK, or None, indexed board[row][col].
 # These mirror TwentyDots.check_line_match/collect_dots and GameSession's
 # apply_cards/apply_power without the logging, so the AI can search quickly.
 
@@ -32,7 +35,7 @@ def find_match(board, row, col, color):
                     for dx, dy in DIRECTIONS for sx, sy in ((1, 1), (-1, -1))
                     if 0 <= col + sx * dx < SIZE and 0 <= row + sy * dy < SIZE}
         best, best_len = [], 0
-        for test_color in sorted(adjacent - {None, 'yellow'}):
+        for test_color in sorted(adjacent & set(COLORS)):
             found = [p for dx, dy in DIRECTIONS
                      for line in [line_through(test_color, dx, dy)] if len(line) >= 3
                      for p in line]
@@ -90,6 +93,12 @@ def simulate_power(board, power, color, cells):
     """Apply a validated power with (row, col) target cells on a copy."""
     board = [row[:] for row in board]
     gains, wild = empty_gains(), False
+    if power == 'tax':
+        return board, gains, wild
+    if power in ('block', 'erase'):
+        (row, col), = cells
+        board[row][col] = BLOCK if power == 'block' else None
+        return board, gains, wild
     if power == 'swap':
         (ra, ca), (rb, cb) = cells
         board[ra][ca], board[rb][cb] = board[rb][cb], board[ra][ca]
@@ -107,6 +116,17 @@ def simulate_power(board, power, color, cells):
         if match:
             wild = collect(board, match, gains)
     return board, gains, wild
+
+
+def offered_dots(board, cells):
+    """Dots any single card could earn on these squares, summed over every color."""
+    total = 0
+    for row, col in cells:
+        if board[row][col] != BLOCK:
+            for color in COLORS:
+                gains = response_gains(board, row, col, color)
+                total += gains['total'] + gains['yellow']
+    return total
 
 
 def response_gains(board, row, col, color):
@@ -177,6 +197,8 @@ def expected_top_two(values, pool):
 def best_play(board, cards, stats, mode):
     """A greedy player's best use of up to two (location, color) cards: (value, board)."""
     best_value, best_board = 0.0, board
+    cards = [card for card in cards
+             if board[ROWS.index(card[0][0])][COLUMNS.index(card[0][1])] != BLOCK]
     for i, first in enumerate(cards):
         once, gains, _ = simulate_cards(board, [first])
         value = goal_value(gains, stats, mode)
@@ -288,15 +310,42 @@ class AIPlayer:
         _, power, color, cells = option
         board, gains, wild = simulate_power(context['board'], power, color, cells)
         hand = [(''.join(c.location), c.color) for c in context.get('regular_hand', [])]
-        return {'cards': (), 'power': index, 'board': board, 'gains': gains,
+        plan = {'cards': (), 'power': index, 'board': board, 'gains': gains,
                 'wild': wild, 'played': 1, 'hand': hand}
+        if power == 'tax':
+            plan['harm'], plan['players'] = self._tax_harm(cells[0], color, context)
+        elif power in ('block', 'erase'):
+            plan['harm'] = self._denial(context, board, cells[0])
+        return plan
+
+    def _tax_harm(self, victim, color, context):
+        """Goal value the leader loses, and everyone's scores after the Tax."""
+        stats = context['players'][victim]
+        taken = min(TAX_DOTS, stats['score'].get(color, 0))
+        loss = {**empty_gains(), color: taken, 'total': taken}
+        after = {'total_dots': stats['total_dots'] - taken,
+                 'yellow_dots': stats.get('yellow_dots', 0),
+                 'score': {**stats['score'], color: stats['score'].get(color, 0) - taken}}
+        players = {**context['players'], victim: after}
+        return TAX_WEIGHT * goal_value(loss, after, context['mode']), players
+
+    def _denial(self, context, board, cell):
+        """Expected dots opponents can no longer earn near a blocked or erased square."""
+        row, col = cell
+        nearby = [(r, c) for r in range(max(0, row - 2), min(SIZE, row + 3))
+                  for c in range(max(0, col - 2), min(SIZE, col + 3))]
+        removed = offered_dots(context['board'], nearby) - offered_dots(board, nearby)
+        opponents = len(context['order']) - 1
+        # Each specific card sits in a given opponent's hand with this chance.
+        held = HAND_SIZE / (DECK_SIZE - HAND_SIZE) * (1.0 + 0.5 * (opponents - 1))
+        return max(0.0, removed) * held
 
     def _best(self, plans, context):
         """Highest-valued plan; ties keep the earliest so choices stay predictable."""
         me = context['players'][context['me']]
         mode = context['mode']
         for plan in plans:
-            plan['value'] = goal_value(plan['gains'], me, mode)
+            plan['value'] = goal_value(plan['gains'], me, mode) + plan.get('harm', 0.0)
         if self.difficulty != 'hard':
             top = max(plan['value'] for plan in plans)
             return next(plan for plan in plans if plan['value'] == top)
@@ -327,7 +376,8 @@ class AIPlayer:
         """Average of (our best next turn - next opponent's best reply) over sampled hands."""
         mode, order = context['mode'], context['order']
         me = add_gains(context['players'][context['me']], plan['gains'])
-        rival = context['players'][order[(order.index(context['me']) + 1) % len(order)]]
+        players = plan.get('players', context['players'])
+        rival = players[order[(order.index(context['me']) + 1) % len(order)]]
         total = 0.0
         for rival_hand, draws in samples:
             threat, board = best_play(plan['board'], rival_hand, rival, mode)
@@ -340,8 +390,10 @@ class AIPlayer:
         if not plan['wild']:
             return 0.0
         me = add_gains(context['players'][context['me']], plan['gains'])
-        return sum(goal_value(roll_gains(plan['board'], r, c), me, context['mode'])
-                   for r in range(SIZE) for c in range(SIZE)) / (SIZE * SIZE)
+        board = plan['board']
+        open_squares = [(r, c) for r in range(SIZE) for c in range(SIZE) if board[r][c] != BLOCK]
+        return sum(goal_value(roll_gains(board, r, c), me, context['mode'])
+                   for r, c in open_squares) / len(open_squares)
 
     def _lookahead(self, plan, context):
         """Own follow-ups and draws, minus what the board offers the opponents."""
@@ -351,10 +403,13 @@ class AIPlayer:
         seat = order.index(context['me'])
         opponents = [order[(seat + k) % len(order)] for k in range(1, len(order))]
 
+        players = plan.get('players', context['players'])
         mine, own_total = [], 0.0
         offered = {name: [] for name in opponents}  # Values of cards opponents might hold.
         for row in range(SIZE):
             for col in range(SIZE):
+                if board[row][col] == BLOCK:
+                    continue
                 for color in COLORS:
                     gains = response_gains(board, row, col, color)
                     mine_value = goal_value(gains, me, mode)
@@ -364,7 +419,7 @@ class AIPlayer:
                     own_total += mine_value
                     if gains['total'] or gains['yellow']:
                         for name in opponents:
-                            offered[name].append(goal_value(gains, context['players'][name], mode))
+                            offered[name].append(goal_value(gains, players[name], mode))
         unknown = SIZE * SIZE * len(COLORS) - len(plan['hand'])
         threat = sum((1.0 if k == 0 else 0.5) * expected_top_two(offered[name], unknown)
                      for k, name in enumerate(opponents))

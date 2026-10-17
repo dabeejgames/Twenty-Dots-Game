@@ -8,7 +8,10 @@
     const POWERS = {
         paint: { title: 'Paint', symbol: '✦', targets: 1, description: 'Place this card’s color on any empty square. Completed lines score normally.' },
         shift: { title: 'Shift', symbol: '↗', targets: 2, description: 'Move a dot matching this card’s color one square up, down, left, or right into an empty space—not diagonally. Yellow stays put. Completed lines score normally.' },
-        swap: { title: 'Swap', symbol: '⇄', targets: 2, description: 'Swap any two regular dots anywhere on the board. The card’s color does not matter. Yellow cannot swap. Completed lines at both spots score normally.' },
+        swap: { title: 'Swap', symbol: '⇄', targets: 2, anyColor: true, description: 'Swap any two regular dots anywhere on the board. The card’s color does not matter. Yellow cannot swap. Completed lines at both spots score normally.' },
+        block: { title: 'Block', symbol: '⛔', targets: 1, anyColor: true, description: 'Block an empty square. Nobody can play there until your next turn begins, and the wild dice skip it. The card’s color does not matter.' },
+        erase: { title: 'Erase', symbol: '✕', targets: 1, description: 'Remove one dot matching this card’s color from the board. Nobody scores it.' },
+        tax: { title: 'Tax', symbol: '¤', targets: 1, description: 'Take up to two dots of this card’s color from an opponent tied for the most dots. Nobody gains them.' },
     };
     const MODES = {
         twenty_dots: { title: 'The classic', goal: 'First to 20 dots.', short: 'First to 20 dots' },
@@ -427,6 +430,21 @@
         return app.game?.board[location.charCodeAt(0) - 65]?.[Number(location[1]) - 1]?.color || null;
     }
 
+    function isBlocked(location) {
+        return Boolean(app.game?.blocks?.some(block => block.location === location));
+    }
+
+    function blockOwner(location) {
+        return app.game?.blocks?.find(block => block.location === location)?.player;
+    }
+
+    function taxTargets(color) {
+        const players = Object.entries(app.game?.players || {});
+        const top = Math.max(...players.map(([, player]) => player.total_dots));
+        return players.filter(([name, player]) => name !== app.seat?.player_name
+            && player.total_dots === top && (player.score[color] || 0) > 0).map(([name]) => name);
+    }
+
     function canUsePower() {
         return Boolean(canSelect() && myTurn() && app.game.power_cards && !app.game.can_roll_dice && app.game.cards_played_this_turn === 0);
     }
@@ -436,7 +454,7 @@
         return [[row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]]
             .filter(([r, c]) => r >= 0 && r < 6 && c >= 0 && c < 6)
             .map(([r, c]) => String.fromCharCode(65 + r) + (c + 1))
-            .filter(target => boardColor(target) === null);
+            .filter(target => boardColor(target) === null && !isBlocked(target));
     }
 
     function canShiftSource(location) {
@@ -455,7 +473,9 @@
             return COLORS.includes(boardColor(location))
                 && app.game.board.flat().filter(dot => COLORS.includes(dot?.color)).length >= 2;
         }
-        return boardColor(location) === null;
+        if (card.power === 'erase') return boardColor(location) === card.color;
+        if (card.power === 'tax') return false;
+        return boardColor(location) === null && !isBlocked(location);
     }
 
     function powerReady() {
@@ -463,7 +483,9 @@
         if (!card || !canUsePower() || app.powerTargets.length !== POWERS[card.power].targets) return false;
         if (new Set(app.powerTargets).size !== app.powerTargets.length) return false;
         if (card.power === 'swap') return app.powerTargets.every(target => COLORS.includes(boardColor(target)));
-        return boardColor(app.powerTargets.at(-1)) === null
+        if (card.power === 'erase') return boardColor(app.powerTargets[0]) === card.color;
+        if (card.power === 'tax') return taxTargets(card.color).includes(app.powerTargets[0]);
+        return boardColor(app.powerTargets.at(-1)) === null && !isBlocked(app.powerTargets.at(-1))
             && (card.power !== 'shift' || (canShiftSource(app.powerTargets[0])
                 && shiftDestinations(app.powerTargets[0]).includes(app.powerTargets[1])));
     }
@@ -482,7 +504,22 @@
                 ? 'Step 1 of 2 · Tap any marked colored dot. Yellow cannot swap.'
                 : 'Step 2 of 2 · Tap a different colored dot anywhere on the board. Yellow cannot swap.';
         }
-        if (!cells.some(dot => !dot)) return 'No empty squares right now. Cancel and choose another card, or pass.';
+        if (card.power === 'tax') {
+            if (powerReady()) return `Taking up to two ${card.color} dots from ${app.powerTargets[0]}. Confirm below.`;
+            return taxTargets(card.color).length
+                ? `Choose who to tax · Only opponents tied for the most dots with a ${card.color} dot.`
+                : `Nobody to tax · Tax needs an opponent tied for the most dots who has a ${card.color} dot. Cancel and choose another card, or pass.`;
+        }
+        if (card.power === 'erase') {
+            if (!cells.some(dot => dot?.color === card.color)) return `No ${card.color} dots to erase yet. Cancel and choose another card, or pass.`;
+            if (powerReady()) return `Erasing ${app.powerTargets[0]}. Check the preview, then confirm below.`;
+            return `Choose a dot · Tap a marked ${card.color} dot to remove it.`;
+        }
+        const open = app.game.board.some((row, r) => row.some((dot, c) => !dot && !isBlocked(String.fromCharCode(65 + r) + (c + 1))));
+        if (!open) return 'No open squares right now. Cancel and choose another card, or pass.';
+        if (card.power === 'block') return powerReady()
+            ? `Blocking ${app.powerTargets[0]} until your next turn. Confirm below.`
+            : 'Choose a square to block · Tap an empty square marked +.';
         if (card.power === 'shift' && !cells.some(dot => dot?.color === card.color)) return `No ${card.color} dots to shift yet. Cancel and choose another card, or pass.`;
         if (card.power === 'shift' && !app.game.board.some((row, r) => row.some((dot, c) =>
             dot?.color === card.color && canShiftSource(String.fromCharCode(65 + r) + (c + 1))))) {
@@ -500,11 +537,24 @@
         $('power-guide').hidden = !card;
         if (!card) return;
         $('power-title').textContent = `${POWERS[card.power].symbol} ${POWERS[card.power].title} · Full turn`;
-        $('power-description').textContent = card.power === 'paint'
-            ? `Place a ${card.color} dot on any empty square. Completed lines score normally.`
-            : card.power === 'shift' ? `Move a ${card.color} dot one square up, down, left, or right into an empty space. No diagonals. Completed lines score normally.`
-                : POWERS[card.power].description;
+        $('power-description').textContent = {
+            paint: `Place a ${card.color} dot on any empty square. Completed lines score normally.`,
+            shift: `Move a ${card.color} dot one square up, down, left, or right into an empty space. No diagonals. Completed lines score normally.`,
+            erase: `Remove one ${card.color} dot from the board. Nobody scores it.`,
+            tax: `Take up to two ${card.color} dots from an opponent tied for the most dots. Nobody gains them.`,
+        }[card.power] || POWERS[card.power].description;
         $('power-target-status').textContent = powerInstructions();
+        const choices = card.power === 'tax' && canUsePower() ? taxTargets(card.color) : [];
+        $('power-players').hidden = !choices.length;
+        $('power-players').replaceChildren(...choices.map(name => {
+            const button = node('button', `button button-secondary${app.powerTargets[0] === name ? ' selected' : ''}`,
+                `${name} · ${app.game.players[name].score[card.color]} ${card.color}`);
+            button.type = 'button';
+            button.disabled = Boolean(app.pending);
+            button.setAttribute('aria-pressed', String(app.powerTargets[0] === name));
+            button.addEventListener('click', () => { app.powerTargets = [name]; renderBoard(); renderControls(); });
+            return button;
+        }));
         $('cancel-power').disabled = Boolean(app.pending);
         $('reset-power-targets').hidden = false;
         $('reset-power-targets').disabled = !app.powerTargets.length || Boolean(app.pending);
@@ -549,6 +599,7 @@
             for (const [name, player] of Object.entries(state.players)) {
                 const difference = player.total_dots - (previous.players[name]?.total_dots || 0);
                 if (difference > 0) log(`${name} collected ${difference} ${difference === 1 ? 'dot' : 'dots'}.`);
+                if (difference < 0) log(`${name} lost ${-difference} ${difference === -1 ? 'dot' : 'dots'} to Tax.`);
             }
             if (state.yellow_dot_position && JSON.stringify(state.yellow_dot_position) !== JSON.stringify(previous.yellow_dot_position)) {
                 log(`Wild dot landed on ${state.yellow_dot_position.join('')}.`);
@@ -681,9 +732,15 @@
                 const swapping = power?.power === 'swap';
                 const complete = power && app.powerTargets.length === POWERS[power.power].targets;
                 const source = targetIndex === 0 && (power?.power === 'shift' || (swapping && !complete));
-                const destination = complete && (swapping ? targetIndex >= 0 : location === app.powerTargets.at(-1));
+                const placing = ['paint', 'shift', 'swap'].includes(power?.power);
+                const destination = complete && placing && (swapping ? targetIndex >= 0 : location === app.powerTargets.at(-1));
                 if (destination) previewCard = { color: swapping ? boardColor(app.powerTargets[1 - targetIndex])
                     : power.power === 'paint' ? power.color : boardColor(app.powerTargets[0]) };
+                const blocking = complete && power.power === 'block' && targetIndex === 0;
+                const erasing = complete && power.power === 'erase' && targetIndex === 0;
+                const blocked = isBlocked(location);
+                cell.classList.toggle('blocked', blocked || blocking);
+                cell.classList.toggle('erase-preview', erasing);
                 const legal = validPowerTarget(location);
                 cell.classList.toggle('power-legal', legal);
                 cell.classList.toggle('power-source', Boolean(source));
@@ -696,12 +753,13 @@
                 cell.classList.toggle('last-collected', Boolean(collected));
                 const content = [node('span', 'cell-coordinate', location)];
                 if (previewCard || color) content.push(coloredDot(previewCard ? previewCard.color : color));
+                if (blocked || blocking) content.push(node('span', 'block-mark', '⛔'));
                 if (legal && !color) content.push(node('span', 'target-plus', '+'));
                 if (previewCard || source) content.push(node('span', 'selection-number', power ? targetIndex + 1 : selectedIndex + 1));
                 cell.replaceChildren(...content);
-                cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${placed ? '; last move placed here' : ''}${collected ? '; last move collected here' : ''}${previewCard ? `; preview ${previewCard.color}, card ${selectedIndex + 1}` : ''}`);
-                if (power) cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${source ? '; selected source' : destination ? `; preview ${previewCard.color} destination` : legal ? '; valid power target' : ''}`);
-                cell.setAttribute('aria-pressed', String(Boolean(previewCard || source)));
+                cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? `; blocked by ${blockOwner(location)}` : ''}${placed ? '; last move placed here' : ''}${collected ? '; last move collected here' : ''}${previewCard ? `; preview ${previewCard.color}, card ${selectedIndex + 1}` : ''}`);
+                if (power) cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? '; blocked' : ''}${source ? '; selected source' : destination ? `; preview ${previewCard.color} destination` : blocking ? '; preview block' : erasing ? '; preview erase' : legal ? '; valid power target' : ''}`);
+                cell.setAttribute('aria-pressed', String(Boolean(previewCard || source || blocking || erasing)));
             }
         }
         $('board-hint').textContent = selectedPower() ? 'Power targets are previews until you confirm.' : app.selected.length ? 'Outlined dots preview your selected cards.' : 'Tap a card to preview its position.';
@@ -729,6 +787,10 @@
             button.setAttribute('aria-pressed', String(selected));
             button.setAttribute('aria-label', `${card.color}, ${locationOf(card)}${selected ? ', selected' : ''}`);
             button.append(node('span', 'card-coordinate', locationOf(card)), coloredDot(card.color), node('span', 'card-color', card.color.toUpperCase()));
+            if (!isPower(card) && isBlocked(locationOf(card))) {
+                button.classList.add('blocked-card');
+                button.setAttribute('aria-label', `${card.color}, ${locationOf(card)}, blocked until ${blockOwner(locationOf(card))}’s next turn`);
+            }
             if (isPower(card)) {
                 button.classList.add('power-card');
                 button.dataset.power = card.power;
@@ -736,7 +798,7 @@
                 button.title = POWERS[card.power].description;
                 const badge = node('span', `power-symbol ${card.color}`, POWERS[card.power].symbol);
                 badge.setAttribute('aria-hidden', 'true');
-                button.replaceChildren(node('span', 'card-coordinate', POWERS[card.power].title), badge, node('span', 'card-color', card.power !== 'swap' ? `${card.color.toUpperCase()} · POWER` : 'FULL TURN'));
+                button.replaceChildren(node('span', 'card-coordinate', POWERS[card.power].title), badge, node('span', 'card-color', POWERS[card.power].anyColor ? 'FULL TURN' : `${card.color.toUpperCase()} · POWER`));
             }
             if (selected) button.append(node('span', 'card-check', '✓'));
             button.addEventListener('click', () => toggleCard(index));
@@ -763,6 +825,10 @@
             return;
         }
         if (selectedPower()) clearSelection();
+        if (!app.selected.includes(index) && isBlocked(locationOf(card))) {
+            toast(`${locationOf(card)} is blocked until ${blockOwner(locationOf(card))}’s next turn.`);
+            return;
+        }
         if (app.selected.includes(index)) app.selected = app.selected.filter(i => i !== index);
         else {
             const max = myTurn() ? Math.max(0, 2 - app.game.cards_played_this_turn) : 2;
@@ -845,7 +911,8 @@
         }
         if (selectedPower() && mine && available && !state.can_roll_dice) {
             const power = selectedPower();
-            title = `Your turn. ${POWERS[power.power].title} a possibility.`;
+            title = { block: 'Your turn. Hold a square.', erase: 'Your turn. Break up a line.', tax: 'Your turn. Slow the leader.' }[power.power]
+                || `Your turn. ${POWERS[power.power].title} a possibility.`;
             subtitle = powerInstructions();
             action = powerReady() ? `Use ${POWERS[power.power].title} ${POWERS[power.power].symbol}` : 'Choose power targets';
             note = 'Uses your whole turn. No card is spent until you confirm.';
@@ -1052,7 +1119,10 @@
         $('move-summary').textContent = `${callout}${move.player} ${move.kind === 'roll' ? 'rolled wild' : 'played'}${positions ? ` at ${positions}` : ''}${move.points ? ` · +${move.points} dots` : ''}.`;
         if (move.kind === 'power' && Object.hasOwn(POWERS, move.power)) {
             const detail = move.power === 'swap' ? `swapped ${(move.placements || []).map(dot => dot.location).join(' ⇄ ')}`
-                : move.power === 'shift' ? `moved ${move.removed?.[0]} → ${positions}` : `painted ${positions}`;
+                : move.power === 'shift' ? `moved ${move.removed?.[0]} → ${positions}`
+                    : move.power === 'block' ? `blocked ${move.blocked?.[0]} until their next turn`
+                        : move.power === 'erase' ? `erased ${move.removed?.[0]}`
+                            : move.power === 'tax' ? `took ${move.taxed?.count} ${move.taxed?.color} from ${move.taxed?.player}` : `painted ${positions}`;
             $('move-summary').textContent = `${callout}${move.player} used ${POWERS[move.power].title} · ${detail}${move.points ? ` · +${move.points} dots` : ''}.`;
         }
         if (!animate || document.hidden) return;

@@ -81,18 +81,26 @@ class SimulatorParityTests(AITestCase):
         for trial in range(300):
             board = self.random_board(rng, rng.choice((0.3, 0.6, 0.85)))
             session = self.session(power_cards=True, board=board)
-            power, color = rng.choice(('paint', 'shift', 'swap')), rng.choice(COLORS)
+            power, color = rng.choice(server.ONLINE_POWERS), rng.choice(COLORS)
             session.game.players['P0']['hand'] = [Card('PWR', color, power)]
+            rival = session.game.players['P1']
+            rival['score'] = {c: rng.randrange(3) for c in COLORS}
+            rival['total_dots'] = sum(rival['score'].values())
             options = session.ai_power_options('P0')
             if not options:
                 continue
             card, targets, cells = rng.choice(options)
             new_board, gains, _ = simulate_power(board, power, color, cells)
+            _, players = AIPlayer('hard')._tax_harm('P1', color, session.ai_context('P0'))
             session.apply_power('P0', card, targets)
             checked += 1
             with self.subTest(trial=trial, board=board, power=power, targets=targets):
-                self.assertEqual(new_board, colors(session))
+                # The AI's board marks blocked squares, exactly like the server's AI context.
+                self.assertEqual(new_board, session.ai_context('P0')['board'])
                 self.assertEqual(gains, self.gains_of(session, 'P0'))
+                if power == 'tax':
+                    self.assertEqual(players['P1']['score'], rival['score'])
+                    self.assertEqual(players['P1']['total_dots'], rival['total_dots'])
         self.assertGreater(checked, 200)
 
     def test_power_options_are_all_legal_and_cover_every_target(self):
@@ -180,6 +188,60 @@ class DecisionTests(AITestCase):
                     hand, session.ai_context('P0', options)), [])
                 card, targets = session.choose_ai_power('P0')
                 self.assertEqual((card['power'], targets), ('paint', ['B2']))
+
+    def test_dead_hand_blocks_or_erases_an_opponents_open_line(self):
+        # Red A1-A2 leaves A3 open for anyone holding red A3.
+        for power, expected in (('block', [['A3']]), ('erase', [['A1'], ['A2']])):
+            for difficulty in ('medium', 'hard'):
+                with self.subTest(power=power, difficulty=difficulty):
+                    board = [[None] * 6 for _ in range(6)]
+                    board[0][0] = board[0][1] = 'red'
+                    session = self.session(power_cards=True, board=board)
+                    hand = self.hand(session, ('F6', 'blue'), ('E5', 'green'))
+                    session.game.players['P0']['hand'] = hand + [Card('PWR', 'red', power)]
+                    session.ai_players['P0'] = AIPlayer(difficulty)
+                    options = session.ai_power_options('P0')
+                    self.assertEqual(AIPlayer(difficulty).choose_cards(
+                        hand, session.ai_context('P0', options)), [])
+                    card, targets = session.choose_ai_power('P0')
+                    self.assertEqual(card['power'], power)
+                    self.assertIn(targets, expected)
+
+    def test_dead_hand_taxes_the_leader(self):
+        session = self.session(3, power_cards=True)
+        session.game.players['P1']['score']['purple'] = 6
+        session.game.players['P1']['total_dots'] = 6
+        session.game.players['P2']['score']['purple'] = 3
+        session.game.players['P2']['total_dots'] = 3
+        hand = self.hand(session, ('F6', 'blue'), ('E5', 'green'))
+        session.game.players['P0']['hand'] = hand + [Card('PWR', 'purple', 'tax')]
+        options = session.ai_power_options('P0')
+        self.assertEqual([targets for _, targets, _ in options], [['P1']])  # Never the trailer.
+        for difficulty in ('medium', 'hard'):
+            with self.subTest(difficulty=difficulty):
+                session.ai_players['P0'] = AIPlayer(difficulty)
+                self.assertEqual(AIPlayer(difficulty).choose_cards(
+                    hand, session.ai_context('P0', options)), [])
+                card, targets = session.choose_ai_power('P0')
+                self.assertEqual((card['power'], targets), ('tax', ['P1']))
+
+    def test_ai_never_plans_on_a_blocked_square(self):
+        board = [[None] * 6 for _ in range(6)]
+        board[0][0] = board[0][1] = 'red'
+        session = self.session(board=board)
+        session.blocks = [{'location': 'A3', 'player': 'P1'}]
+        hand = self.hand(session, ('A3', 'red'), ('F6', 'blue'))
+        context = session.ai_context('P0')
+        self.assertEqual(context['board'][0][2], ai_player.BLOCK)
+        self.assertEqual([''.join(c.location) for c in context['regular_hand']], ['F6'])
+        for difficulty in ('medium', 'hard'):
+            with self.subTest(difficulty=difficulty):
+                picks = AIPlayer(difficulty).choose_cards(context['regular_hand'], context)
+                self.assertIn(picks, ([0], []))
+        session.ai_players['P0'] = AIPlayer('hard')
+        session.execute_ai_move()
+        self.assertIsNotNone(session.game.grid[0][0])  # The red pair was never collected.
+        self.assertIn(hand[0], session.game.players['P0']['hand'])
 
     def test_full_ai_games_finish_for_every_difficulty_and_mode(self):
         for mode in ('twenty_dots', 'five_colors', 'five_with_yellow'):

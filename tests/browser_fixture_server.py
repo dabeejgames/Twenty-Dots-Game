@@ -102,7 +102,8 @@ def prepare_power(session, data):
                     return card
         raise AssertionError('Fixture card not found')
 
-    for power in server.ONLINE_POWERS:
+    classic = ('paint', 'shift', 'swap')
+    for power in classic if data['power'] in classic else (data['power'], 'paint', 'swap'):
         color = 'blue' if power == 'shift' else 'red'
         player['hand'].append(take(lambda card: card.power == power and card.color == color))
     for location in ('F5', 'F6'):
@@ -114,6 +115,7 @@ def prepare_power(session, data):
     game.must_advance_after_roll = {}
     game.grid = [[None for _ in range(6)] for _ in range(6)]
     game.yellow_dot_position = None
+    session.blocks = []
     if data['power'] == 'shift':
         game.grid[1][2] = Dot('blue')
         game.grid[2][0] = Dot('blue')
@@ -155,6 +157,10 @@ def prepare_power(session, data):
     for participant in game.players.values():
         participant['score'] = dict.fromkeys(game.colors, 0)
         participant['yellow_dots'] = participant['total_dots'] = 0
+    if data.get('leaders'):
+        # Tax fixture: the guest leads in red; the third player trails.
+        for seat, red in zip(session.player_order[1:], (3, 1)):
+            game.players[seat]['score']['red'] = game.players[seat]['total_dots'] = red
     if data.get('winning'):
         player['score']['red'] = 19
         player['total_dots'] = 19

@@ -964,7 +964,7 @@ class MultiplayerTests(unittest.TestCase):
                 with self.subTest(count=count, enabled=enabled):
                     clients, session = self.table(count, f'p{count}{enabled}', power_cards=enabled)
                     cards = self.all_cards(session)
-                    self.assertEqual(len(cards), 156 if enabled else 144)
+                    self.assertEqual(len(cards), 168 if enabled else 144)
                     self.assert_card_partition(session, {id(c) for c in cards})
                     regular = [c for c in cards if c.power is None]
                     self.assertEqual(len(regular), 144)
@@ -972,7 +972,7 @@ class MultiplayerTests(unittest.TestCase):
                     powers = [c for c in cards if c.power is not None]
                     self.assertEqual({(c.location, c.color, c.power) for c in powers},
                                      {('PWR', color, p) for color in session.game.colors
-                                      for p in ('paint', 'shift', 'swap')} if enabled else set())
+                                      for p in server.ONLINE_POWERS} if enabled else set())
                     self.assertFalse(session.game.power_cards_enabled)
                     for state in (session.get_lobby_state(), session.get_game_state()):
                         self.assertIs(state['power_cards'], enabled)
@@ -1013,7 +1013,7 @@ class MultiplayerTests(unittest.TestCase):
             self.emit(host, 'add_ai_player', game_id=room, ai_name='AI')
             self.emit(host, 'start_game', game_id=room)
             session = server.games[room]
-            self.assertEqual(len(self.all_cards(session)), 156 if enabled else 144)
+            self.assertEqual(len(self.all_cards(session)), 168 if enabled else 144)
             self.assertFalse(session.game.power_cards_enabled)
             for count in (2, 3, 4):
                 events = self.emit(self.client(), 'start_single_player', player_name='Host',
@@ -1021,7 +1021,7 @@ class MultiplayerTests(unittest.TestCase):
                 state = self.payload(events, 'game_started')
                 session = server.games[state['game_id']]
                 self.assertIs(state['power_cards'], enabled)
-                self.assertEqual(len(self.all_cards(session)), 156 if enabled else 144)
+                self.assertEqual(len(self.all_cards(session)), 168 if enabled else 144)
                 self.assertEqual(len(session.ai_players), count - 1)
 
     def test_power_rematch_options_readiness_tokens_and_round_reset_two_to_four(self):
@@ -1057,7 +1057,7 @@ class MultiplayerTests(unittest.TestCase):
                 self.ready(client, session)
             self.assertTrue(session.power_cards)
             self.assertEqual(session.game_mode, 'five_colors')
-            self.assertEqual(len(self.all_cards(session)), 156)
+            self.assertEqual(len(self.all_cards(session)), 168)
             self.assertFalse(session.recycle_pool)
             self.assertIsNone(session.last_move)
             self.assertTrue(session.game.can_roll_dice)
@@ -1071,7 +1071,7 @@ class MultiplayerTests(unittest.TestCase):
         for client in clients:
             self.ready(client, session)
         self.assertTrue(session.power_cards)
-        self.assertEqual(len(self.all_cards(session)), 156)
+        self.assertEqual(len(self.all_cards(session)), 168)
 
     def test_power_paint_cost_private_hands_metadata_and_no_replacement_points(self):
         clients, session = self.table(power_cards=True)
@@ -1464,6 +1464,127 @@ class MultiplayerTests(unittest.TestCase):
             self.payload(self.power_play(clients[0], session, card, targets), 'error')
             self.assertEqual(self.power_snapshot(session), before)
 
+    def test_power_block_denies_the_square_until_its_owners_next_turn(self):
+        clients, session = self.table(3, power_cards=True)
+        session.game.can_roll_dice = False
+        card = self.own_power(session, 'block', 'green')
+        state = self.payload(self.power_play(clients[0], session, card, ['C4']), 'game_updated')
+        self.assertEqual(state['blocks'], [{'location': 'C4', 'player': 'P0'}])
+        self.assertEqual(state['last_move']['blocked'], ['C4'])
+        self.assertEqual((state['last_move']['points'], state['current_turn']), (0, 'P1'))
+        self.assertIsNone(session.game.grid[2][3])
+        # Regular cards, Paint, and Shift all treat the square as off limits.
+        hand = session.game.players['P1']['hand']
+        hand[:] = [Card('C4', 'red')] + [c for c in hand if c.power][:4]
+        before = self.power_snapshot(session)
+        events = self.emit(clients[1], 'play_cards', game_id='room', round_id=1,
+                           cards=[{'location': ['C', '4'], 'color': 'red', 'power': None}])
+        self.assertIn('blocked', self.payload(events, 'error')['message'])
+        self.assertEqual(self.power_snapshot(session), before)
+        with self.assertRaises(ValueError):
+            session.apply_cards('P1', [hand[0]])
+        paint = self.own_power(session, 'paint', name='P1')
+        session.game.grid[2][2] = Dot('red')
+        shift = self.own_power(session, 'shift', name='P1')
+        for power_card, targets in ((paint, ['C4']), (shift, ['C3', 'C4'])):
+            before = self.power_snapshot(session)
+            self.assertIn('blocked', self.payload(
+                self.power_play(clients[1], session, power_card, targets), 'error')['message'])
+            self.assertEqual(self.power_snapshot(session), before)
+        self.assertNotIn(['C3', 'C4'], [t for c, t, _ in session.ai_power_options('P1')])
+        # The wild dice re-roll instead of landing on it.
+        with patch.object(session.game, 'roll_dice', side_effect=[('C', '4'), ('F', '6')]):
+            session.roll_wild('P1')
+        self.assertIsNone(session.game.grid[2][3])
+        self.assertEqual(session.game.grid[5][5].color, 'yellow')
+        session.advance_turn()
+        self.assertEqual(len(session.blocks), 1)  # Still blocked on P2's turn.
+        session.advance_turn()
+        self.assertEqual((session.game.get_current_player(), session.blocks), ('P0', []))
+        restored = server.GameSession.restore(json.loads(json.dumps(session.snapshot())))
+        self.assertEqual(restored.blocks, [])
+
+    def test_power_block_survives_restart_and_clears_on_rematch(self):
+        clients, session = self.table(power_cards=True)
+        session.game.can_roll_dice = False
+        card = self.own_power(session, 'block')
+        self.power_play(clients[0], session, card, ['A1'])
+        restored = server.GameSession.restore(json.loads(json.dumps(session.snapshot())))
+        self.assertTrue(restored.is_blocked('A1'))
+        legacy = json.loads(json.dumps(session.snapshot()))
+        del legacy['blocks']
+        self.assertEqual(server.GameSession.restore(legacy).blocks, [])
+        self.win_round(session, 'P0')
+        for client in clients:
+            self.ready(client, session)
+        self.assertEqual((session.round_id, session.blocks), (2, []))
+
+    def test_power_block_requires_an_open_empty_square(self):
+        clients, session = self.table(power_cards=True)
+        session.game.can_roll_dice = False
+        card = self.own_power(session, 'block')
+        session.game.grid[0][0] = Dot('blue')
+        session.blocks = [{'location': 'B2', 'player': 'P1'}]
+        for targets in ([], ['A1'], ['B2'], ['A1', 'A2'], ['Z9'], [3]):
+            before = self.power_snapshot(session)
+            self.payload(self.power_play(clients[0], session, card, targets), 'error')
+            self.assertEqual(self.power_snapshot(session), before)
+
+    def test_power_erase_removes_a_matching_dot_without_scoring(self):
+        clients, session = self.table(power_cards=True)
+        session.game.can_roll_dice = False
+        card = self.own_power(session, 'erase', 'blue')
+        session.game.grid[0][0] = Dot('blue')
+        session.game.grid[0][1] = Dot('red')
+        session.game.grid[0][2] = Dot('yellow')
+        for targets in ([], ['A2'], ['A3'], ['B1'], ['A1', 'A2']):
+            before = self.power_snapshot(session)
+            self.assertIn('error', [e['name'] for e in self.power_play(clients[0], session, card, targets)])
+            self.assertEqual(self.power_snapshot(session), before)
+        state = self.payload(self.power_play(clients[0], session, card, ['A1']), 'game_updated')
+        self.assertIsNone(session.game.grid[0][0])
+        self.assertEqual(state['last_move']['removed'], ['A1'])
+        self.assertEqual((state['last_move']['points'], state['last_move']['collected']), (0, []))
+        self.assertEqual(session.game.players['P0']['total_dots'], 0)
+        self.assertEqual(state['current_turn'], 'P1')
+
+    def test_power_tax_takes_up_to_two_dots_from_the_leader_only(self):
+        clients, session = self.table(3, power_cards=True)
+        session.game.can_roll_dice = False
+        players = session.game.players
+
+        def scores(p0, p1, p2):
+            for name, score in zip(('P0', 'P1', 'P2'), (p0, p1, p2)):
+                players[name]['score'] = dict.fromkeys(session.game.colors, 0) | score
+                players[name]['total_dots'] = sum(score.values())
+
+        card = self.own_power(session, 'tax', 'red')
+        scores({'red': 1}, {'red': 1, 'blue': 4}, {'red': 3})
+        # Only opponents tied for the most dots, holding the card's color, can be taxed.
+        for targets in ([], ['P0'], ['P2'], ['Nobody'], [None], ['P1', 'P2'], ['A1']):
+            before = self.power_snapshot(session)
+            self.payload(self.power_play(clients[0], session, card, targets), 'error')
+            self.assertEqual(self.power_snapshot(session), before)
+        state = self.payload(self.power_play(clients[0], session, card, ['P1']), 'game_updated')
+        self.assertEqual(state['last_move']['taxed'], {'player': 'P1', 'color': 'red', 'count': 1})
+        self.assertEqual(state['players']['P1']['score']['red'], 0)
+        self.assertEqual(state['players']['P1']['total_dots'], 4)
+        self.assertEqual((state['players']['P0']['total_dots'], state['last_move']['points']), (1, 0))
+        # Ties for the lead are fair game; a sole leader has nobody to tax.
+        scores({'red': 1}, {'red': 2}, {'red': 5})
+        session.game.current_player_idx = 1
+        session.game.turn_cards_played['P1'] = 0
+        card = self.own_power(session, 'tax', 'red', name='P1')
+        session.advance_turn()
+        session.game.current_player_idx = 1
+        session.game.turn_cards_played['P1'] = 0
+        self.power_play(clients[1], session, card, ['P2'])
+        self.assertEqual(players['P2']['score']['red'], 3)
+        self.assertEqual(session.tax_targets('P2', 'red'), [])
+        scores({'red': 3}, {}, {'red': 3})
+        self.assertEqual(session.tax_targets('P0', 'red'), ['P2'])
+        self.assertEqual(session.tax_targets('P0', 'blue'), [])
+
     def test_regular_play_rejects_power_payload_and_disguised_actual_power(self):
         clients, session = self.table(power_cards=True)
         session.game.can_roll_dice = False
@@ -1527,7 +1648,7 @@ class MultiplayerTests(unittest.TestCase):
         session.game.grid[5][5] = Dot('red')
         before = self.power_snapshot(session)
         card, targets = session.choose_ai_power('P0')
-        self.assertEqual(targets, ['F6', 'E6'])
+        self.assertIn(targets, (['F6', 'E6'], ['F6', 'F5']))  # Either open neighbor.
         session.resolve_power('P0', card, targets)
         self.assertEqual(self.power_snapshot(session), before)
         session.game.grid[5][5] = None
@@ -1580,12 +1701,12 @@ class MultiplayerTests(unittest.TestCase):
             self.assertEqual(session.game.players['P0']['yellow_dots'], 1)
             self.assertFalse(session.ai_move_in_progress)
 
-    def test_power_real_depletion_four_players_preserves_156_identities(self):
+    def test_power_real_depletion_four_players_preserves_168_identities(self):
         with patch.object(server.TwentyDots, 'shuffle_deck'):
             clients, session = self.table(4, mode='five_with_yellow', power_cards=True)
         session.game.can_roll_dice = False
         originals = {id(c) for c in self.all_cards(session)}
-        self.assertEqual(len(originals), 156)
+        self.assertEqual(len(originals), 168)
         powers_played = set()
         for _ in range(400):
             name = session.game.get_current_player()
@@ -1596,7 +1717,8 @@ class MultiplayerTests(unittest.TestCase):
                 events = self.power_play(client, session, card, targets)
                 powers_played.add(card['power'])
             else:
-                regular = [c for c in session.get_player_hand(name) if c['power'] is None]
+                regular = [c for c in session.get_player_hand(name) if c['power'] is None
+                           and not session.is_blocked(''.join(c['location']))]
                 selected = []
                 for card in regular:
                     if not any(c['location'] == card['location'] for c in selected):

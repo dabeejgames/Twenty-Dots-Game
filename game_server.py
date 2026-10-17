@@ -13,7 +13,7 @@ from threading import RLock
 from functools import wraps
 from importlib import import_module
 from twenty_dots import TwentyDots, Card, Dot
-from ai_player import AIPlayer
+from ai_player import AIPlayer, TAX_DOTS
 from room_store import open_store
 
 app = Flask(__name__)
@@ -25,7 +25,9 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 games = {}
 room_store = open_store()
 
-ONLINE_POWERS = ('paint', 'shift', 'swap')
+ONLINE_POWERS = ('paint', 'shift', 'swap', 'block', 'erase', 'tax')
+POWER_TARGETS = {'paint': 1, 'shift': 2, 'swap': 2, 'block': 1, 'erase': 1, 'tax': 1}
+BLOCKED_MESSAGE = 'That square is blocked until its owner’s next turn'
 
 
 def make_round_lock():
@@ -131,6 +133,7 @@ class GameSession:
         self.next_power_cards = power_cards
         self.recycle_pool = []  # Actual played Card objects, never public discard metadata.
         self.deck_reshuffles = 0
+        self.blocks = []  # [{'location': 'C4', 'player': name}] until that player's next turn.
         self.last_move = None
         self.move_id = 0
         self.reaction_times = {}
@@ -193,7 +196,7 @@ class GameSession:
             'next_power_cards': self.next_power_cards,
             'recycle_pool': [card(c) for c in self.recycle_pool],
             'deck_reshuffles': self.deck_reshuffles, 'last_move': self.last_move,
-            'move_id': self.move_id,
+            'move_id': self.move_id, 'blocks': self.blocks,
             'game': {
                 'num_players': game.num_players,
                 'grid': [[dot.color if dot else None for dot in row] for row in game.grid],
@@ -228,6 +231,7 @@ class GameSession:
                     'last_move', 'move_id'):
             setattr(session, key, data[key])
         session.recycle_pool = [card(c) for c in data['recycle_pool']]
+        session.blocks = data.get('blocks', [])  # Rooms saved before Block existed.
 
         saved = data['game']
         game = TwentyDots(num_players=saved['num_players'], difficulty='easy',
@@ -287,6 +291,7 @@ class GameSession:
         self.ready_players.clear()
         self.recycle_pool = []
         self.deck_reshuffles = 0
+        self.blocks = []
         self.last_move = None
         self.game = TwentyDots(num_players=len(self.player_order), difficulty='easy',
                                ai_opponents={}, power_cards=False)
@@ -326,6 +331,8 @@ class GameSession:
     def advance_turn(self):
         self.game.next_player()
         new_player = self.game.get_current_player()
+        # A Block lasts until its owner's next turn begins.
+        self.blocks = [block for block in self.blocks if block['player'] != new_player]
         self.game.turn_cards_played[new_player] = 0
         self.game.must_advance_after_roll[new_player] = False
         # A hand may have emptied while every remaining card was held elsewhere.
@@ -453,6 +460,8 @@ class GameSession:
         """Shared human/AI placement, recycling, scoring and last-move recording."""
         if any(card.power is not None or card.location == 'PWR' for card in cards):
             raise ValueError('Power cards require play_power')
+        if any(self.is_blocked(''.join(card.location)) for card in cards):
+            raise ValueError(BLOCKED_MESSAGE)
         hand = self.game.players[player_name]['hand']
         player = self.game.players[player_name]
         move = self.begin_move(player_name, 'play')
@@ -486,6 +495,17 @@ class GameSession:
         self.finish_move(move)
         return yellow_replaced, yellow_collected
 
+    def is_blocked(self, location):
+        return any(block['location'] == location for block in self.blocks)
+
+    def tax_targets(self, player_name, color):
+        """Opponents tied for the most dots who hold at least one dot of `color`."""
+        players = self.game.players
+        top = max(p['total_dots'] for p in players.values())
+        return [name for name in self.player_order
+                if name != player_name and players[name]['total_dots'] == top
+                and players[name]['score'][color] > 0]
+
     def resolve_power(self, player_name, card_data, targets):
         """Validate completely before mutation; callers hold round_lock."""
         if (not self.started or self.winner or not self.power_cards
@@ -504,9 +524,14 @@ class GameSession:
                      and c.power == card_data['power']), None)
         if card is None:
             raise ValueError('Power card is not in your hand')
-        count = {'paint': 1, 'shift': 2, 'swap': 2}[card.power]
-        if not isinstance(targets, list) or len(targets) != count:
+        if not isinstance(targets, list) or len(targets) != POWER_TARGETS[card.power]:
             raise ValueError('Invalid power targets')
+        if card.power == 'tax':
+            if not isinstance(targets[0], str) or targets[0] not in self.tax_targets(
+                    player_name, card.color):
+                raise ValueError(f'Tax targets an opponent tied for the most dots '
+                                 f'who has a {card.color} dot')
+            return card, targets
         for target in targets:
             if (not isinstance(target, str) or len(target) != 2
                     or target[0] not in self.game.rows or target[1] not in self.game.columns):
@@ -519,10 +544,17 @@ class GameSession:
                    or self.game.grid[row][col].color not in self.game.colors
                    for row, col in cells):
                 raise ValueError('Swap requires two regular colored dots; wild dots cannot swap')
+        elif card.power == 'erase':
+            row, col = cells[0]
+            dot = self.game.grid[row][col]
+            if dot is None or dot.color != card.color:
+                raise ValueError(f'Erase requires a {card.color} dot matching the card color')
         else:
             row, col = cells[-1]
             if self.game.grid[row][col] is not None:
                 raise ValueError('Power destination must be empty')
+            if self.is_blocked(targets[-1]):
+                raise ValueError(BLOCKED_MESSAGE)
         if card.power == 'shift':
             row, col = cells[0]
             dot = self.game.grid[row][col]
@@ -548,7 +580,20 @@ class GameSession:
             {'location': 'PWR', 'color': card.color, 'power': card.power})
         self.game.turn_cards_played[player_name] = 2
         yellow_collected = False
-        if card.power == 'swap':
+        if card.power == 'tax':
+            victim = self.game.players[cells[0]]
+            taken = min(TAX_DOTS, victim['score'][card.color])
+            victim['score'][card.color] -= taken
+            victim['total_dots'] -= taken
+            move['taxed'] = {'player': cells[0], 'color': card.color, 'count': taken}
+        elif card.power == 'block':
+            self.blocks.append({'location': targets[0], 'player': player_name})
+            move['blocked'] = [targets[0]]
+        elif card.power == 'erase':
+            row, col = cells[0]
+            self.game.grid[row][col] = None
+            move['removed'] = [targets[0]]
+        elif card.power == 'swap':
             (row_a, col_a), (row_b, col_b) = cells
             self.game.grid[row_a][col_a], self.game.grid[row_b][col_b] = (
                 self.game.grid[row_b][col_b], self.game.grid[row_a][col_a])
@@ -614,8 +659,12 @@ class GameSession:
                 # Swapping two dots of one color changes nothing.
                 candidates = [[a, b] for i, a in enumerate(sources) for b in sources[i + 1:]
                               if color_at[a] != color_at[b]]
-            elif power == 'paint':
+            elif power in ('paint', 'block'):
                 candidates = [[cell] for cell in empty]
+            elif power == 'erase':
+                candidates = [[cell] for cell in sources]
+            elif power == 'tax':
+                candidates = [[name] for name in self.tax_targets(player_name, card['color'])]
             else:
                 candidates = [[source, destination] for source in sources for destination in empty]
             for targets in candidates:
@@ -626,11 +675,18 @@ class GameSession:
                 options.append((card, targets, cells))
         return options
 
+    def playable_regular(self, player_name):
+        """Regular cards in hand whose squares are not blocked."""
+        return [c for c in self.game.players[player_name]['hand']
+                if c.power is None and c.location != 'PWR'
+                and not self.is_blocked(''.join(c.location))]
+
     def ai_context(self, player_name, power_options=None):
         """What a seated player can see: the board, every score, and their own hand."""
-        hand = self.game.players[player_name]['hand']
         return {
-            'board': [[dot.color if dot else None for dot in row] for row in self.game.grid],
+            'board': [['block' if self.is_blocked(r + c) else dot.color if dot else None
+                       for c, dot in zip(self.game.columns, row)]
+                      for r, row in zip(self.game.rows, self.game.grid)],
             'me': player_name,
             'order': list(self.player_order),
             'mode': self.game_mode,
@@ -638,7 +694,7 @@ class GameSession:
                                'yellow_dots': p.get('yellow_dots', 0)}
                         for name, p in self.game.players.items()},
             'cards_left': 2 - self.game.turn_cards_played.get(player_name, 0),
-            'regular_hand': [c for c in hand if c.power is None and c.location != 'PWR'],
+            'regular_hand': self.playable_regular(player_name),
             'power_options': [(card, card['power'], card['color'], cells)
                               for card, _, cells in power_options or []],
         }
@@ -721,6 +777,7 @@ class GameSession:
             'last_move': self.last_move,
             'yellow_dot_position': yellow_position,
             'landmines': landmines_data,
+            'blocks': list(self.blocks),
             'can_roll_dice': getattr(self.game, 'can_roll_dice', False),
             'game_mode': self.game_mode,
             'required_players': self.required_players,
@@ -762,6 +819,8 @@ class GameSession:
         from twenty_dots import Dot
         move = self.begin_move(player_name, 'roll')
         row, col = self.game.roll_dice()
+        while self.is_blocked(row + col):  # The wild dice re-roll a blocked square.
+            row, col = self.game.roll_dice()
         row_idx = self.game.rows.index(row)
         col_idx = self.game.columns.index(col)
         old_dot = self.game.grid[row_idx][col_idx]
@@ -810,7 +869,7 @@ class GameSession:
                     hand = self.game.players[name]['hand']
                     if not hand:
                         self.refill_hand(name)
-                    regular = [c for c in hand if c.power is None and c.location != 'PWR']
+                    regular = self.playable_regular(name)
                     powers = self.ai_power_options(name) if used == 0 and self.power_cards else []
                     indices = (self.ai_players[name].choose_cards(
                         regular, self.ai_context(name, powers)) if regular else [])
@@ -1452,6 +1511,9 @@ def handle_play_cards(data):
     
     if len(cards_to_play) > 2:
         emit('error', {'message': 'Cannot play more than 2 cards per turn'})
+        return
+    if any(game_session.is_blocked(''.join(card.location)) for card in cards_to_play):
+        emit('error', {'message': BLOCKED_MESSAGE})
         return
     
     # Check for duplicate locations

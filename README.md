@@ -13,7 +13,7 @@ A strategic multiplayer board game where players compete to collect colored dots
 1. **Create a Room:**
    - Open the web client and enter your name.
    - Choose **Create room**, 2–4 players, and a game goal.
-   - Optionally enable **Power Play** for Paint, color-matched one-step Shift, and Swap cards. Swap exchanges any two non-wild dots anywhere on the board. Leave Power Play off for regular-card play.
+   - Optionally enable **Power Play** for six power cards. Paint, color-matched one-step Shift, and Swap build lines. Block, Erase, and Tax get in your opponents' way. Leave Power Play off for regular-card play.
    - Send the **Invite friends** link, or copy the room code.
 
 2. **Join Friends:**
@@ -61,7 +61,7 @@ A strategic multiplayer board game where players compete to collect colored dots
 - **Mobile-first Table:** Responsive board, card previews, touch controls, and persistent private hands
 - **Room Invites:** Native mobile sharing, clipboard links, and a live waiting room
 - **Reconnect:** Token-protected saved seats and automatic connection recovery
-- **Optional Power Play:** Three tactical online powers with target previews, full-turn costs, and server-validated effects; [power rules](POWER_CARDS_README.md)
+- **Optional Power Play:** Six tactical online powers (three that build, three that get in the way) with target previews, full-turn costs, and server-validated effects; [power rules](POWER_CARDS_README.md)
 - **Desktop Variant:** The existing desktop powers and landmines remain separate from the focused online set
 - **AI Opponents:** Computer players read the board and play toward the round's goal. Easy plays loosely, Medium takes the best move available now, and Hard also weighs what each move leaves open for the next player, holds back a card rather than set up a line, and plays Power Play cards
 - **Real-time Updates:** Instant game state synchronization
@@ -141,7 +141,7 @@ To play with friends on the same WiFi:
 - Run `npm run test:replay --prefix tests` for deterministic real-backend rematch, series, reaction, preferences, and deck-recycling checks. It starts and stops its own loopback-only fixture server on port 5001. Set `TEST_PYTHON` to your Python interpreter path if needed, or `BROWSER_FIXTURE_PORT` to another unused port. Fixture setup is authenticated with an ephemeral key and exists only in the separate test entry point, never in the production server.
 - Set `PLAYWRIGHT_BROWSER=webkit` to run either browser suite in WebKit (install it with `npx --prefix tests playwright install webkit`). Browser emulation does not replace testing sound/haptics on physical devices.
 - With a local game server running, `npm run test:music --prefix tests` checks actual synthesized audio output, opt-in playback, volume, preference migration, lifecycle pause/resume, and mobile accessibility. It uses `GAME_URL` and `PLAYWRIGHT_BROWSER` like the smoke suite.
-- The replay suite also covers all three powers: target/cancel previews, full-turn costs, yellow rolls, winning moves, private hands, refresh/rejoin, and host Power Play changes at 320px.
+- The replay suite also covers all six powers: target/cancel previews, full-turn costs, yellow rolls, winning moves, private hands, refresh/rejoin, and host Power Play changes at 320px.
 - The replay suite also checks the tutorial, keyboard targeting/focus, lesson and stats accessibility at 320px, storage denial, earned badges, and result deduplication after refresh/rejoin.
 - Run `npm run test:progress --prefix tests` for dependency-free unit tests of stats, streaks, mode milestones, storage corruption/quota failures, and cross-tab locking.
 - Browser code and styles are in `static/game.js`, `static/game.css`, `static/journey.js` (lesson and stats UI), and `static/progress.js` (local records); no frontend build step is needed.

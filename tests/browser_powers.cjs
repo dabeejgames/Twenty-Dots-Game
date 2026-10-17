@@ -203,6 +203,68 @@ module.exports = async function testPowers(browser, base, request, audit, errors
         assert(!await host.locator('#primary-action').isDisabled());
         await host.locator('#cancel-power').click();
 
+        const hasClass = (page, id, name) => page.locator(`#cell-${id}`).evaluate((cell, name) => cell.classList.contains(name), name);
+        id = await prepare('block');
+        await choose('block');
+        assert.match(await host.locator('.power-card[data-power="block"] .card-color').textContent(), /FULL TURN/);
+        assert.equal(await host.locator('.power-legal').count(), 34, 'Every empty square can be blocked');
+        await host.locator('#cell-A1').click();
+        assert(!await hasClass(host, 'A1', 'blocked'), 'Occupied squares cannot be blocked');
+        await host.locator('#cell-A3').click();
+        assert(await hasClass(host, 'A3', 'blocked'));
+        assert.match(await host.locator('#power-target-status').textContent(), /Blocking A3/);
+        assert.deepEqual(await host.evaluate(() => window.lastState.blocks), [], 'Block remains only a preview');
+        await audit(host, 'Block preview at 320px');
+        await host.locator('#primary-action').click();
+        await changed(id, 'block');
+        for (const page of pages) await page.waitForFunction(() => window.lastState.blocks?.[0]?.location === 'A3');
+        assert(await hasClass(pages[1], 'A3', 'blocked'));
+        assert.match(await pages[1].locator('#cell-A3').getAttribute('aria-label'), /blocked by Power host/);
+        assert.match(await host.locator('#move-summary').textContent(), /used Block · blocked A3/);
+        assert.equal(await host.evaluate(() => window.lastState.current_turn), 'Power guest');
+
+        id = await prepare('erase');
+        assert(!await hasClass(host, 'A3', 'blocked'), 'Fixture clears earlier blocks');
+        await choose('erase');
+        assert.match(await host.locator('#power-description').textContent(), /Remove one red dot/);
+        assert.deepEqual(await host.locator('.power-legal').evaluateAll(cells => cells.map(cell => cell.id).sort()),
+            ['cell-A1', 'cell-A2'], 'Only matching-color dots can be erased');
+        await host.locator('#cell-B2').click();
+        assert.equal(await host.locator('.erase-preview').count(), 0);
+        await host.locator('#cell-A2').click();
+        assert(await hasClass(host, 'A2', 'erase-preview'));
+        assert.equal(await host.evaluate(() => window.lastState.board[0][1]?.color), 'red', 'Erase remains only a preview');
+        await host.locator('#primary-action').click();
+        await changed(id, 'erase');
+        assert.equal(await host.evaluate(() => window.lastState.board[0][1]), null);
+        assert.equal(await host.evaluate(() => window.lastState.last_move.points), 0);
+        assert.match(await host.locator('#move-summary').textContent(), /used Erase · erased A2/);
+
+        await prepare('tax');
+        await choose('tax');
+        assert(await host.locator('#power-players').isHidden());
+        assert.match(await host.locator('#power-target-status').textContent(), /Nobody to tax/);
+        assert(await host.locator('#primary-action').isDisabled());
+        await host.locator('#cancel-power').click();
+
+        id = await prepare('tax', { leaders: true });
+        await choose('tax');
+        assert.equal(await host.locator('.power-legal').count(), 0, 'Tax targets players, not squares');
+        assert.deepEqual(await host.locator('#power-players button').allTextContents(), ['Power guest · 3 red'],
+            'Only the leader can be taxed');
+        assert(await host.locator('#primary-action').isDisabled());
+        await host.locator('#power-players button').click();
+        assert.match(await host.locator('#power-target-status').textContent(), /from Power guest/);
+        await audit(host, 'Tax target at 320px');
+        await host.locator('#primary-action').click();
+        await changed(id, 'tax');
+        assert.equal(await host.evaluate(() => window.lastState.players['Power guest'].score.red), 1);
+        assert.equal(await host.evaluate(() => window.lastState.players['Power guest'].total_dots), 1);
+        assert.equal(await host.evaluate(() => window.lastState.players['Power host'].total_dots), 0);
+        assert.match(await host.locator('#move-summary').textContent(), /used Tax · took 2 red from Power guest/);
+        await pages[1].waitForFunction(() => window.lastState.last_move?.power === 'tax');
+        assert.match(await pages[1].locator('#activity-list').textContent(), /Power guest lost 2 dots to Tax/);
+
         await prepare('paint');
         await choose('paint');
         await host.locator('#cell-A3').click();
@@ -245,7 +307,7 @@ module.exports = async function testPowers(browser, base, request, audit, errors
             assert.equal(await page.locator('.power-card').count(), 0);
             assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         }
-        console.log('PASS: Power Play create/join, all three powers, preview/cancel, keyboard targets, privacy, reconnect, full-turn restrictions, yellow roll, win/rematch toggle, recycling, mobile accessibility.');
+        console.log('PASS: Power Play create/join, all six powers, preview/cancel, keyboard targets, privacy, reconnect, full-turn restrictions, yellow roll, win/rematch toggle, recycling, mobile accessibility.');
     } finally {
         for (const context of contexts) await context.close();
     }
