@@ -95,9 +95,9 @@ def simulate_power(board, power, color, cells):
     gains, wild = empty_gains(), False
     if power == 'tax':
         return board, gains, wild
-    if power in ('block', 'erase'):
+    if power == 'block':
         (row, col), = cells
-        board[row][col] = BLOCK if power == 'block' else None
+        board[row][col] = BLOCK
         return board, gains, wild
     if power == 'swap':
         (ra, ca), (rb, cb) = cells
@@ -314,7 +314,7 @@ class AIPlayer:
                 'wild': wild, 'played': 1, 'hand': hand}
         if power == 'tax':
             plan['harm'], plan['players'] = self._tax_harm(cells[0], color, context)
-        elif power in ('block', 'erase'):
+        elif power == 'block':
             plan['harm'] = self._denial(context, board, cells[0])
         return plan
 
@@ -330,7 +330,7 @@ class AIPlayer:
         return TAX_WEIGHT * goal_value(loss, after, context['mode']), players
 
     def _denial(self, context, board, cell):
-        """Expected dots opponents can no longer earn near a blocked or erased square."""
+        """Expected dots opponents can no longer earn near a blocked square."""
         row, col = cell
         nearby = [(r, c) for r in range(max(0, row - 2), min(SIZE, row + 3))
                   for c in range(max(0, col - 2), min(SIZE, col + 3))]

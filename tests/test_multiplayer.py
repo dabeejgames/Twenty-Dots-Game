@@ -964,7 +964,7 @@ class MultiplayerTests(unittest.TestCase):
                 with self.subTest(count=count, enabled=enabled):
                     clients, session = self.table(count, f'p{count}{enabled}', power_cards=enabled)
                     cards = self.all_cards(session)
-                    self.assertEqual(len(cards), 168 if enabled else 144)
+                    self.assertEqual(len(cards), 164 if enabled else 144)
                     self.assert_card_partition(session, {id(c) for c in cards})
                     regular = [c for c in cards if c.power is None]
                     self.assertEqual(len(regular), 144)
@@ -1013,7 +1013,7 @@ class MultiplayerTests(unittest.TestCase):
             self.emit(host, 'add_ai_player', game_id=room, ai_name='AI')
             self.emit(host, 'start_game', game_id=room)
             session = server.games[room]
-            self.assertEqual(len(self.all_cards(session)), 168 if enabled else 144)
+            self.assertEqual(len(self.all_cards(session)), 164 if enabled else 144)
             self.assertFalse(session.game.power_cards_enabled)
             for count in (2, 3, 4):
                 events = self.emit(self.client(), 'start_single_player', player_name='Host',
@@ -1021,7 +1021,7 @@ class MultiplayerTests(unittest.TestCase):
                 state = self.payload(events, 'game_started')
                 session = server.games[state['game_id']]
                 self.assertIs(state['power_cards'], enabled)
-                self.assertEqual(len(self.all_cards(session)), 168 if enabled else 144)
+                self.assertEqual(len(self.all_cards(session)), 164 if enabled else 144)
                 self.assertEqual(len(session.ai_players), count - 1)
 
     def test_power_rematch_options_readiness_tokens_and_round_reset_two_to_four(self):
@@ -1057,7 +1057,7 @@ class MultiplayerTests(unittest.TestCase):
                 self.ready(client, session)
             self.assertTrue(session.power_cards)
             self.assertEqual(session.game_mode, 'five_colors')
-            self.assertEqual(len(self.all_cards(session)), 168)
+            self.assertEqual(len(self.all_cards(session)), 164)
             self.assertFalse(session.recycle_pool)
             self.assertIsNone(session.last_move)
             self.assertTrue(session.game.can_roll_dice)
@@ -1071,7 +1071,7 @@ class MultiplayerTests(unittest.TestCase):
         for client in clients:
             self.ready(client, session)
         self.assertTrue(session.power_cards)
-        self.assertEqual(len(self.all_cards(session)), 168)
+        self.assertEqual(len(self.all_cards(session)), 164)
 
     def test_power_paint_cost_private_hands_metadata_and_no_replacement_points(self):
         clients, session = self.table(power_cards=True)
@@ -1475,7 +1475,7 @@ class MultiplayerTests(unittest.TestCase):
         self.assertIsNone(session.game.grid[2][3])
         # Regular cards, Paint, and Shift all treat the square as off limits.
         hand = session.game.players['P1']['hand']
-        hand[:] = [Card('C4', 'red')] + [c for c in hand if c.power][:4]
+        hand[:] = [Card('C4', 'red')] + [Card(f'F{n}', 'blue') for n in range(1, 5)]
         before = self.power_snapshot(session)
         events = self.emit(clients[1], 'play_cards', game_id='room', round_id=1,
                            cards=[{'location': ['C', '4'], 'color': 'red', 'power': None}])
@@ -1530,23 +1530,23 @@ class MultiplayerTests(unittest.TestCase):
             self.payload(self.power_play(clients[0], session, card, targets), 'error')
             self.assertEqual(self.power_snapshot(session), before)
 
-    def test_power_erase_removes_a_matching_dot_without_scoring(self):
+    def test_retired_erase_is_rejected_and_dropped_from_restored_rooms(self):
         clients, session = self.table(power_cards=True)
         session.game.can_roll_dice = False
-        card = self.own_power(session, 'erase', 'blue')
-        session.game.grid[0][0] = Dot('blue')
-        session.game.grid[0][1] = Dot('red')
-        session.game.grid[0][2] = Dot('yellow')
-        for targets in ([], ['A2'], ['A3'], ['B1'], ['A1', 'A2']):
-            before = self.power_snapshot(session)
-            self.assertIn('error', [e['name'] for e in self.power_play(clients[0], session, card, targets)])
-            self.assertEqual(self.power_snapshot(session), before)
-        state = self.payload(self.power_play(clients[0], session, card, ['A1']), 'game_updated')
-        self.assertIsNone(session.game.grid[0][0])
-        self.assertEqual(state['last_move']['removed'], ['A1'])
-        self.assertEqual((state['last_move']['points'], state['last_move']['collected']), (0, []))
-        self.assertEqual(session.game.players['P0']['total_dots'], 0)
-        self.assertEqual(state['current_turn'], 'P1')
+        session.game.grid[0][0] = Dot('red')
+        session.game.players['P0']['hand'].append(Card('PWR', 'red', 'erase'))
+        before = self.power_snapshot(session)
+        events = self.power_play(clients[0], session, {'location': 'PWR', 'color': 'red',
+                                                       'power': 'erase'}, ['A1'])
+        self.assertIn('Invalid power card', self.payload(events, 'error')['message'])
+        self.assertEqual(self.power_snapshot(session), before)
+        self.assertNotIn('erase', [c['power'] for c in session.get_player_hand('P0')])
+        saved = json.loads(json.dumps(session.snapshot()))
+        saved['game']['deck'].append({'location': 'PWR', 'color': 'blue', 'power': 'erase'})
+        saved['recycle_pool'].append({'location': 'PWR', 'color': 'green', 'power': 'erase'})
+        restored = server.GameSession.restore(saved)
+        self.assertFalse(any(c.power == 'erase' for c in self.all_cards(restored)))
+        self.assertEqual(len(restored.game.players['P0']['hand']), 5)
 
     def test_power_tax_takes_up_to_two_dots_from_the_leader_only(self):
         clients, session = self.table(3, power_cards=True)
@@ -1701,12 +1701,12 @@ class MultiplayerTests(unittest.TestCase):
             self.assertEqual(session.game.players['P0']['yellow_dots'], 1)
             self.assertFalse(session.ai_move_in_progress)
 
-    def test_power_real_depletion_four_players_preserves_168_identities(self):
+    def test_power_real_depletion_four_players_preserves_164_identities(self):
         with patch.object(server.TwentyDots, 'shuffle_deck'):
             clients, session = self.table(4, mode='five_with_yellow', power_cards=True)
         session.game.can_roll_dice = False
         originals = {id(c) for c in self.all_cards(session)}
-        self.assertEqual(len(originals), 168)
+        self.assertEqual(len(originals), 164)
         powers_played = set()
         for _ in range(400):
             name = session.game.get_current_player()

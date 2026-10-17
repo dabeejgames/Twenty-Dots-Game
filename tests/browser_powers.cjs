@@ -223,23 +223,6 @@ module.exports = async function testPowers(browser, base, request, audit, errors
         assert.match(await host.locator('#move-summary').textContent(), /used Block · blocked A3/);
         assert.equal(await host.evaluate(() => window.lastState.current_turn), 'Power guest');
 
-        id = await prepare('erase');
-        assert(!await hasClass(host, 'A3', 'blocked'), 'Fixture clears earlier blocks');
-        await choose('erase');
-        assert.match(await host.locator('#power-description').textContent(), /Remove one red dot/);
-        assert.deepEqual(await host.locator('.power-legal').evaluateAll(cells => cells.map(cell => cell.id).sort()),
-            ['cell-A1', 'cell-A2'], 'Only matching-color dots can be erased');
-        await host.locator('#cell-B2').click();
-        assert.equal(await host.locator('.erase-preview').count(), 0);
-        await host.locator('#cell-A2').click();
-        assert(await hasClass(host, 'A2', 'erase-preview'));
-        assert.equal(await host.evaluate(() => window.lastState.board[0][1]?.color), 'red', 'Erase remains only a preview');
-        await host.locator('#primary-action').click();
-        await changed(id, 'erase');
-        assert.equal(await host.evaluate(() => window.lastState.board[0][1]), null);
-        assert.equal(await host.evaluate(() => window.lastState.last_move.points), 0);
-        assert.match(await host.locator('#move-summary').textContent(), /used Erase · erased A2/);
-
         await prepare('tax');
         await choose('tax');
         assert(await host.locator('#power-players').isHidden());
@@ -307,7 +290,7 @@ module.exports = async function testPowers(browser, base, request, audit, errors
             assert.equal(await page.locator('.power-card').count(), 0);
             assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         }
-        console.log('PASS: Power Play create/join, all six powers, preview/cancel, keyboard targets, privacy, reconnect, full-turn restrictions, yellow roll, win/rematch toggle, recycling, mobile accessibility.');
+        console.log('PASS: Power Play create/join, all five powers, preview/cancel, keyboard targets, privacy, reconnect, full-turn restrictions, yellow roll, win/rematch toggle, recycling, mobile accessibility.');
     } finally {
         for (const context of contexts) await context.close();
     }

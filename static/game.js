@@ -10,7 +10,6 @@
         shift: { title: 'Shift', symbol: '↗', targets: 2, description: 'Move a dot matching this card’s color one square up, down, left, or right into an empty space—not diagonally. Yellow stays put. Completed lines score normally.' },
         swap: { title: 'Swap', symbol: '⇄', targets: 2, anyColor: true, description: 'Swap any two regular dots anywhere on the board. The card’s color does not matter. Yellow cannot swap. Completed lines at both spots score normally.' },
         block: { title: 'Block', symbol: '⛔', targets: 1, anyColor: true, description: 'Block an empty square. Nobody can play there until your next turn begins, and the wild dice skip it. The card’s color does not matter.' },
-        erase: { title: 'Erase', symbol: '✕', targets: 1, description: 'Remove one dot matching this card’s color from the board. Nobody scores it.' },
         tax: { title: 'Tax', symbol: '¤', targets: 1, description: 'Take up to two dots of this card’s color from an opponent tied for the most dots. Nobody gains them.' },
     };
     const MODES = {
@@ -473,7 +472,6 @@
             return COLORS.includes(boardColor(location))
                 && app.game.board.flat().filter(dot => COLORS.includes(dot?.color)).length >= 2;
         }
-        if (card.power === 'erase') return boardColor(location) === card.color;
         if (card.power === 'tax') return false;
         return boardColor(location) === null && !isBlocked(location);
     }
@@ -483,7 +481,6 @@
         if (!card || !canUsePower() || app.powerTargets.length !== POWERS[card.power].targets) return false;
         if (new Set(app.powerTargets).size !== app.powerTargets.length) return false;
         if (card.power === 'swap') return app.powerTargets.every(target => COLORS.includes(boardColor(target)));
-        if (card.power === 'erase') return boardColor(app.powerTargets[0]) === card.color;
         if (card.power === 'tax') return taxTargets(card.color).includes(app.powerTargets[0]);
         return boardColor(app.powerTargets.at(-1)) === null && !isBlocked(app.powerTargets.at(-1))
             && (card.power !== 'shift' || (canShiftSource(app.powerTargets[0])
@@ -510,11 +507,6 @@
                 ? `Choose who to tax · Only opponents tied for the most dots with a ${card.color} dot.`
                 : `Nobody to tax · Tax needs an opponent tied for the most dots who has a ${card.color} dot. Cancel and choose another card, or pass.`;
         }
-        if (card.power === 'erase') {
-            if (!cells.some(dot => dot?.color === card.color)) return `No ${card.color} dots to erase yet. Cancel and choose another card, or pass.`;
-            if (powerReady()) return `Erasing ${app.powerTargets[0]}. Check the preview, then confirm below.`;
-            return `Choose a dot · Tap a marked ${card.color} dot to remove it.`;
-        }
         const open = app.game.board.some((row, r) => row.some((dot, c) => !dot && !isBlocked(String.fromCharCode(65 + r) + (c + 1))));
         if (!open) return 'No open squares right now. Cancel and choose another card, or pass.';
         if (card.power === 'block') return powerReady()
@@ -540,7 +532,6 @@
         $('power-description').textContent = {
             paint: `Place a ${card.color} dot on any empty square. Completed lines score normally.`,
             shift: `Move a ${card.color} dot one square up, down, left, or right into an empty space. No diagonals. Completed lines score normally.`,
-            erase: `Remove one ${card.color} dot from the board. Nobody scores it.`,
             tax: `Take up to two ${card.color} dots from an opponent tied for the most dots. Nobody gains them.`,
         }[card.power] || POWERS[card.power].description;
         $('power-target-status').textContent = powerInstructions();
@@ -737,10 +728,8 @@
                 if (destination) previewCard = { color: swapping ? boardColor(app.powerTargets[1 - targetIndex])
                     : power.power === 'paint' ? power.color : boardColor(app.powerTargets[0]) };
                 const blocking = complete && power.power === 'block' && targetIndex === 0;
-                const erasing = complete && power.power === 'erase' && targetIndex === 0;
                 const blocked = isBlocked(location);
                 cell.classList.toggle('blocked', blocked || blocking);
-                cell.classList.toggle('erase-preview', erasing);
                 const legal = validPowerTarget(location);
                 cell.classList.toggle('power-legal', legal);
                 cell.classList.toggle('power-source', Boolean(source));
@@ -758,8 +747,8 @@
                 if (previewCard || source) content.push(node('span', 'selection-number', power ? targetIndex + 1 : selectedIndex + 1));
                 cell.replaceChildren(...content);
                 cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? `; blocked by ${blockOwner(location)}` : ''}${placed ? '; last move placed here' : ''}${collected ? '; last move collected here' : ''}${previewCard ? `; preview ${previewCard.color}, card ${selectedIndex + 1}` : ''}`);
-                if (power) cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? '; blocked' : ''}${source ? '; selected source' : destination ? `; preview ${previewCard.color} destination` : blocking ? '; preview block' : erasing ? '; preview erase' : legal ? '; valid power target' : ''}`);
-                cell.setAttribute('aria-pressed', String(Boolean(previewCard || source || blocking || erasing)));
+                if (power) cell.setAttribute('aria-label', `${location}: ${color || 'empty'}${blocked ? '; blocked' : ''}${source ? '; selected source' : destination ? `; preview ${previewCard.color} destination` : blocking ? '; preview block' : legal ? '; valid power target' : ''}`);
+                cell.setAttribute('aria-pressed', String(Boolean(previewCard || source || blocking)));
             }
         }
         $('board-hint').textContent = selectedPower() ? 'Power targets are previews until you confirm.' : app.selected.length ? 'Outlined dots preview your selected cards.' : 'Tap a card to preview its position.';
@@ -911,7 +900,7 @@
         }
         if (selectedPower() && mine && available && !state.can_roll_dice) {
             const power = selectedPower();
-            title = { block: 'Your turn. Hold a square.', erase: 'Your turn. Break up a line.', tax: 'Your turn. Slow the leader.' }[power.power]
+            title = { block: 'Your turn. Hold a square.', tax: 'Your turn. Slow the leader.' }[power.power]
                 || `Your turn. ${POWERS[power.power].title} a possibility.`;
             subtitle = powerInstructions();
             action = powerReady() ? `Use ${POWERS[power.power].title} ${POWERS[power.power].symbol}` : 'Choose power targets';
@@ -1121,7 +1110,6 @@
             const detail = move.power === 'swap' ? `swapped ${(move.placements || []).map(dot => dot.location).join(' ⇄ ')}`
                 : move.power === 'shift' ? `moved ${move.removed?.[0]} → ${positions}`
                     : move.power === 'block' ? `blocked ${move.blocked?.[0]} until their next turn`
-                        : move.power === 'erase' ? `erased ${move.removed?.[0]}`
                             : move.power === 'tax' ? `took ${move.taxed?.count} ${move.taxed?.color} from ${move.taxed?.player}` : `painted ${positions}`;
             $('move-summary').textContent = `${callout}${move.player} used ${POWERS[move.power].title} · ${detail}${move.points ? ` · +${move.points} dots` : ''}.`;
         }

@@ -25,8 +25,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 games = {}
 room_store = open_store()
 
-ONLINE_POWERS = ('paint', 'shift', 'swap', 'block', 'erase', 'tax')
-POWER_TARGETS = {'paint': 1, 'shift': 2, 'swap': 2, 'block': 1, 'erase': 1, 'tax': 1}
+ONLINE_POWERS = ('paint', 'shift', 'swap', 'block', 'tax')
+POWER_TARGETS = {'paint': 1, 'shift': 2, 'swap': 2, 'block': 1, 'tax': 1}
 BLOCKED_MESSAGE = 'That square is blocked until its owner’s next turn'
 
 
@@ -217,6 +217,10 @@ class GameSession:
         """Rebuild a room from snapshot(); every human seat waits for its owner to rejoin."""
         def card(c):
             return Card(c['location'], c['color'], c['power'])
+
+        def cards(saved):
+            # Drop retired powers (Erase) from rooms saved before they were removed.
+            return [card(c) for c in saved if c['power'] is None or c['power'] in ONLINE_POWERS]
         session = cls(data['game_id'], data['host_sid'], data['game_mode'],
                       data['required_players'], data['power_cards'])
         session.players = data['players']
@@ -230,15 +234,15 @@ class GameSession:
                     'next_game_mode', 'next_power_cards', 'deck_reshuffles',
                     'last_move', 'move_id'):
             setattr(session, key, data[key])
-        session.recycle_pool = [card(c) for c in data['recycle_pool']]
+        session.recycle_pool = cards(data['recycle_pool'])
         session.blocks = data.get('blocks', [])  # Rooms saved before Block existed.
 
         saved = data['game']
         game = TwentyDots(num_players=saved['num_players'], difficulty='easy',
                           ai_opponents={}, power_cards=False)
         game.grid = [[Dot(color) if color else None for color in row] for row in saved['grid']]
-        game.deck = [card(c) for c in saved['deck']]
-        game.players = {name: {**p, 'hand': [card(c) for c in p['hand']]}
+        game.deck = cards(saved['deck'])
+        game.players = {name: {**p, 'hand': cards(p['hand'])}
                         for name, p in saved['players'].items()}
         game.current_player_idx = saved['current_player_idx']
         position = saved['yellow_dot_position']
@@ -544,11 +548,6 @@ class GameSession:
                    or self.game.grid[row][col].color not in self.game.colors
                    for row, col in cells):
                 raise ValueError('Swap requires two regular colored dots; wild dots cannot swap')
-        elif card.power == 'erase':
-            row, col = cells[0]
-            dot = self.game.grid[row][col]
-            if dot is None or dot.color != card.color:
-                raise ValueError(f'Erase requires a {card.color} dot matching the card color')
         else:
             row, col = cells[-1]
             if self.game.grid[row][col] is not None:
@@ -589,10 +588,6 @@ class GameSession:
         elif card.power == 'block':
             self.blocks.append({'location': targets[0], 'player': player_name})
             move['blocked'] = [targets[0]]
-        elif card.power == 'erase':
-            row, col = cells[0]
-            self.game.grid[row][col] = None
-            move['removed'] = [targets[0]]
         elif card.power == 'swap':
             (row_a, col_a), (row_b, col_b) = cells
             self.game.grid[row_a][col_a], self.game.grid[row_b][col_b] = (
@@ -661,8 +656,6 @@ class GameSession:
                               if color_at[a] != color_at[b]]
             elif power in ('paint', 'block'):
                 candidates = [[cell] for cell in empty]
-            elif power == 'erase':
-                candidates = [[cell] for cell in sources]
             elif power == 'tax':
                 candidates = [[name] for name in self.tax_targets(player_name, card['color'])]
             else:

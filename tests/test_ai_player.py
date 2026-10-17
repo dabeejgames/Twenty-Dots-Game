@@ -189,9 +189,9 @@ class DecisionTests(AITestCase):
                 card, targets = session.choose_ai_power('P0')
                 self.assertEqual((card['power'], targets), ('paint', ['B2']))
 
-    def test_dead_hand_blocks_or_erases_an_opponents_open_line(self):
+    def test_dead_hand_blocks_an_opponents_open_line(self):
         # Red A1-A2 leaves A3 open for anyone holding red A3.
-        for power, expected in (('block', [['A3']]), ('erase', [['A1'], ['A2']])):
+        for power, expected in (('block', [['A3']]),):
             for difficulty in ('medium', 'hard'):
                 with self.subTest(power=power, difficulty=difficulty):
                     board = [[None] * 6 for _ in range(6)]

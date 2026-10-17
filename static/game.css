@@ -384,8 +384,6 @@ legend { font-size: 12px; font-weight: 600; padding: 0; margin-bottom: 10px; }
 .cell.blocked { background: repeating-linear-gradient(135deg, #ece7df 0 6px, #e2dbd0 6px 12px); }
 .cell.blocked .cell-coordinate { opacity: 1; }
 .block-mark { font-size: 18px; line-height: 1; pointer-events: none; }
-.cell.erase-preview { box-shadow: inset 0 0 0 3px var(--coral-dark); }
-.cell.erase-preview .dot { opacity: .35; outline: 2px dashed var(--coral-dark); outline-offset: 2px; }
 .playing-card.blocked-card { opacity: .5; }
 .power-players { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .power-players .button { min-height: 40px; padding: 8px 14px; font-size: 12px; }
